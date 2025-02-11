@@ -2,8 +2,13 @@
 
 # Files and directories created by pub
 .dart_tool/
+.vscode
 .packages
+.fvm
+.idea
 build/
+*.iml
+.metadata
 # If you're building an application, you may want to check-in your pubspec.lock
 pubspec.lock
 
@@ -25,3 +30,6 @@ doc/api/
 
 .flutter-plugins
 .flutter-plugins-dependencies
+
+# FVM Version Cache
+.fvm/

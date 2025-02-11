@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "302105442862",
+    "project_id": "baviblrdbc",
+    "storage_bucket": "baviblrdbc.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:302105442862:android:9e73a8991336f69c967dbf",
+        "android_client_info": {
+          "package_name": "com.wooshir.bavi"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCbOYEqzlOsDhCsJhGkCcWOO9ZvRPu9ISg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

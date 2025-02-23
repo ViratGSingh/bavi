@@ -1,38 +1,55 @@
+import 'package:bavi/addVideo/bloc/add_video_bloc.dart';
+import 'package:bavi/home/bloc/home_bloc.dart';
+import 'package:bavi/home/view/home_page.dart';
 import 'package:bavi/login/bloc/login_bloc.dart';
 import 'package:bavi/login/view/login_page.dart';
+import 'package:bavi/routes.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
-
-class BaviApp extends StatelessWidget {
-  const BaviApp({super.key});
-
+class BaviApp extends StatefulWidget {
+  final GoRouter router;
+  const BaviApp({super.key, required this.router});
 
   @override
-  Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) => LoginBloc(httpClient: http.Client()),  
-      child: const BaviAppView(),
-    );
-  }
+  State<BaviApp> createState() => _BaviAppState();
 }
 
-class BaviAppView extends StatelessWidget {
-  const BaviAppView({super.key});
+
+class _BaviAppState extends State<BaviApp> {
+  @override
+  void initState() {
+    super.initState();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.white,
-          elevation: 0,
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(
+          create: (_) => LoginBloc(httpClient: http.Client()),
         ),
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.white),
+        BlocProvider(
+          create: (_) => HomeBloc(httpClient: http.Client()),
+        ),
+        BlocProvider(
+          create: (_) => AddVideoBloc(httpClient: http.Client()),
+        )
+      ],
+      child: MaterialApp.router(
+        routerConfig: widget.router,
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
+          appBarTheme: const AppBarTheme(
+            backgroundColor: Colors.white,
+            elevation: 0,
+          ),
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.white),
+        ),
       ),
-      home: const LoginPage(),
     );
   }
 }

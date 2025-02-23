@@ -12,7 +12,20 @@
           "package_name": "com.wooshir.bavi"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "302105442862-h7scl07i2bm1m7abehnjj45c37h41egh.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.wooshir.bavi",
+            "certificate_hash": "e233dfe468545dbb004cb7238a066c12591f8d53"
+          }
+        },
+        {
+          "client_id": "302105442862-o7rpmod94ggs1uu0qlsrij6le5p9vi0q.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCbOYEqzlOsDhCsJhGkCcWOO9ZvRPu9ISg"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "302105442862-o7rpmod94ggs1uu0qlsrij6le5p9vi0q.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "302105442862-n0daq23oc2etcqmg75abeh80sphnufn0.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.wooshir.bavi"
+              }
+            }
+          ]
         }
       }
     }

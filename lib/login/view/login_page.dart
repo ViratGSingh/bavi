@@ -14,10 +14,9 @@ class LoginPage extends StatelessWidget {
     return BlocBuilder<LoginBloc, LoginState>(builder: (context, state) {
       return SafeArea(
         child: Scaffold(
-          extendBody: true,
           backgroundColor: Color(0xFF8A2BE2),
           body: Padding(
-            padding: const EdgeInsets.fromLTRB(0, 20, 0, 40),
+            padding: const EdgeInsets.fromLTRB(0, 40, 0, 40),
             child: Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -27,24 +26,22 @@ class LoginPage extends StatelessWidget {
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 54,
-                      fontFamily: 'Jua',
+                      height: 0.8,
+                      fontFamily: 'Gugi',
                     ),
                   ),
                   Container(
-                    //color: Colors.red,
                     child: Column(
                       children: [
                         Container(
                           child: CarouselSlider(
                             options: CarouselOptions(
                               autoPlay: true,
-                              enlargeCenterPage: true,
-                              aspectRatio:
-                                  (MediaQuery.of(context).size.width - 40) /
-                                      (MediaQuery.of(context).size.height / 3 +
-                                          15 +
-                                          60 +
-                                          15),
+                              //enlargeCenterPage: true,
+                              padEnds: false,
+                              aspectRatio: (MediaQuery.of(context).size.width -
+                                      40) /
+                                  (MediaQuery.of(context).size.width - 40 + 90),
                               viewportFraction: 1,
                               autoPlayAnimationDuration: Duration(seconds: 2),
                               onPageChanged: (index, reason) {
@@ -58,8 +55,8 @@ class LoginPage extends StatelessWidget {
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Container(
-                                    height: MediaQuery.of(context).size.height / 3,
-                                    width: MediaQuery.of(context).size.width - 40,
+                                    width:
+                                        MediaQuery.of(context).size.width - 40,
                                     decoration: BoxDecoration(
                                         borderRadius: BorderRadius.circular(12),
                                         color: Color(0xFFDFFF00)),
@@ -70,7 +67,8 @@ class LoginPage extends StatelessWidget {
                                   ),
                                   SizedBox(height: 15),
                                   Container(
-                                    width: MediaQuery.of(context).size.width - 40,
+                                    width:
+                                        MediaQuery.of(context).size.width - 40,
                                     child: Text(
                                       'Make collections of your favourite videos',
                                       textAlign: TextAlign.center,
@@ -88,8 +86,8 @@ class LoginPage extends StatelessWidget {
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Container(
-                                    width: MediaQuery.of(context).size.width - 40,
-                                    height: MediaQuery.of(context).size.height / 3,
+                                    width:
+                                        MediaQuery.of(context).size.width - 40,
                                     padding: EdgeInsets.all(20),
                                     decoration: BoxDecoration(
                                         borderRadius: BorderRadius.circular(12),
@@ -101,7 +99,8 @@ class LoginPage extends StatelessWidget {
                                   ),
                                   SizedBox(height: 15),
                                   Container(
-                                    width: MediaQuery.of(context).size.width - 40,
+                                    width:
+                                        MediaQuery.of(context).size.width - 40,
                                     child: Text(
                                       'Search from your collections with ease',
                                       textAlign: TextAlign.center,
@@ -119,8 +118,8 @@ class LoginPage extends StatelessWidget {
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Container(
-                                    width: MediaQuery.of(context).size.width - 40,
-                                    height: MediaQuery.of(context).size.height / 3,
+                                    width:
+                                        MediaQuery.of(context).size.width - 40,
                                     padding: EdgeInsets.all(25),
                                     decoration: BoxDecoration(
                                         borderRadius: BorderRadius.circular(12),
@@ -132,9 +131,10 @@ class LoginPage extends StatelessWidget {
                                   ),
                                   SizedBox(height: 15),
                                   Container(
-                                    width: MediaQuery.of(context).size.width - 40,
+                                    width:
+                                        MediaQuery.of(context).size.width - 40,
                                     child: Text(
-                                      'Free backup for your collections',
+                                      'Back up your collections for free',
                                       textAlign: TextAlign.center,
                                       style: TextStyle(
                                         color: Colors.white,
@@ -176,7 +176,11 @@ class LoginPage extends StatelessWidget {
                   Column(
                     children: [
                       ElevatedButton(
-                          onPressed: () {},
+                          onPressed: () {
+                            context.read<LoginBloc>().add(
+                                  LoginAttemptGoogle(),
+                                );
+                          },
                           style: ButtonStyle(
                               shape: WidgetStatePropertyAll(
                                 RoundedRectangleBorder(

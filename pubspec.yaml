@@ -48,12 +48,32 @@ dependencies:
   lottie: ^3.3.1
   carousel_slider: ^5.0.0
 
+  #sign in
+  google_sign_in: ^6.2.2
+  sign_in_with_apple: ^6.1.4
 
   #api
   http: ^1.3.0
 
+  #cache
+  shared_preferences: ^2.5.2
+
   #base
   firebase_core: ^3.11.0
+  cloud_firestore: ^5.6.4
+  firebase_auth: ^5.5.0
+  uuid: ^4.5.1
+
+  #api
+  flutter_dotenv: ^5.2.1
+
+  #video
+  chewie: ^1.10.0
+  video_player: ^2.9.2
+
+  #route
+  go_router: ^14.8.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -81,6 +101,7 @@ flutter:
     - assets/animations/
     - assets/fonts/
     - assets/images/login/
+    - .env
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

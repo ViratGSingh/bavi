@@ -16,9 +16,9 @@ class VideoCollectionInfo extends Equatable {
   final int collectionId;
   final String name;
   final CollectionStatus type;
-  final List<String> videos;
-  final Timestamp createdAt; // Added createdAt field
-  Timestamp updatedAt; // Added updatedAt field
+  final List<CollectionVideoData> videos;
+  final Timestamp createdAt;
+  Timestamp updatedAt;
 
   @override
   List<Object> get props => [collectionId, name, type, videos, createdAt, updatedAt];
@@ -32,9 +32,11 @@ class VideoCollectionInfo extends Equatable {
           : json['type'] == "connects"
               ? CollectionStatus.connects
               : CollectionStatus.public,
-      videos: (json['videos'] as List<dynamic>).map((e) => e as String).toList(),
-      createdAt: json['created_at'] as Timestamp, // Parse createdAt
-      updatedAt: json['updated_at'] as Timestamp, // Parse updatedAt
+      videos: (json['videos'] as List<dynamic>)
+          .map((e) => CollectionVideoData.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      createdAt: json['created_at'] as Timestamp,
+      updatedAt: json['updated_at'] as Timestamp,
     );
   }
 
@@ -47,9 +49,40 @@ class VideoCollectionInfo extends Equatable {
           : type == CollectionStatus.connects
               ? "connects"
               : "public",
-      'videos': videos,
-      'created_at': createdAt, // Include createdAt in JSON
-      'updated_at': updatedAt, // Include updatedAt in JSON
+      'videos': videos.map((video) => video.toJson()).toList(),
+      'created_at': createdAt,
+      'updated_at': updatedAt,
+    };
+  }
+}
+
+class CollectionVideoData extends Equatable {
+  CollectionVideoData({
+    required this.videoId,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  final String videoId;
+  final Timestamp createdAt;
+  final Timestamp updatedAt;
+
+  @override
+  List<Object> get props => [videoId, createdAt, updatedAt];
+
+  factory CollectionVideoData.fromJson(Map<String, dynamic> json) {
+    return CollectionVideoData(
+      videoId: json['video_id'] as String,
+      createdAt: json['created_at'] as Timestamp,
+      updatedAt: json['updated_at'] as Timestamp,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'video_id': videoId,
+      'created_at': createdAt,
+      'updated_at': updatedAt,
     };
   }
 }

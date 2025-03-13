@@ -1,5 +1,5 @@
-import 'package:bavi/addVideo/models/collection.dart';
 import 'package:bavi/addVideo/widgets/collections_bottomsheet.dart';
+import 'package:bavi/models/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';

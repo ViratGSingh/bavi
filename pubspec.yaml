@@ -74,6 +74,30 @@ dependencies:
   #route
   go_router: ^14.8.0
 
+  #loading
+  shimmer: ^3.0.0
+
+  #cache
+  cached_video_player_plus: ^3.0.3
+  cached_network_image: ^3.4.1
+  flutter_cache_manager: ^3.4.1
+
+  #path
+  path_provider: ^2.1.5
+
+  #aws
+  aws_client: ^0.6.1
+
+  #icons
+  icons_plus: ^5.0.0
+
+  #Share
+  share_plus: ^10.1.4
+  gal: ^2.3.1
+
+  #search
+  algoliasearch: ^1.30.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

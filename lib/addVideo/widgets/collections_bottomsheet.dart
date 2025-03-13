@@ -1,4 +1,4 @@
-import 'package:bavi/addVideo/models/collection.dart';
+import 'package:bavi/models/collection.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
@@ -20,31 +20,37 @@ void showCollections(
       collectionId: -1,
       name: "All",
       type: CollectionStatus.public,
-      videos: [videoId],
+      videos: [CollectionVideoData(videoId: videoId, createdAt: Timestamp.now(), updatedAt: Timestamp.now())],
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
     );
     List<VideoCollectionInfo> updCollectionsInfo = [];
 
     if (collections.isNotEmpty) {
+
       //If custom collections as present
       for (VideoCollectionInfo collection in collections) {
+
+        List<String> videoIdList = collection.videos.map((video) => video.videoId).toList();
+        CollectionVideoData newcollectionVideoData = CollectionVideoData(videoId: videoId, createdAt: Timestamp.now(), updatedAt: Timestamp.now());
+            
         if (collection.collectionId == -1) {
-          if (collection.videos.contains(videoId) == false) {
-            collection.videos.add(videoId);
+          //Add new video
+          if (videoIdList.contains(videoId) == false) {
+            collection.videos.add(newcollectionVideoData);
             collection.updatedAt = Timestamp.now();
           }
           updCollectionsInfo.add(collection);
         } else {
           //Add extracted video in selected collections
           if (selectedStates[collection.collectionId] == true) {
-            if (collection.videos.contains(videoId) == false) {
-              collection.videos.add(videoId);
+            if (videoIdList.contains(videoId) == false) {
+              collection.videos.add(newcollectionVideoData);
               collection.updatedAt = Timestamp.now();
             }
           }else{
-            if (collection.videos.contains(videoId) == true) {
-              collection.videos.remove(videoId);
+            if (videoIdList.contains(videoId) == true) {
+              collection.videos.remove(newcollectionVideoData);
             }
           }
           updCollectionsInfo.add(collection);

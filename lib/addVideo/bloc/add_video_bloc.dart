@@ -1,19 +1,22 @@
 import 'dart:convert';
-
-import 'package:bavi/addVideo/models/collection.dart';
-import 'package:bavi/addVideo/models/short_video.dart';
+import 'dart:io';
+import 'package:bavi/addVideo/bloc/add_video_state.dart';
+import 'package:bavi/models/collection.dart';
+import 'package:bavi/models/short_video.dart';
 import 'package:bavi/navigation_service.dart';
 import 'package:bloc/bloc.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:meta/meta.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:aws_client/s3_2006_03_01.dart';
 
 part 'add_video_event.dart';
-part 'add_video_state.dart';
 
 class AddVideoBloc extends Bloc<AddVideoEvent, AddVideoState> {
   final http.Client httpClient;
@@ -23,8 +26,31 @@ class AddVideoBloc extends Bloc<AddVideoEvent, AddVideoState> {
     on<AddVideoRedirect>(_redirectToVideo);
     on<AddVideoFetchCollections>(_fetchCollections);
     on<AddVideoUpdateCollections>(_addVideoCollectionToUser);
+    on<AddVideoCheckLink>(_checkLink);
   }
   ExtractedVideoInfo? extractedVideoInfo;
+
+
+  String instagramTutorialVideoUrl = "https://bavi.s3.ap-south-1.amazonaws.com/videos/save_instagram_video.mp4";
+  String youtubeTutorialVideoUrl = "https://bavi.s3.ap-south-1.amazonaws.com/videos/save_youtube_video.mp4";
+
+  Future<void> _checkLink(AddVideoCheckLink event, Emitter<AddVideoState> emit) async {
+    String link = event.link;
+    bool isValidUrl = Uri.tryParse(link)?.hasAbsolutePath ?? false;
+    
+    if (!isValidUrl) {
+      emit(state.copyWith(isValidLink: false));
+      return;
+    }
+
+    if(link.contains("instagram") && link.contains("reel")){
+      emit(state.copyWith(isValidLink: true));
+    }else if(link.contains("youtube") && link.contains("shorts")){
+      emit(state.copyWith(isValidLink: true));
+    }else{
+      emit(state.copyWith(isValidLink: false));
+    }
+  }
 
   //Fetch Collections
   Future<void> _fetchCollections(
@@ -80,6 +106,136 @@ class AddVideoBloc extends Bloc<AddVideoEvent, AddVideoState> {
     }
   }
 
+  //Download and cache video
+  Future<File?> downloadAndCacheVideo(
+      String videoUrl, String videoId, String platform) async {
+    try {
+      // Use flutter_cache_manager to download and cache the video
+      final file = await DefaultCacheManager()
+          .getSingleFile(videoUrl, key: "${platform}_video_$videoId");
+
+      print('Video downloaded and cached at: ${file.path}');
+      return file;
+    } catch (e) {
+      print('Error downloading or caching video: $e');
+      return null;
+    }
+  }
+
+  Future<File?> downloadAndCacheThumbnail(
+      String thumbnailUrl, String videoId, String platform) async {
+    try {
+      // Use flutter_cache_manager to download and cache the thumbnail
+      final file = await DefaultCacheManager().getSingleFile(
+        thumbnailUrl,
+        key: '${platform}_thumbnail_$videoId', // Unique cache key
+      );
+
+      print('Thumbnail downloaded and cached at: ${file.path}');
+      return file;
+    } catch (e) {
+      print('Error downloading or caching thumbnail: $e');
+      return null;
+    }
+  }
+
+//Upload video to aws s3 and get its url
+  Future<String?> uploadVideoToS3(
+      File videoFile, String platform, String videoId) async {
+    // AWS S3 Configuration
+    const String bucketName = 'bavi';
+    const String folderName = 'videos';
+    const String region = 'ap-south-1'; // Replace with your bucket's region
+    String accessKey =
+        dotenv.get('AWS_ACCESS_KEY'); // Replace with your AWS access key
+    String secretKey =
+        dotenv.get('AWS_SECRET_KEY'); // Replace with your AWS secret key
+
+    // Initialize the S3 client
+    final s3 = S3(
+      region: region,
+      credentials: AwsClientCredentials(
+        accessKey: accessKey,
+        secretKey: secretKey,
+      ),
+    );
+
+    // Generate a unique file name for the video
+    String fileName = '${platform}_$videoId.mp4';
+    String s3Key = '$folderName/$fileName'; // Full S3 key (path)
+
+    try {
+      // Step 1: Upload the video file to S3
+      await s3.putObject(
+        bucket: bucketName,
+        key: s3Key, // Save in the "videos" folder
+        body: await videoFile.readAsBytes(),
+        contentType: 'video/mp4',
+        //acl: ObjectCannedACL.publicRead, // Make the object publicly accessible
+      );
+
+      print('Video uploaded successfully to folder: $folderName');
+
+      // Step 2: Construct the public URL of the uploaded video
+      final videoUrl = 'https://$bucketName.s3.$region.amazonaws.com/$s3Key';
+      print('Uploaded video URL: $videoUrl');
+
+      return videoUrl; // Return the URL of the uploaded video
+    } catch (e) {
+      print('Error uploading video: $e');
+      return null;
+    }
+  }
+
+//upload thumbnail to the s3 and get its url
+  Future<String?> uploadImageToS3(
+      File imageFile, String platform, String videoId) async {
+    // AWS S3 Configuration
+    const String bucketName = 'bavi';
+    const String folderName = 'thumbnails';
+    const String region = 'ap-south-1'; // Replace with your bucket's region
+    String accessKey =
+        dotenv.get('AWS_ACCESS_KEY'); // Replace with your AWS access key
+    String secretKey =
+        dotenv.get('AWS_SECRET_KEY'); // Replace with your AWS secret key
+
+    // Initialize the S3 client
+    final s3 = S3(
+      region: region,
+      credentials: AwsClientCredentials(
+        accessKey: accessKey,
+        secretKey: secretKey,
+      ),
+    );
+
+    // Generate a unique file name for the image
+    String fileName = '${platform}_$videoId.jpg'; // Assuming JPEG format
+    String s3Key = '$folderName/$fileName'; // Full S3 key (path)
+
+    try {
+      // Step 1: Upload the image file to S3
+      await s3.putObject(
+        bucket: bucketName,
+        key: s3Key, // Save in the "thumbnails" folder
+        body: await imageFile.readAsBytes(),
+        contentType:
+            'image/jpeg', // Set the content type (use 'image/png' for PNG files)
+        //acl: ObjectCannedACL.publicRead, // Make the object publicly accessible
+      );
+
+      print('Image uploaded successfully to folder: $folderName');
+
+      // Step 2: Construct the public URL of the uploaded image
+      final imageUrl = 'https://$bucketName.s3.$region.amazonaws.com/$s3Key';
+      print('Uploaded image URL: $imageUrl');
+
+      return imageUrl; // Return the URL of the uploaded image
+    } catch (e) {
+      print('Error uploading image: $e');
+      return null;
+    }
+  }
+
   // Add Collection
   Future<void> _addVideoCollectionToUser(
       AddVideoUpdateCollections event, Emitter<AddVideoState> emit) async {
@@ -87,7 +243,6 @@ class AddVideoBloc extends Bloc<AddVideoEvent, AddVideoState> {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
 
     String? userEmaildId = prefs.getString("email");
-
     try {
       // Reference to the Firestore collection "users"
       final CollectionReference usersCollection =
@@ -128,8 +283,8 @@ class AddVideoBloc extends Bloc<AddVideoEvent, AddVideoState> {
         extractedVideoInfo: null,
         videoId: null,
         collectionsInfo: null));
-    
-          navService.goTo('/home');
+
+    navService.goTo('/home');
   }
 
   Future<void> _resetPage(
@@ -166,8 +321,10 @@ class AddVideoBloc extends Bloc<AddVideoEvent, AddVideoState> {
     emit(state.copyWith(status: AddVideoStatus.loading));
     String videoLink = event.link;
     String videoId = "";
+    String platform = "";
     //Check link
     if (videoLink.contains("instagram")) {
+      platform = "instagram";
       String? igVideoId = extractInstagramId(videoLink);
       if (igVideoId != null) {
         videoId = igVideoId;
@@ -177,6 +334,7 @@ class AddVideoBloc extends Bloc<AddVideoEvent, AddVideoState> {
         }
       }
     } else if (videoLink.contains("youtube")) {
+      platform = "youtube";
       String? ytVideoId = extractInstagramId(videoLink);
       if (ytVideoId != null) {
         videoId = ytVideoId;
@@ -191,7 +349,8 @@ class AddVideoBloc extends Bloc<AddVideoEvent, AddVideoState> {
     emit(state.copyWith(
         status: AddVideoStatus.success,
         extractedVideoInfo: extractedVideoInfo,
-        videoId: videoId));
+        videoId: videoId,
+        platform: platform));
   }
 
   Future<void> checkBackupVidInfo(String videoId, String platform) async {
@@ -253,16 +412,37 @@ class AddVideoBloc extends Bloc<AddVideoEvent, AddVideoState> {
           caption: respData["data"]["caption"]["text"],
           userData: userData,
           videoData: videoData);
-      Map<String, dynamic> extractedData = {
-        "videoId": id,
-        "platform": "instagram",
-        "data": extractedVideoInfo?.toJson() ?? {},
-        "total_extracts": 1,
-        "created_at": Timestamp.now(),
-        "updated_at": Timestamp.now()
-      };
-      backupExtractedData(extractedData, id, "instagram");
-      print('Data: $extractedVideoInfo');
+
+      //Save video and thumbnail and replace with its urls
+      //Download the video and save it in s3
+      File? videoFile = await downloadAndCacheVideo(
+          extractedVideoInfo!.videoData.videoUrl, id, "instagram");
+      File? imageFile = await downloadAndCacheThumbnail(
+          extractedVideoInfo!.videoData.thumbnailUrl, id, "instagram");
+      if (videoFile != null && imageFile != null) {
+        String? videoUrl = await uploadVideoToS3(videoFile, "instagram", id);
+        String? imageUrl = await uploadImageToS3(imageFile, "instagram", id);
+        if (videoUrl != null && imageUrl != null) {
+          ExtractedVideoInfo updatedVideoInfo = ExtractedVideoInfo(
+              searchContent: extractedVideoInfo!.searchContent,
+              caption: extractedVideoInfo!.caption,
+              userData: extractedVideoInfo!.userData,
+              videoData: VideoData(thumbnailUrl: imageUrl, videoUrl: videoUrl));
+
+          Map<String, dynamic> extractedData = {
+            "videoId": id,
+            "platform": "instagram",
+            "data": updatedVideoInfo?.toJson() ?? {},
+            "total_extracts": 1,
+            "created_at": Timestamp.now(),
+            "updated_at": Timestamp.now()
+          };
+          backupExtractedData(extractedData, id, "instagram");
+          print('Data: $extractedVideoInfo');
+        }
+      } else {
+        throw Exception("Unable to extract video and thumbnail");
+      }
     } else {
       // Handle error
       print('Failed to load data: ${response.statusCode}');
@@ -331,15 +511,33 @@ class AddVideoBloc extends Bloc<AddVideoEvent, AddVideoState> {
           userData: userData,
           videoData: videoData);
 
-      Map<String, dynamic> extractedData = {
-        "videoId": id,
-        "platform": "youtube",
-        "data": extractedVideoInfo?.toJson() ?? {},
-        "total_extracts": 1,
-        "created_at": Timestamp.now(),
-        "updated_at": Timestamp.now()
-      };
-      backupExtractedData(extractedData, id, "youtube");
+      //Save video and thumbnail and replace with its urls
+      //Download the video and save it in s3
+      File? videoFile = await downloadAndCacheVideo(
+          extractedVideoInfo!.videoData.videoUrl, id, "youtube");
+      File? imageFile = await downloadAndCacheThumbnail(
+          extractedVideoInfo!.videoData.thumbnailUrl, id, "youtube");
+      if (videoFile != null && imageFile != null) {
+        String? videoUrl = await uploadVideoToS3(videoFile, "youtube", id);
+        String? imageUrl = await uploadImageToS3(imageFile, "youtube", id);
+        if (videoUrl != null && imageUrl != null) {
+          ExtractedVideoInfo updatedVideoInfo = ExtractedVideoInfo(
+              searchContent: extractedVideoInfo!.searchContent,
+              caption: extractedVideoInfo!.caption,
+              userData: extractedVideoInfo!.userData,
+              videoData: VideoData(thumbnailUrl: imageUrl, videoUrl: videoUrl));
+
+          Map<String, dynamic> extractedData = {
+            "videoId": id,
+            "platform": "youtube",
+            "data": updatedVideoInfo?.toJson() ?? {},
+            "total_extracts": 1,
+            "created_at": Timestamp.now(),
+            "updated_at": Timestamp.now()
+          };
+          backupExtractedData(extractedData, id, "youtube");
+        }
+      }
 
       print('Data: $extractedVideoInfo');
     } else {

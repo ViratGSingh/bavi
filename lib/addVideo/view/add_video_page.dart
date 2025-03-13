@@ -1,13 +1,15 @@
 import 'dart:async';
-
 import 'package:bavi/addVideo/bloc/add_video_bloc.dart';
-import 'package:bavi/addVideo/models/collection.dart';
+import 'package:bavi/addVideo/bloc/add_video_state.dart';
 import 'package:bavi/addVideo/widgets/video_screen.dart';
+import 'package:bavi/models/collection.dart';
 import 'package:bavi/navigation_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:video_player/video_player.dart';
+import 'package:carousel_slider/carousel_slider.dart';
+import 'package:bavi/addVideo/widgets/tutorial_carousel.dart';
+import 'package:bavi/dialogs/warning.dart';
 
 class AddVideoPage extends StatefulWidget {
   const AddVideoPage({super.key});
@@ -22,13 +24,16 @@ class _AddVideoPageState extends State<AddVideoPage> {
   TextEditingController _textController = TextEditingController();
 
   Future<void> copyClipboard() async {
-    ClipboardData? clipboardData =
-        await Clipboard.getData(Clipboard.kTextPlain);
-    if (clipboardData != null && clipboardData.text != _textController.text) {
-      _textController.text = clipboardData.text ?? "";
-      print("Copied text: ${_textController.text}");
-      setState(() {});
-    }
+    await Clipboard.getData(Clipboard.kTextPlain).then((clipboardData) {
+      if (clipboardData != null && clipboardData.text != _textController.text) {
+        _textController.text = clipboardData.text ?? "";
+        print("Copied text: ${_textController.text}");
+        setState(() {});
+        context.read<AddVideoBloc>().add(
+              AddVideoCheckLink(_textController.text),
+            );
+      }
+    });
   }
 
   @override
@@ -70,7 +75,8 @@ class _AddVideoPageState extends State<AddVideoPage> {
       return PopScope(
         canPop: false,
         onPopInvokedWithResult: (didPop, result) {
-               navService.goTo('/home');
+          Clipboard.setData(ClipboardData(text: ""));
+          navService.goTo('/home');
         },
         child: SafeArea(
           child: Scaffold(
@@ -82,10 +88,11 @@ class _AddVideoPageState extends State<AddVideoPage> {
                     backgroundColor: Colors.white,
                     surfaceTintColor: Colors.white,
                     shadowColor: Colors.black,
-                    leadingWidth: 50,
+                    leadingWidth: 70,
                     leading: InkWell(
                       onTap: () {
-                 navService.goTo('/home');
+                        Clipboard.setData(ClipboardData(text: ""));
+                        navService.goTo('/home');
                       },
                       child: Container(
                         width: 24,
@@ -110,12 +117,17 @@ class _AddVideoPageState extends State<AddVideoPage> {
                   ),
             body: state.status == AddVideoStatus.success
                 ? VideoPlayerWidget(
-                    videoId: state.videoId ?? "",
+                    videoId: state.videoId!,
                     collections: state.collectionsInfo ?? [],
-                    videoUrl: state.extractedVideoInfo?.videoData.videoUrl ?? "",
+                    videoUrl:
+                        state.extractedVideoInfo?.videoData.videoUrl ?? "",
                     onSave: (List<VideoCollectionInfo> updCollections) {
                       context.read<AddVideoBloc>().add(
-                            AddVideoUpdateCollections(updCollections),
+                            AddVideoUpdateCollections(
+                                updCollections,
+                                state.extractedVideoInfo!,
+                                state.videoId!,
+                                state.platform!),
                           );
                     },
                     onBack: () {
@@ -168,10 +180,13 @@ class _AddVideoPageState extends State<AddVideoPage> {
                                       controller: _textController,
                                       onChanged: (value) {
                                         setState(() {});
+                                        context.read<AddVideoBloc>().add(
+                                              AddVideoCheckLink(value),
+                                            );
                                       },
                                       decoration: InputDecoration(
                                         border: InputBorder.none,
-                                        hintText: 'Enter text',
+                                        hintText: 'Enter link',
                                       ),
                                     ),
                                   ),
@@ -183,13 +198,40 @@ class _AddVideoPageState extends State<AddVideoPage> {
                                 ],
                               ),
                             ),
+                            TutorialCarousel(tutorialLinks: [
+                              context
+                                  .read<AddVideoBloc>()
+                                  .instagramTutorialVideoUrl,
+                              context
+                                  .read<AddVideoBloc>()
+                                  .youtubeTutorialVideoUrl,
+                            ]),
                             ElevatedButton(
                               onPressed: _textController.text == ""
                                   ? null
                                   : () {
-                                      context.read<AddVideoBloc>().add(
-                                            AddVideoExtract(_textController.text),
-                                          );
+                                      if (state.isValidLink == false) {
+                                        showDialog(
+                                            context: context,
+                                            builder: (context) => WarningPopup(
+                                                  title: "Error",
+                                                  message:
+                                                      "Please enter a valid Instagram Reel or YouTube Short link to continue",
+                                                  action: "Okay",
+                                                  popupColor: Color(0xFF8A2BE2),
+                                                  isInfo: true,
+                                                  popupIcon: Icons.info,
+                                                  actionFunc: () {
+                                                    Navigator.pop(context);
+                                                  },
+                                                  cancelText: "Cancel",
+                                                ));
+                                      } else {
+                                        context.read<AddVideoBloc>().add(
+                                              AddVideoExtract(
+                                                  _textController.text),
+                                            );
+                                      }
                                     },
                               style: ButtonStyle(
                                   backgroundColor: WidgetStatePropertyAll(

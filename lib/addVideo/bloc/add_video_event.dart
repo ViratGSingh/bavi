@@ -22,6 +22,15 @@ final class AddVideoFetchCollections extends AddVideoEvent {
 // Add video collection
 final class AddVideoUpdateCollections extends AddVideoEvent {
   final List<VideoCollectionInfo> collections; // Accept a list of collections
-  AddVideoUpdateCollections(this.collections);
+  final ExtractedVideoInfo videoInfo;
+  final String videoId;
+  final String platform;
+  AddVideoUpdateCollections(this.collections, this.videoInfo, this.videoId, this.platform);
+}
+
+// Add video collection
+final class AddVideoCheckLink extends AddVideoEvent {
+  final String link;
+  AddVideoCheckLink(this.link);
 }
 

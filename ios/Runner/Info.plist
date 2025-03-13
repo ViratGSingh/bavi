@@ -2,6 +2,15 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- gal: Required -->
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>We need access to save your favourite videos to your gallery</string>
+	<!-- gal: Required -->
+
+	<!-- gal: Required for ios < 14 or saving to album -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>We need access to save your favourite videos to your gallery</string>
+	<!-- gal: Required for ios < 14 or saving to album -->
 	<key>GIDClientID</key>
 	<string>302105442862-n0daq23oc2etcqmg75abeh80sphnufn0.apps.googleusercontent.com</string>
 	<key>CFBundleURLTypes</key>

@@ -5,10 +5,15 @@ sealed class AddVideoEvent {}
 
 final class AddVideoExtract extends AddVideoEvent {
   final String link;
-  AddVideoExtract(this.link);
+  final bool isOnboarding;
+  AddVideoExtract(this.link, this.isOnboarding);
 }
 //Reset to idle state
 final class AddVideoReset extends AddVideoEvent {
+}
+
+//Initiate Mixpanel
+final class AddVideoInitiateMixpanel extends AddVideoEvent {
 }
 
 //Direct without extracting

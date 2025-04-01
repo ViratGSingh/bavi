@@ -16,7 +16,7 @@ class NavigationService {
   // Navigate to a path with optional extra data and query parameters
   void goTo(String path, {Object? extra, Map<String, String>? queryParams}) {
     final uri = Uri(path: path, queryParameters: queryParams);
-    router.go(uri.toString(), extra: extra);
+    router.push(uri.toString(), extra: extra);
   }
 
   void goToAndPopUntil(String path, {Object? extra, Map<String, String>? queryParams}) {

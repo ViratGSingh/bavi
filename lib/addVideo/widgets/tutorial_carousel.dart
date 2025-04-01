@@ -50,7 +50,7 @@ class _TutorialCarouselState extends State<TutorialCarousel> {
       }
 
       await controller.initialize();
-      controller.setLooping(false); // Disable looping
+      controller.setLooping(true); // Enable looping
       
       // Add listener for video completion
       controller.addListener(() {
@@ -103,17 +103,20 @@ class _TutorialCarouselState extends State<TutorialCarousel> {
           enableInfiniteScroll: false,
           padEnds: false,
           onPageChanged: (index, reason) {
-            setState(() {
-              _currentIndex = index;
-              // Pause previous video
-              if (_controllers[_currentIndex == 0 ? 1 : 0]?.value.isPlaying ?? false) {
-                _controllers[_currentIndex == 0 ? 1 : 0]?.pause();
-              }
-              // Play current video
-              if (_controllers[index]?.value.isInitialized ?? false) {
-                _controllers[index]?.play();
-              }
-            });
+            // setState(() {
+            //   _currentIndex = index;
+            //   // Pause previous video
+            //   if (_controllers[_currentIndex == 0 ? 1 : 0]?.value.isPlaying ?? false) {
+            //     //_controllers[_currentIndex == 0 ? 1 : 0]?.pause();
+            //     _controllers[index]?.seekTo(Duration(seconds: 0));
+            //     _controllers[index]?.play();
+            //   }
+            //   // Play current video
+            //   if (_controllers[index]?.value.isInitialized ?? false) {
+            //     _controllers[index]?.seekTo(Duration(seconds: 0));
+            //     _controllers[index]?.play();
+            //   }
+            // });
           },
         ),
         itemBuilder: (context, index, realIndex) {

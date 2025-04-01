@@ -14,3 +14,7 @@ final class LoginAttemptApple extends LoginEvent {
 final class LoginInitialize extends LoginEvent {
 }
 
+//Initiate Mixpanel
+final class LoginInitiateMixpanel extends LoginEvent {
+}
+

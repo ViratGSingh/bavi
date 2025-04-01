@@ -18,6 +18,7 @@ class _LoginPageState extends State<LoginPage> {
   void initState() {
     super.initState();
     context.read<LoginBloc>().add(LoginInitialize());
+    context.read<LoginBloc>().add(LoginInitiateMixpanel());
   }
 
   @override
@@ -33,7 +34,7 @@ class _LoginPageState extends State<LoginPage> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    "Bavi",
+                    "BaviSync",
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 54,
@@ -187,10 +188,12 @@ class _LoginPageState extends State<LoginPage> {
                   Column(
                     children: [
                       ElevatedButton(
-                          onPressed: () {
-                            context.read<LoginBloc>().add(
-                                  LoginAttemptGoogle(),
-                                );
+                          onPressed: state.status == LoginStatus.loading
+                              ? null
+                              : () {
+                                  context.read<LoginBloc>().add(
+                                        LoginAttemptGoogle(),
+                                      );
                           },
                           style: ButtonStyle(
                               shape: WidgetStatePropertyAll(
@@ -206,21 +209,25 @@ class _LoginPageState extends State<LoginPage> {
                                 Size(
                                     MediaQuery.of(context).size.width - 40, 56),
                               )),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Container(
-                                width: 20,
-                                height: 20,
-                                child: SvgPicture.asset(
-                                    "assets/images/login/google.svg",
-                                    fit: BoxFit.cover),
-                              ),
-                              SizedBox(width: 12),
+                          child: state.status == LoginStatus.loading
+                              ? CircularProgressIndicator(
+                                  color: Color(0xFF8A2BE2),
+                                )
+                              : Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                              // Container(
+                              //   width: 20,
+                              //   height: 20,
+                              //   child: SvgPicture.asset(
+                              //       "assets/images/login/google.svg",
+                              //       fit: BoxFit.cover),
+                              // ),
+                              // SizedBox(width: 12),
                               Text(
-                                'Sign in with Google',
+                                'Continue',
                                 style: TextStyle(
                                   color: Color(0xFF090E1D),
                                   fontSize: 16,

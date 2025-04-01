@@ -11,9 +11,11 @@ import 'package:bavi/navigation_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:icons_plus/icons_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:shimmer/shimmer.dart';
+import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -27,9 +29,17 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     // TODO: implement initState
     super.initState();
+    initMixpanel();
     context.read<HomeBloc>().add(
           HomeDetectExtractVideoLink(),
         );
+  }
+
+  late Mixpanel mixpanel;
+  Future<void> initMixpanel() async {
+    // initialize Mixpanel
+    mixpanel = await Mixpanel.init(dotenv.get("MIXPANEL_PROJECT_KEY"),
+        trackAutomaticEvents: false);
   }
 
   @override
@@ -44,7 +54,7 @@ class _HomePageState extends State<HomePage> {
             bottomNavigationBar: BottomAppBar(
               // shape: CircularNotchedRectangle(),
               // notchMargin: 8.0,
-              height: 50,
+              height: 60,
               padding: EdgeInsets.zero,
               color: Colors.white,
               child: Container(
@@ -68,19 +78,22 @@ class _HomePageState extends State<HomePage> {
                                   ? Iconsax.home_1_bold
                                   : Iconsax.home_1_outline,
                               color: Colors.black),
-                          // Text(
-                          //   'Home',
-                          //   style: TextStyle(
-                          //       color: state.page == NavBarOption.home
-                          //           ? Colors.white: Color(0xFFe6e7e8),
-                          //       fontSize: 12,
-                          //       fontWeight: FontWeight.bold),
-                          // ),
+                          Text(
+                            'Home',
+                            style: TextStyle(
+                                color: Colors.black,
+                                fontSize: 12,
+                                fontWeight:  state.page == NavBarOption.home
+                                    ?FontWeight.bold:FontWeight.normal),
+                          ),
                         ],
                       ),
-                      onPressed: () => context.read<HomeBloc>().add(
-                            HomeNavOptionSelect(NavBarOption.home),
-                          ),
+                      onPressed: () {
+                        context.read<HomeBloc>().add(
+                              HomeNavOptionSelect(NavBarOption.home),
+                            );
+                        mixpanel.track("home_view");
+                      },
                     ),
                     IconButton(
                       icon: Column(
@@ -91,34 +104,50 @@ class _HomePageState extends State<HomePage> {
                                   ? Iconsax.search_normal_bold
                                   : Iconsax.search_normal_outline,
                               color: Colors.black),
-                          // Text(
-                          //   'Search',
-                          //   style: TextStyle(
-                          //       color: state.page == NavBarOption.search
-                          //           ? Colors.white: Color(0xFFe6e7e8),
-                          //       fontSize: 12,
-                          //       fontWeight: FontWeight.bold),
-                          // ),
+                          Text(
+                            'Search',
+                            style: TextStyle(
+                                color:Colors.black,
+                                fontSize: 12,
+                                fontWeight:  state.page == NavBarOption.search
+                                    ? FontWeight.bold:FontWeight.normal),
+                          ),
                         ],
                       ),
-                      onPressed: () => context.read<HomeBloc>().add(
-                            HomeNavOptionSelect(NavBarOption.search),
-                          ),
+                      onPressed: () {
+                        context.read<HomeBloc>().add(
+                              HomeNavOptionSelect(NavBarOption.search),
+                            );
+                        mixpanel.track("search_view");
+                      },
                     ),
                     IconButton(
-                      icon: Container(
-                        decoration: BoxDecoration(
-                            color: Color(0xFF8A2BE2),
-                            borderRadius: BorderRadius.circular(4)),
-                        padding: EdgeInsets.fromLTRB(10, 5, 10, 5),
-                        child: Icon(
-                          Iconsax.archive_add_bold,
-                          size: 16,
-                          color: Color(0xFFDFFF00),
-                        ),
+                      icon: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            decoration: BoxDecoration(
+                                color: Color(0xFF8A2BE2),
+                                borderRadius: BorderRadius.circular(4)),
+                            padding: EdgeInsets.fromLTRB(10, 5, 10, 5),
+                            child: Icon(
+                              Iconsax.archive_add_bold,
+                              size: 16,
+                              color: Color(0xFFDFFF00),
+                            ),
+                          ),
+                          Text(
+                            'Add Video',
+                            style: TextStyle(
+                                color:Colors.black,
+                                fontSize: 12,
+                                fontWeight:  FontWeight.normal),
+                          ),
+                        ],
                       ),
                       onPressed: () {
                         navService.goTo("/addVideo");
+                        mixpanel.track("add_video_view");
                         // Navigator.push(
                         //   context,
                         //   MaterialPageRoute<void>(
@@ -137,19 +166,22 @@ class _HomePageState extends State<HomePage> {
                                 : Iconsax.video_play_outline,
                             color: Colors.black,
                           ),
-                          // Text(
-                          //   'Saved',
-                          //   style: TextStyle(
-                          //       color: state.page == NavBarOption.saved
-                          //           ? Colors.white:Color(0xFFe6e7e8),
-                          //       fontSize: 12,
-                          //       fontWeight: FontWeight.bold),
-                          // ),
+                          Text(
+                            'Plsyer',
+                            style: TextStyle(
+                                color:  Colors.black,
+                                fontSize: 12,
+                                fontWeight: state.page == NavBarOption.player
+                                    ?FontWeight.bold:FontWeight.normal),
+                          ),
                         ],
                       ),
-                      onPressed: () => context.read<HomeBloc>().add(
-                            HomeNavOptionSelect(NavBarOption.player),
-                          ),
+                      onPressed: () {
+                        context.read<HomeBloc>().add(
+                              HomeNavOptionSelect(NavBarOption.player),
+                            );
+                        mixpanel.track("player_view");
+                      },
                     ),
                     IconButton(
                       icon: Column(
@@ -160,19 +192,22 @@ class _HomePageState extends State<HomePage> {
                                   ? Iconsax.frame_bold
                                   : Iconsax.frame_1_outline,
                               color: Colors.black),
-                          // Text(
-                          //   'Profile',
-                          //   style: TextStyle(
-                          //       color:state.page == NavBarOption.profile
-                          //           ? Colors.white:Color(0xFFe6e7e8),
-                          //       fontSize: 12,
-                          //       fontWeight: FontWeight.bold),
-                          // ),
+                          Text(
+                            'Profile',
+                            style: TextStyle(
+                                color: Colors.black,
+                                fontSize: 12,
+                                fontWeight: state.page == NavBarOption.profile
+                                    ? FontWeight.bold:FontWeight.normal),
+                          ),
                         ],
                       ),
-                      onPressed: () => context.read<HomeBloc>().add(
-                            HomeNavOptionSelect(NavBarOption.profile),
-                          ),
+                      onPressed: () {
+                        context.read<HomeBloc>().add(
+                              HomeNavOptionSelect(NavBarOption.profile),
+                            );
+                        mixpanel.track("profile_view");
+                      },
                     ),
                   ],
                 ),

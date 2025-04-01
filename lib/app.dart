@@ -4,6 +4,7 @@ import 'package:bavi/home/view/home_page.dart';
 import 'package:bavi/login/bloc/login_bloc.dart';
 import 'package:bavi/login/view/login_page.dart';
 import 'package:bavi/routes.dart';
+import 'package:bavi/settings/bloc/settings_bloc.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -37,6 +38,9 @@ class _BaviAppState extends State<BaviApp> {
         ),
         BlocProvider(
           create: (_) => AddVideoBloc(httpClient: http.Client()),
+        ),
+        BlocProvider(
+          create: (_) => SettingsBloc(httpClient: http.Client()),
         )
       ],
       child: MaterialApp.router(

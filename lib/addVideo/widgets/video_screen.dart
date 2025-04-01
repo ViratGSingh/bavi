@@ -8,6 +8,7 @@ class VideoPlayerWidget extends StatefulWidget {
   final String videoUrl;
   final String videoId;
   final Function() onBack;
+  final bool isOnboarding;
   final Function(List<VideoCollectionInfo> updCollections) onSave;
   final List<VideoCollectionInfo> collections;
 
@@ -17,7 +18,8 @@ class VideoPlayerWidget extends StatefulWidget {
       required this.videoUrl,
       required this.onBack,
       required this.onSave,
-      required this.collections})
+      required this.collections,
+      this.isOnboarding = false})
       : super(key: key);
 
   @override
@@ -37,7 +39,8 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
     // Initialize the video player controller
     _videoPlayerController = VideoPlayerController.network(widget.videoUrl);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      showCollections(context, userCollections, widget.videoId, widget.onSave);
+      showCollections(context, userCollections, widget.videoId, widget.onSave,
+          widget.isOnboarding);
     });
     // Initialize the video player asynchronously
     _initializeVideoPlayer();
@@ -98,8 +101,11 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
+      canPop: false,
       onPopInvokedWithResult: (didPop, result) {
-        widget.onBack();
+        if(widget.isOnboarding==false){
+          widget.onBack();
+        }
       },
       child: Scaffold(
         backgroundColor: Colors.black,
@@ -121,23 +127,26 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
               ),
 
             // Close Button
-            Positioned(
-              top: 20,
-              left: 20,
-              child: IconButton(
-                icon: const Icon(
-                  Icons.arrow_back_ios,
-                  color: Colors.white,
-                  size: 22,
+            Visibility(
+              visible: !widget.isOnboarding,
+              child: Positioned(
+                top: 20,
+                left: 10,
+                child: IconButton(
+                  icon: const Icon(
+                    Icons.arrow_back_ios,
+                    color: Colors.white,
+                    size: 22,
+                  ),
+                  onPressed: widget.onBack,
                 ),
-                onPressed: widget.onBack,
               ),
             ),
 
             // Save Button
             Positioned(
               bottom: 70,
-              right: 20,
+              right: 10,
               child: IconButton(
                 icon: const Icon(
                   Icons.bookmark_outline_rounded,
@@ -145,7 +154,8 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
                   size: 24,
                 ),
                 onPressed: () {
-      showCollections(context, userCollections, widget.videoId, widget.onSave);
+                  showCollections(context, userCollections, widget.videoId,
+                      widget.onSave, widget.isOnboarding);
                 },
               ),
             ),

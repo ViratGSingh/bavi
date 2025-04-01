@@ -1,10 +1,14 @@
+import 'dart:convert';
+
 import 'package:bavi/models/collection.dart';
 import 'package:bavi/models/short_video.dart';
 import 'package:bavi/navigation_service.dart';
 import 'package:chewie/chewie.dart'; // For video controls
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:icons_plus/icons_plus.dart';
+import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:video_player/video_player.dart'; // For video playback
 import 'package:flutter_cache_manager/flutter_cache_manager.dart'; // For caching videos
 import 'package:cached_network_image/cached_network_image.dart'; // For caching thumbnails
@@ -40,10 +44,13 @@ class _CollectionPlayerPageState extends State<CollectionPlayerPage>
   late CarouselSliderController _carouselController;
   String _currentVideoId = '';
   int _collectionIndex = 0;
+  bool isMute = false;
   List<ExtractedVideoInfo> sortedSavedVideoList = [];
   //Sort according to user collection list
+
   void _sortVideoList(VideoCollectionInfo collectionInfo) {
-    for (CollectionVideoData videoData in collectionInfo.videos) {
+    sortedSavedVideoList.clear();
+    for (CollectionVideoData videoData in collectionInfo.videos.reversed) {
       String platform = widget.platform[videoData.videoId] ?? "";
       if (widget.videoList.any((element) =>
           element.videoData.videoUrl.contains(videoData.videoId) &&
@@ -118,13 +125,21 @@ class _CollectionPlayerPageState extends State<CollectionPlayerPage>
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance
-        .addObserver(this); // Add observer to detect app state changes
+    initMixpanel();
+    WidgetsBinding.instance.addObserver(this);
     _carouselController = CarouselSliderController();
-    _currentVideoId = widget.collectionsInfo![_collectionIndex]
-        .videos[widget.initialPosition].videoId;
+    _currentVideoId = widget.collectionsInfo![_collectionIndex].videos.reversed
+        .toList()[widget.initialPosition]
+        .videoId;
     _sortVideoList(widget.collectionsInfo![_collectionIndex]);
-    _preloadAllVideos();
+    _preloadInitialVideos();
+  }
+
+  late Mixpanel mixpanel;
+  Future<void> initMixpanel() async {
+    // initialize Mixpanel
+    mixpanel = await Mixpanel.init(dotenv.get("MIXPANEL_PROJECT_KEY"),
+        trackAutomaticEvents: false);
   }
 
   @override
@@ -183,6 +198,7 @@ class _CollectionPlayerPageState extends State<CollectionPlayerPage>
 
   //Open bottomsheet to show caption
   void _showCaption(String caption) {
+    String decodedCaption = utf8.decode(caption.runes.toList());
     showModalBottomSheet(
       context: context,
       backgroundColor: Color(0xFF8A2BE2),
@@ -220,7 +236,7 @@ class _CollectionPlayerPageState extends State<CollectionPlayerPage>
             ),
             SizedBox(height: 20),
             Text(
-              caption,
+              decodedCaption,
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 14,
@@ -232,6 +248,7 @@ class _CollectionPlayerPageState extends State<CollectionPlayerPage>
         ),
       ),
     );
+    mixpanel.track("player_caption_video");
   }
 
   //Download video
@@ -251,6 +268,7 @@ class _CollectionPlayerPageState extends State<CollectionPlayerPage>
         );
       }
     }
+    mixpanel.track("player_download_video");
   }
 
   // Share video
@@ -263,6 +281,7 @@ class _CollectionPlayerPageState extends State<CollectionPlayerPage>
       shareLink = "https://www.youtube.com/shorts/$videoId";
     }
     Share.share(shareLink);
+    mixpanel.track("player_share_video");
   }
 
   // Preload all videos at the start
@@ -272,20 +291,81 @@ class _CollectionPlayerPageState extends State<CollectionPlayerPage>
     }
   }
 
+  // Preload initial videos
+  void _preloadInitialVideos() {
+    _preloadVideos(0);
+  }
+
+  // Preload videos
+  void _preloadVideos(int index) {
+    print("Preloading videos around index: $index");
+    final videoCount = sortedSavedVideoList.length;
+    final preloadIndices = <int>[];
+
+    if (videoCount <= 3) {
+      preloadIndices.addAll(List.generate(videoCount, (i) => i));
+    } else {
+      preloadIndices.add(index);
+      if (index > 0) preloadIndices.add(index - 1);
+      if (index < videoCount - 1) preloadIndices.add(index + 1);
+      if (index < videoCount - 2) preloadIndices.add(index + 2);
+      if (index == 0) preloadIndices.add(videoCount - 1);
+    }
+
+    final indicesToPreload = preloadIndices.toSet().toList();
+
+    final chewieControllerKeys = _chewieControllers.keys.toList();
+    for (String key in chewieControllerKeys) {
+      if (!indicesToPreload.contains(sortedSavedVideoList
+          .indexWhere((element) => element.videoData.videoUrl.contains(key)))) {
+        final controller = _chewieControllers[key];
+        if (controller != null) {
+          final videoController = controller.videoPlayerController;
+          videoController.pause();
+          videoController.dispose();
+          controller.dispose();
+          _chewieControllers.remove(key);
+          _videoLoadFailed.remove(key);
+          print("Disposed controller for key: $key");
+        }
+      }
+    }
+
+    indicesToPreload.forEach((i) {
+      if (i >= 0 && i < videoCount) {
+        print("Preloading video at index: $i");
+        _preloadVideo(sortedSavedVideoList[i]);
+      }
+    });
+  }
+
   // Preload a video
   Future<void> _preloadVideo(ExtractedVideoInfo videoInfo) async {
     String videoId = widget.collectionsInfo![_collectionIndex].videos
         .firstWhere((v) => videoInfo.videoData.videoUrl.contains(v.videoId))
         .videoId;
 
+    // ScaffoldMessenger.of(context).showSnackBar(
+    //   SnackBar(content: Text('Starting to to preload video')),
+    // );
+
     if (!_chewieControllers.containsKey(videoId)) {
+      // ScaffoldMessenger.of(context).showSnackBar(
+      //   SnackBar(content: Text('preload $videoId exists')),
+      // );
       final videoUrl = videoInfo.videoData.videoUrl;
       final fileInfo = await _cacheManager.getFileFromCache(videoUrl);
 
       if (fileInfo != null) {
+        // ScaffoldMessenger.of(context).showSnackBar(
+        //   SnackBar(content: Text('preload file $videoId exists')),
+        // );
         _initializeVideoPlayer(
             videoId, VideoPlayerController.file(fileInfo.file));
       } else {
+        // ScaffoldMessenger.of(context).showSnackBar(
+        //   SnackBar(content: Text('preload file $videoId doesnt exists')),
+        // );
         final videoPlayerController = VideoPlayerController.network(videoUrl);
         _initializeVideoPlayer(videoId, videoPlayerController);
 
@@ -405,8 +485,10 @@ class _CollectionPlayerPageState extends State<CollectionPlayerPage>
                           onPressed: () {
                             if (value.volume > 0) {
                               videoPlayerController.setVolume(0);
+                              isMute = true;
                             } else {
                               videoPlayerController.setVolume(1.0);
+                              isMute = false;
                             }
                           },
                         ),
@@ -447,23 +529,38 @@ class _CollectionPlayerPageState extends State<CollectionPlayerPage>
         carouselController: _carouselController,
         itemCount: sortedSavedVideoList.length,
         options: CarouselOptions(
-          initialPage: widget.initialPosition,
+          initialPage:
+              0, //sortedSavedVideoList.length - 1 - widget.initialPosition, // reversed initial page
           viewportFraction: 1.0, // Cover the whole screen
           enableInfiniteScroll: true, // Enable looping
           scrollDirection: Axis.vertical, // Vertical scrolling
           enlargeCenterPage: true, // Center the current video
           height: MediaQuery.of(context).size.height, // Full screen height
           onPageChanged: (index, reason) {
-            String newVideoId =
-                widget.collectionsInfo![_collectionIndex].videos[index].videoId;
+            String newVideoId = widget
+                .collectionsInfo![_collectionIndex].videos.reversed
+                .toList()[index]
+                .videoId;
             setState(() {
               _currentVideoId = newVideoId;
+              isMute = isMute;
             });
+            // ScaffoldMessenger.of(context).showSnackBar(
+            //   SnackBar(
+            //       content: Text(
+            //           'Current Videos ${_chewieControllers.keys.toList()} Videoid $newVideoId')),
+            // );
             _playCurrentVideo(newVideoId);
+            if (index % 2 == 0 || index == 0) {
+              _preloadVideos(index); // Trigger preloading here!
+            }
+            mixpanel.track("player_scroll_video");
           },
         ),
         itemBuilder: (context, index, realIndex) {
           final videoInfo = sortedSavedVideoList[index];
+          String decodedUserName =
+              utf8.decode(videoInfo.userData.fullname.runes.toList());
           return GestureDetector(
             onTap: () {
               VideoPlayerController currVideoPlayerController =
@@ -479,8 +576,10 @@ class _CollectionPlayerPageState extends State<CollectionPlayerPage>
                   _chewieControllers[_currentVideoId]!.videoPlayerController;
               if (currVideoPlayerController.value.volume > 0) {
                 currVideoPlayerController.setVolume(0);
+                isMute = true;
               } else {
                 currVideoPlayerController.setVolume(1.0);
+                isMute = false;
               }
             },
             child: Stack(
@@ -538,6 +637,9 @@ class _CollectionPlayerPageState extends State<CollectionPlayerPage>
                         ).then((int? newIndex) {
                           if (newIndex != null &&
                               newIndex != _collectionIndex) {
+                            // Pause current video first
+                            _pauseAllVideos();
+                            _carouselController.jumpToPage(0);
                             setState(() {
                               _collectionIndex = newIndex;
                               sortedSavedVideoList.clear();
@@ -546,10 +648,11 @@ class _CollectionPlayerPageState extends State<CollectionPlayerPage>
                               _currentVideoId = widget
                                   .collectionsInfo![_collectionIndex]
                                   .videos
-                                  .first
+                                  .last
                                   .videoId;
                             });
-                            _playCurrentVideo(_currentVideoId);
+                            _preloadInitialVideos();
+                            //_playCurrentVideo(_currentVideoId);
                           }
                         });
                       },
@@ -557,9 +660,9 @@ class _CollectionPlayerPageState extends State<CollectionPlayerPage>
                         padding:
                             EdgeInsets.symmetric(horizontal: 0, vertical: 8),
                         decoration: BoxDecoration(
-                          //color: Colors.black.withOpacity(0.5),
-                          //borderRadius: BorderRadius.circular(8),
-                        ),
+                            //color: Colors.black.withOpacity(0.5),
+                            //borderRadius: BorderRadius.circular(8),
+                            ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -618,7 +721,7 @@ class _CollectionPlayerPageState extends State<CollectionPlayerPage>
                                 width:
                                     2 * MediaQuery.of(context).size.width / 3,
                                 child: Text(
-                                  videoInfo.userData.fullname,
+                                  decodedUserName,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     color: Colors.white,
@@ -710,8 +813,9 @@ class _CollectionPlayerPageState extends State<CollectionPlayerPage>
 
   // Build the video player for a single video
   Widget _buildVideoPlayer(ExtractedVideoInfo videoInfo, int index) {
-    String videoId =
-        widget.collectionsInfo![_collectionIndex].videos[index].videoId;
+    String videoId = widget.collectionsInfo![_collectionIndex].videos
+        .firstWhere((v) => videoInfo.videoData.videoUrl.contains(v.videoId))
+        .videoId;
     final isVideoFailed = _videoLoadFailed[videoId] ?? false;
     print(isVideoFailed);
     print(_chewieControllers.containsKey(videoId));
@@ -756,13 +860,26 @@ class _CollectionPlayerPageState extends State<CollectionPlayerPage>
 
   // Play the current video and pause others
   void _playCurrentVideo(String videoId) {
+    // ScaffoldMessenger.of(context).showSnackBar(
+    //   SnackBar(
+    //       content: Text(
+    //           'Current Videos ${_chewieControllers.keys.toList()} Videoid $videoId')),
+    // );
     _chewieControllers.forEach((key, controller) {
-      if (key == videoId) {
-        // Play the current video
-        controller?.videoPlayerController.play();
-      } else {
-        // Pause all other videos
-        controller?.videoPlayerController.pause();
+      if (controller != null) {
+        if (key == videoId) {
+          // Play the current video from the start
+          controller.videoPlayerController.seekTo(Duration.zero);
+          controller.videoPlayerController.play();
+          if (isMute) {
+            controller.videoPlayerController.setVolume(0);
+          } else {
+            controller.videoPlayerController.setVolume(1);
+          }
+        } else {
+          // Pause all other videos
+          controller.videoPlayerController.pause();
+        }
       }
     });
   }

@@ -4,7 +4,9 @@ import 'package:bavi/navigation_service.dart';
 import 'package:chewie/chewie.dart'; // For video controls
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:icons_plus/icons_plus.dart';
+import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:video_player/video_player.dart'; // For video playback
 import 'package:flutter_cache_manager/flutter_cache_manager.dart'; // For caching videos
 import 'package:cached_network_image/cached_network_image.dart'; // For caching thumbnails
@@ -40,6 +42,7 @@ class _VideoActivityFeedState extends State<VideoActivityFeed>
   final Map<int, bool> _videoLoadFailed = {}; // Track video load failures
   late CarouselSliderController _carouselController;
   int _currentIndex = 0; // Track the current visible video index
+  bool isMute = false;
 
   String formatTimestamp(Timestamp timestamp) {
     // Convert Firestore Timestamp to DateTime
@@ -105,12 +108,20 @@ class _VideoActivityFeedState extends State<VideoActivityFeed>
   @override
   void initState() {
     super.initState();
+    initMixpanel();
     WidgetsBinding.instance
         .addObserver(this); // Add observer to detect app state changes
     _carouselController = CarouselSliderController();
     _currentIndex = widget.initialPosition; // Set initial index
-    // Preload all videos at the start
-    _preloadAllVideos();
+    _preloadInitialVideos(); // Preload initial videos
+  }
+
+  late Mixpanel mixpanel;
+  Future<void> initMixpanel() async {
+    // initialize Mixpanel
+    mixpanel = await Mixpanel.init(dotenv.get("MIXPANEL_PROJECT_KEY"),
+        trackAutomaticEvents: false);
+    mixpanel.track("home_view");
   }
 
   @override
@@ -169,6 +180,7 @@ class _VideoActivityFeedState extends State<VideoActivityFeed>
 
   //Open bottomsheet to show caption
   void _showCaption(String caption) {
+    String decodedCaption = utf8.decode(caption.runes.toList());
     showModalBottomSheet(
       context: context,
       backgroundColor: Color(0xFF8A2BE2),
@@ -176,6 +188,10 @@ class _VideoActivityFeedState extends State<VideoActivityFeed>
         borderRadius: BorderRadius.vertical(
           top: Radius.circular(20),
         ),
+      ),
+      isScrollControlled: true,
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.5,
       ),
       builder: (context) => Container(
         padding: EdgeInsets.all(20),
@@ -205,19 +221,24 @@ class _VideoActivityFeedState extends State<VideoActivityFeed>
               ],
             ),
             SizedBox(height: 20),
-            Text(
-              caption,
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontFamily: 'Poppins',
-                fontWeight: FontWeight.w500,
+            Expanded(
+              child: SingleChildScrollView(
+                child: Text(
+                  decodedCaption,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontFamily: 'Poppins',
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
               ),
             ),
           ],
         ),
       ),
     );
+    mixpanel.track("home_caption_video");
   }
 
   //Download video
@@ -237,6 +258,8 @@ class _VideoActivityFeedState extends State<VideoActivityFeed>
         );
       }
     }
+
+    mixpanel.track("home_download_video");
   }
 
   // Share video
@@ -249,6 +272,7 @@ class _VideoActivityFeedState extends State<VideoActivityFeed>
       shareLink = "https://www.youtube.com/shorts/$videoId";
     }
     Share.share(shareLink);
+    mixpanel.track("home_share_video");
   }
 
   // Preload all videos at the start
@@ -259,32 +283,71 @@ class _VideoActivityFeedState extends State<VideoActivityFeed>
   }
 
   // Preload a video at a specific index
+
+  void _preloadInitialVideos() {
+    _preloadVideos(_currentIndex);
+  }
+
+  void _preloadVideos(int index) {
+    final videoCount = widget.videoList.length;
+    final preloadIndices = <int>[];
+
+    if (videoCount <= 3) {
+      preloadIndices.addAll(List.generate(videoCount, (i) => i));
+    } else {
+      preloadIndices.add(index);
+      if (index > 0) preloadIndices.add(index - 1);
+      if (index < videoCount - 1) preloadIndices.add(index + 1);
+      if (index < videoCount - 2) preloadIndices.add(index + 2);
+      if (index == 0) preloadIndices.add(videoCount - 1);
+    }
+
+    final indicesToPreload = preloadIndices.toSet().toList();
+
+    // Remove controllers for videos that are no longer in the preload range
+    final indicesToRemove = _chewieControllers.keys
+        .where((existingIndex) => !indicesToPreload.contains(existingIndex))
+        .toList();
+
+    indicesToRemove.forEach((indexToRemove) {
+      final controller = _chewieControllers[indexToRemove];
+      if (controller != null) {
+        final videoController = controller.videoPlayerController;
+        videoController.pause();
+        videoController.dispose();
+        controller.dispose();
+        _chewieControllers.remove(indexToRemove);
+        _videoLoadFailed.remove(indexToRemove);
+      }
+    });
+
+    // Preload the necessary videos, ensuring the correct order
+    indicesToPreload.sort(); // Sort to ensure correct order
+    indicesToPreload.forEach((i) {
+      if (i >= 0 && i < videoCount) {
+        _preloadVideo(i);
+      }
+    });
+  }
+
   Future<void> _preloadVideo(int index) async {
     if (!_chewieControllers.containsKey(index)) {
-      print("initializing");
       final videoUrl = widget.videoList[index].videoData.videoUrl;
-
-      // Check if the video is already cached
       final fileInfo = await _cacheManager.getFileFromCache(videoUrl);
 
       if (fileInfo != null) {
-        // If cached, use the cached file
         _initializeVideoPlayer(
             index, VideoPlayerController.file(fileInfo.file));
       } else {
-        // If not cached, play directly from the URL and cache it in the background
         final videoPlayerController = VideoPlayerController.network(videoUrl);
         _initializeVideoPlayer(index, videoPlayerController);
 
-        // Cache the video in the background
         _cacheManager.downloadFile(videoUrl).then((fileInfo) {
           print('Video cached: ${fileInfo.file.path}');
         }).catchError((error) {
           print('Failed to cache video: $error');
         });
       }
-    } else {
-      print("bleh");
     }
   }
 
@@ -313,6 +376,7 @@ class _VideoActivityFeedState extends State<VideoActivityFeed>
         customControls: Material(
           color: Colors.transparent,
           child: Stack(
+            clipBehavior: Clip.none,
             children: [
               // Bottom gradient overlay
               Positioned(
@@ -353,34 +417,51 @@ class _VideoActivityFeedState extends State<VideoActivityFeed>
                           onPressed: () {
                             if (value.isPlaying) {
                               videoPlayerController.pause();
+                              mixpanel.track("home_pause_video");
                             } else {
                               videoPlayerController.play();
+                              mixpanel.track("home_play_video");
                             }
                           },
                         ),
                         Expanded(
                           child: GestureDetector(
-                            onHorizontalDragUpdate: (details) {
+                            onTapDown: (details) {
                               final double position = details.localPosition.dx;
-                              final double width = context.size!.width;
+                              final double width = context.size!.width - 90;
                               final double percent = position / width;
                               final Duration newPosition = Duration(
-                                  milliseconds:
-                                      (percent * value.duration.inMilliseconds)
-                                          .toInt());
+                                milliseconds:
+                                    (percent * value.duration.inMilliseconds)
+                                        .toInt(),
+                              );
                               videoPlayerController.seekTo(newPosition);
                             },
+                            onTapUp: (details) {
+                              videoPlayerController
+                                  .seekTo(videoPlayerController.value.position);
+                              videoPlayerController.play();
+                            },
                             child: Container(
-                              height: 4,
-                              color: Colors.grey[600],
-                              child: FractionallySizedBox(
-                                alignment: Alignment.centerLeft,
-                                widthFactor: value.position.inMilliseconds /
-                                    (value.duration.inMilliseconds == 0
-                                        ? 1
-                                        : value.duration.inMilliseconds),
-                                child: Container(
-                                  color: Color(0xFF8A2BE2),
+                              height: 10, // Outer container height
+                              alignment: Alignment
+                                  .center, // Center the progress bar vertically
+                              child: Container(
+                                height: 4, // Progress bar height
+                                width: double
+                                    .infinity, // Make the grey container take full width
+                                color: Colors.grey[
+                                    600], // Grey background for the progress bar
+                                child: FractionallySizedBox(
+                                  alignment: Alignment.centerLeft,
+                                  widthFactor: value.position.inMilliseconds /
+                                      (value.duration.inMilliseconds == 0
+                                          ? 1
+                                          : value.duration.inMilliseconds),
+                                  child: Container(
+                                    color: Color(
+                                        0xFF8A2BE2), // Purple progress indicator
+                                  ),
                                 ),
                               ),
                             ),
@@ -395,8 +476,12 @@ class _VideoActivityFeedState extends State<VideoActivityFeed>
                           onPressed: () {
                             if (value.volume > 0) {
                               videoPlayerController.setVolume(0);
+                              mixpanel.track("home_mute_video");
+                              isMute = true;
                             } else {
                               videoPlayerController.setVolume(1.0);
+                              mixpanel.track("home_unmute_video");
+                              isMute = false;
                             }
                           },
                         ),
@@ -410,14 +495,13 @@ class _VideoActivityFeedState extends State<VideoActivityFeed>
         ),
         allowMuting: true,
         startAt: Duration.zero,
-        
-        placeholder:  Shimmer.fromColors(
-            baseColor: Colors.black,
-            highlightColor: Colors.black54,
-            child: Container(
-              color: Colors.black,
-            ),
+        placeholder: Shimmer.fromColors(
+          baseColor: Colors.black,
+          highlightColor: Colors.black54,
+          child: Container(
+            color: Colors.black,
           ),
+        ),
       );
       print("setting state");
       setState(() {
@@ -439,13 +523,13 @@ class _VideoActivityFeedState extends State<VideoActivityFeed>
 
   @override
   Widget build(BuildContext context) {
-    
     return Container(
       color: Colors.black,
       child: CarouselSlider.builder(
         carouselController: _carouselController,
         itemCount: widget.videoList.length,
         options: CarouselOptions(
+          clipBehavior: Clip.none,
           padEnds: false,
           initialPage: widget.initialPosition,
           viewportFraction: 1.0, // Cover the whole screen
@@ -457,174 +541,188 @@ class _VideoActivityFeedState extends State<VideoActivityFeed>
             // Handle page change
             setState(() {
               _currentIndex = index;
+              isMute = isMute;
             });
+
             // Play the current video and pause others
-            _playCurrentVideo(index);
+            _syncAndPlayVideo(index);
+            if (index % 2 == 0 || index == 0) {
+              _preloadVideos(index); // Trigger preloading here!
+            }
+            mixpanel.track("home_scroll_video");
           },
         ),
         itemBuilder: (context, index, realIndex) {
           final videoInfo = widget.videoList[index];
-          String decodedUserName = utf8.decode(videoInfo.userData.fullname.runes.toList());
-          return GestureDetector(
-            onTap: () {
-              VideoPlayerController currVideoPlayerController =
-                  _chewieControllers[index]!.videoPlayerController;
-              if (currVideoPlayerController.value.isPlaying) {
-                currVideoPlayerController.pause();
-              } else {
-                currVideoPlayerController.play();
-              }
-            },
-            onDoubleTap: () {
-              VideoPlayerController currVideoPlayerController =
-                  _chewieControllers[index]!.videoPlayerController;
-              if (currVideoPlayerController.value.volume > 0) {
-                currVideoPlayerController.setVolume(0);
-              } else {
-                currVideoPlayerController.setVolume(1.0);
-              }
-            },
-            child: Stack(
-              children: [
-                _buildVideoPlayer(videoInfo, index),
-                Positioned(
-                  left: 20,
-                  top: 10,
-                  child: Text(
-                    'Bavi',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontFamily: 'Gugi',
-                      fontWeight: FontWeight.w600,
+          String decodedUserName =
+              utf8.decode(videoInfo.userData.fullname.runes.toList());
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              _buildVideoPlayer(videoInfo, index),
+              GestureDetector(
+                onTap: () {
+                  VideoPlayerController currVideoPlayerController =
+                      _chewieControllers[index]!.videoPlayerController;
+                  if (currVideoPlayerController.value.isPlaying) {
+                    currVideoPlayerController.pause();
+                  } else {
+                    currVideoPlayerController.play();
+                  }
+                  mixpanel.track("home_play_video");
+                },
+                onDoubleTap: () {
+                  VideoPlayerController currVideoPlayerController =
+                      _chewieControllers[index]!.videoPlayerController;
+                  if (currVideoPlayerController.value.volume > 0) {
+                    currVideoPlayerController.setVolume(0);
+                    mixpanel.track("home_mute_video");
+                    isMute = true;
+                  } else {
+                    currVideoPlayerController.setVolume(1.0);
+                    mixpanel.track("home_unmute_video");
+                    isMute = false;
+                  }
+                },
+                child: Container(
+                  width: MediaQuery.of(context).size.width,
+                  height: 3 * MediaQuery.of(context).size.height / 4,
+                  color: Colors.transparent,
+                ),
+              ),
+              Positioned(
+                left: 20,
+                top: 0,
+                child: Text(
+                  'BaviSync',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontFamily: 'Gugi',
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 18,
+                bottom: 60,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          widget.platform[widget.collectionInfo?.videos.reversed
+                                      .toList()[index]
+                                      .videoId] ==
+                                  "instagram"
+                              ? Iconsax.instagram_bold
+                              : Iconsax.youtube_bold,
+                          color: Colors.white,
+                          size: widget.platform[widget
+                                      .collectionInfo?.videos.reversed
+                                      .toList()[index]
+                                      .videoId] ==
+                                  "instagram"
+                              ? 40
+                              : 48,
+                        ),
+                        SizedBox(width: 5),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(
+                              width: 2 * MediaQuery.of(context).size.width / 3,
+                              child: Text(
+                                decodedUserName,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontFamily: 'Poppins',
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            SizedBox(
+                              width: 2 * MediaQuery.of(context).size.width / 3,
+                              child: Text(
+                                "@${videoInfo.userData.username.replaceAll("@", "")}",
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontFamily: 'Poppins',
+                                  fontWeight: FontWeight.w400,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                  ),
+                    SizedBox(height: 10),
+                    Padding(
+                      padding: EdgeInsets.only(left: 4),
+                      child: Text(
+                        "Saved on ${formatTimestamp(widget.collectionInfo!.videos.reversed.toList()[index].createdAt)}",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontFamily: 'Poppins',
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                Positioned(
-                  left: 18,
-                  bottom: 60,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            widget.platform[widget
-                                        .collectionInfo?.videos.reversed
-                                        .toList()[index]
-                                        .videoId] ==
-                                    "instagram"
-                                ? Iconsax.instagram_bold
-                                : Iconsax.youtube_bold,
-                            color: Colors.white,
-                            size: widget.platform[widget
-                                        .collectionInfo?.videos.reversed
-                                        .toList()[index]
-                                        .videoId] ==
-                                    "instagram"
-                                ? 40
-                                : 48,
-                          ),
-                          SizedBox(width: 5),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SizedBox(
-                                width:
-                                    2 * MediaQuery.of(context).size.width / 3,
-                                child: Text(
-                                  decodedUserName,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    fontFamily: 'Poppins',
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                              SizedBox(
-                                width:
-                                    2 * MediaQuery.of(context).size.width / 3,
-                                child: Text(
-                                  "@${videoInfo.userData.username.replaceAll("@", "")}",
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontFamily: 'Poppins',
-                                    fontWeight: FontWeight.w400,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+              ),
+              Positioned(
+                right: 10,
+                bottom: 48,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    IconButton(
+                      onPressed: () => _showCaption(videoInfo.caption),
+                      icon: Icon(
+                        Iconsax.info_circle_bold,
+                        color: Colors.white,
+                        size: 24,
                       ),
-                      SizedBox(height: 10),
-                      Padding(
-                        padding: EdgeInsets.only(left: 4),
-                        child: Text(
-                          "Saved on ${formatTimestamp(widget.collectionInfo!.videos.reversed.toList()[index].createdAt)}",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontFamily: 'Poppins',
-                            fontWeight: FontWeight.w400,
-                          ),
-                        ),
+                    ),
+                    SizedBox(height: 10),
+                    IconButton(
+                      onPressed: () => _shareVideo(
+                          widget.collectionInfo?.videos.reversed
+                                  .toList()[index]
+                                  .videoId ??
+                              "",
+                          widget.platform[widget.collectionInfo?.videos.reversed
+                              .toList()[index]
+                              .videoId]),
+                      icon: Icon(
+                        Iconsax.send_2_bold,
+                        color: Colors.white,
+                        size: 24,
                       ),
-                    ],
-                  ),
+                    ),
+                    SizedBox(height: 10),
+                    IconButton(
+                      onPressed: () =>
+                          _downloadVideo(videoInfo.videoData.videoUrl),
+                      icon: Icon(
+                        Icons.download,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                    ),
+                  ],
                 ),
-                Positioned(
-                  right: 10,
-                  bottom: 48,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      IconButton(
-                        onPressed: () => _showCaption(videoInfo.caption),
-                        icon: Icon(
-                          Iconsax.info_circle_bold,
-                          color: Colors.white,
-                          size: 24,
-                        ),
-                      ),
-                      SizedBox(height: 10),
-                      IconButton(
-                        onPressed: () => _shareVideo(
-                            widget.collectionInfo?.videos.reversed
-                                    .toList()[index]
-                                    .videoId ??
-                                "",
-                            widget.platform[widget
-                                .collectionInfo?.videos.reversed
-                                .toList()[index]
-                                .videoId]),
-                        icon: Icon(
-                          Iconsax.send_2_bold,
-                          color: Colors.white,
-                          size: 24,
-                        ),
-                      ),
-                      SizedBox(height: 10),
-                      IconButton(
-                        onPressed: () =>
-                            _downloadVideo(videoInfo.videoData.videoUrl),
-                        icon: Icon(
-                          Icons.download,
-                          color: Colors.white,
-                          size: 24,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              ],
-            ),
+              )
+            ],
           );
         },
       ),
@@ -642,6 +740,7 @@ class _VideoActivityFeedState extends State<VideoActivityFeed>
     print("");
     return Stack(
       fit: StackFit.expand,
+      clipBehavior: Clip.none,
       children: [
         // Thumbnail as fallback and during loading
         if (isVideoFailed || !_chewieControllers.containsKey(index))
@@ -674,15 +773,39 @@ class _VideoActivityFeedState extends State<VideoActivityFeed>
     );
   }
 
+  void _syncAndPlayVideo(int index) {
+    if (_chewieControllers.containsKey(index) &&
+        _chewieControllers[index] != null &&
+        _chewieControllers[index]!.videoPlayerController != null &&
+        _chewieControllers[index]!.videoPlayerController.value.isInitialized) {
+      // Controller exists and is initialized, play it
+      _playCurrentVideo(index);
+    } else {
+      // Controller doesn't exist or isn't initialized, wait and retry
+      Future.delayed(Duration(milliseconds: 50), () {
+        _syncAndPlayVideo(index); // Retry after a short delay
+      });
+    }
+  }
+
   // Play the current video and pause others
   void _playCurrentVideo(int index) {
     _chewieControllers.forEach((key, controller) {
-      if (key == index) {
-        // Play the current video
-        controller?.videoPlayerController.play();
-      } else {
-        // Pause all other videos
-        controller?.videoPlayerController.pause();
+      if (controller != null) {
+        if (key == index) {
+          // Play the current video from the start
+          controller.videoPlayerController.seekTo(Duration.zero);
+          
+          controller.videoPlayerController.play();
+          if(isMute){
+            controller.videoPlayerController.setVolume(0);
+          }else{
+            controller.videoPlayerController.setVolume(1);
+          }
+        } else {
+          // Pause all other videos
+          controller.videoPlayerController.pause();
+        }
       }
     });
   }

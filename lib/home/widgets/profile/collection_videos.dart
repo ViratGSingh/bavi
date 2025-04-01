@@ -16,7 +16,7 @@ class CollectionVideosPage extends StatelessWidget {
         backgroundColor: Colors.white,
         surfaceTintColor: Colors.white,
         shadowColor: Colors.black,
-        leadingWidth: 50,
+        leadingWidth: 80,
         leading: InkWell(
           onTap: () {
             Navigator.pop(context, 1);

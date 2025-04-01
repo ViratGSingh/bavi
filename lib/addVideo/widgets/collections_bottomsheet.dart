@@ -2,17 +2,82 @@ import 'package:bavi/models/collection.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+List<VideoCollectionInfo> sortedCollections(
+    List<VideoCollectionInfo> collections, Map<int, bool> selectedStates) {
+  // Separate the "All" collection
+  VideoCollectionInfo? allCollection = collections.firstWhere(
+    (collection) => collection.collectionId == -1,
+    orElse: () => null!,
+  );
+
+  // Separate selected and unselected collections
+  List<VideoCollectionInfo> selectedCollections = collections
+      .where((collection) =>
+          selectedStates[collection.collectionId] == true &&
+          collection.collectionId != -1)
+      .toList();
+
+  List<VideoCollectionInfo> unselectedCollections = collections
+      .where((collection) =>
+          selectedStates[collection.collectionId] == false ||
+          collection.collectionId == -1)
+      .toList();
+
+  // Combine the lists: "All" collection first, then selected collections, then unselected collections
+  List<VideoCollectionInfo> sortedList = [];
+  if (allCollection != null) {
+    sortedList.add(allCollection);
+  }
+  sortedList.addAll(selectedCollections);
+  sortedList.addAll(unselectedCollections);
+
+  return sortedList;
+}
+
 void showCollections(
     BuildContext context,
     List<VideoCollectionInfo> collections,
     String videoId,
-    final Function(List<VideoCollectionInfo> updCollections) onSave) {
+    final Function(List<VideoCollectionInfo> updCollections) onSave,
+    bool isOnboarding
+    ) {
   // Maintain a map to keep track of selected states
   Map<int, bool> selectedStates = {};
 
   // Initialize selected states for existing collections
   for (var collection in collections) {
     selectedStates[collection.collectionId] = collection.videos.contains(videoId);
+  }
+
+   // Create a ScrollController
+  final ScrollController _scrollController = ScrollController();
+
+  // Function to sort collections
+  List<VideoCollectionInfo> sortedCollections(List<VideoCollectionInfo> collections, Map<int, bool> selectedStates) {
+    // Separate the "All" collection
+    VideoCollectionInfo? allCollection = collections.firstWhere(
+      (collection) => collection.collectionId == -1,
+      orElse: () => null!,
+    );
+
+    // Separate selected and unselected collections
+    List<VideoCollectionInfo> selectedCollections = collections
+        .where((collection) => selectedStates[collection.collectionId] == true && collection.collectionId != -1)
+        .toList();
+
+    List<VideoCollectionInfo> unselectedCollections = collections
+        .where((collection) => selectedStates[collection.collectionId] == false || collection.collectionId == -1)
+        .toList();
+
+    // Combine the lists: "All" collection first, then selected collections, then unselected collections
+    List<VideoCollectionInfo> sortedList = [];
+    if (allCollection != null) {
+      sortedList.add(allCollection);
+    }
+    sortedList.addAll(selectedCollections);
+    sortedList.addAll(unselectedCollections);
+
+    return sortedList;
   }
 
   void saveInfo() {
@@ -27,28 +92,26 @@ void showCollections(
     List<VideoCollectionInfo> updCollectionsInfo = [];
 
     if (collections.isNotEmpty) {
-
-      //If custom collections as present
+      // If custom collections are present
       for (VideoCollectionInfo collection in collections) {
-
         List<String> videoIdList = collection.videos.map((video) => video.videoId).toList();
         CollectionVideoData newcollectionVideoData = CollectionVideoData(videoId: videoId, createdAt: Timestamp.now(), updatedAt: Timestamp.now());
-            
+
         if (collection.collectionId == -1) {
-          //Add new video
+          // Add new video
           if (videoIdList.contains(videoId) == false) {
             collection.videos.add(newcollectionVideoData);
             collection.updatedAt = Timestamp.now();
           }
           updCollectionsInfo.add(collection);
         } else {
-          //Add extracted video in selected collections
+          // Add extracted video in selected collections
           if (selectedStates[collection.collectionId] == true) {
             if (videoIdList.contains(videoId) == false) {
               collection.videos.add(newcollectionVideoData);
               collection.updatedAt = Timestamp.now();
             }
-          }else{
+          } else {
             if (videoIdList.contains(videoId) == true) {
               collection.videos.remove(newcollectionVideoData);
             }
@@ -68,12 +131,19 @@ void showCollections(
     shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(
         top: Radius.circular(20.0), // Rounded top edges
-      ),
+    ),
     ),
     backgroundColor: Color(0xFF8A2BE2),
+    isScrollControlled: true,
+    constraints: BoxConstraints(
+      maxHeight: MediaQuery.of(context).size.height * 0.5,
+    ),
     builder: (BuildContext context) {
       return StatefulBuilder(
         builder: (BuildContext context, StateSetter setState) {
+          // Sort collections to show selected ones first
+          List<VideoCollectionInfo> sortedList = collections.isEmpty?[]:sortedCollections(collections, selectedStates);
+
           return Container(
             padding: EdgeInsets.all(16.0),
             child: Column(
@@ -93,42 +163,47 @@ void showCollections(
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    TextButton(
-                      onPressed: () {
-                        showDialog(
-                          context: context,
-                          builder: (BuildContext context) {
-                            return Dialog(
-                              backgroundColor: Colors
-                                  .transparent, // Transparent dialog background
-                              insetPadding: EdgeInsets.all(
-                                  0), // Padding around the dialog
-                              child: NewCollectionScreen(
-                                onCreate: (newCollection) {
-                                  setState(() {
-                                    collections.add(newCollection);
-                                    selectedStates[newCollection.collectionId] =
-                                        true;
-                                  });
-                                },
-                                newCollectionId: collections.isEmpty
-                                    ? 0
-                                    : collections.length,
-                              ),
-                            );
-                          },
-                        );
-                      },
-                      style: ButtonStyle(
-                          padding: WidgetStatePropertyAll(EdgeInsets.zero)),
-                      child: Text(
-                        'New Collection',
-                        textAlign: TextAlign.right,
-                        style: TextStyle(
-                          color: Color(0xFFDFFF00),
-                          fontSize: 14,
-                          fontFamily: 'Poppins',
-                          fontWeight: FontWeight.w500,
+                    Visibility(
+                      visible: !isOnboarding,
+                      child: TextButton(
+                        onPressed: () {
+                          showDialog(
+                            context: context,
+                            builder: (BuildContext context) {
+                              return Dialog(
+                                backgroundColor: Colors.transparent, // Transparent dialog background
+                                insetPadding: EdgeInsets.all(0), // Padding around the dialog
+                                child: NewCollectionScreen(
+                                  onCreate: (newCollection) {
+                                    setState(() {
+                                      collections.add(newCollection);
+                                      selectedStates[newCollection.collectionId] = true; // Automatically select the new collection
+                                      // Scroll to the top after adding a new collection
+                                      _scrollController.animateTo(
+                                        0,
+                                        duration: Duration(milliseconds: 300),
+                                        curve: Curves.easeInOut,
+                                      );
+                                    });
+                                  },
+                                  newCollectionId: collections.isEmpty ? 0 : collections.length,
+                                ),
+                              );
+                            },
+                          );
+                        },
+                        style: ButtonStyle(
+                          padding: WidgetStatePropertyAll(EdgeInsets.zero),
+                        ),
+                        child: Text(
+                          'New Collection',
+                          textAlign: TextAlign.right,
+                          style: TextStyle(
+                            color: Color(0xFFDFFF00),
+                            fontSize: 14,
+                            fontFamily: 'Poppins',
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                     ),
@@ -137,8 +212,7 @@ void showCollections(
 
                 // Checklist
                 Container(
-                  height: MediaQuery.of(context).size.height / 4 + 70,
-                  child: collections.isEmpty == true
+                  child: sortedList.isEmpty
                       ? CollectionTypeTile(defaultSelected: true)
                       : Column(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -146,38 +220,26 @@ void showCollections(
                             Container(
                               height: MediaQuery.of(context).size.height / 4,
                               child: SingleChildScrollView(
+                                controller: _scrollController,
                                 child: Column(
                                   children: [
                                     CollectionTypeTile(defaultSelected: true),
                                     ListView(
                                       shrinkWrap: true,
                                       physics: NeverScrollableScrollPhysics(),
-                                      children: collections.isEmpty == true
-                                          ? [
-                                              CollectionTypeTile(
-                                                  defaultSelected: true)
-                                            ]
-                                          : collections.map(
-                                              (info) {
-                                                return info.collectionId == -1
-                                                    ? SizedBox.shrink()
-                                                    : CollectionTypeTile(
-                                                        info: info,
-                                                        isSelected:
-                                                            selectedStates[info
-                                                                    .collectionId] ??
-                                                                false,
-                                                        onSelected:
-                                                            (bool selected) {
-                                                          setState(() {
-                                                            selectedStates[info
-                                                                    .collectionId] =
-                                                                selected;
-                                                          });
-                                                        },
-                                                      );
-                                              },
-                                            ).toList(),
+                                      children: sortedList.map((info) {
+                                        return info.collectionId == -1
+                                            ? SizedBox.shrink()
+                                            : CollectionTypeTile(
+                                                info: info,
+                                                isSelected: selectedStates[info.collectionId] ?? false,
+                                                onSelected: (bool selected) {
+                                                  setState(() {
+                                                    selectedStates[info.collectionId] = selected;
+                                                  });
+                                                },
+                                              );
+                                      }).toList(),
                                     ),
                                   ],
                                 ),
@@ -192,25 +254,22 @@ void showCollections(
                   child: ElevatedButton(
                     onPressed: () {
                       saveInfo();
-                      // Handle create button press
-                    }, // Disable button if text is empty
+                    },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white, // Button color
                       disabledBackgroundColor: Color(0xFFE6E7E8),
                       shape: RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.circular(12), // Rounded corners
+                        borderRadius: BorderRadius.circular(12), // Rounded corners
                       ),
-                      padding:
-                          EdgeInsets.symmetric(vertical: 16), // Button padding
+                      padding: EdgeInsets.symmetric(vertical: 16), // Button padding
                     ),
                     child: Text(
-                      'Create',
+                      'Continue',
                       style: TextStyle(
                         color: Color.fromRGBO(9, 14, 29, 1),
                         fontSize: 16,
                         fontFamily: 'Poppins',
-                        fontWeight: FontWeight.w400,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
@@ -221,7 +280,8 @@ void showCollections(
         },
       );
     },
-  );
+  )
+  ;
 }
 
 class NewCollectionScreen extends StatefulWidget {

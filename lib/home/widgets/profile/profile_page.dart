@@ -5,8 +5,11 @@ import 'package:bavi/home/widgets/home/video_activity.dart';
 import 'package:bavi/models/collection.dart';
 import 'package:bavi/models/short_video.dart';
 import 'package:bavi/models/user.dart';
+import 'package:bavi/navigation_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:icons_plus/icons_plus.dart';
 
@@ -33,6 +36,20 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
+  @override
+  void initState() {
+    // TODO: implement initState
+    super.initState();
+    initMixpanel();
+  }
+
+  late Mixpanel mixpanel;
+  Future<void> initMixpanel() async {
+    // initialize Mixpanel
+    mixpanel = await Mixpanel.init(dotenv.get("MIXPANEL_PROJECT_KEY"),
+        trackAutomaticEvents: false);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -90,24 +107,9 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 IconButton(
                   onPressed: () {
-                    showDialog(
-                                            context: context,
-                                            builder: (context) => WarningPopup(
-                                                  title: "Logout",
-                                                  message:
-                                                      "Are you sure you want to logout?",
-                                                  action: "Yes",
-                                                  popupColor: Color(0xFF8A2BE2),
-                                                  isInfo: false,
-                                                  popupIcon: Icons.info,
-                                                  actionFunc: () {
-                                                    Navigator.pop(context);
-                                                    widget.onSignOut();
-                                                  },
-                                                  cancelText: "No",
-                                                ));
+                    navService.goTo("/settings");
                   },
-                  icon: Icon(Iconsax.logout_bold,
+                  icon: Icon(Iconsax.setting_2_bold,
                       color: Color(0xFFDFFF00), size: 24),
                 )
               ],
@@ -217,9 +219,10 @@ class _ProfilePageState extends State<ProfilePage> {
                                                         .first
                                                         .videoData
                                                         .thumbnailUrl,
-                                                      fit: BoxFit.cover,
-                                                    placeholder: (context, url) =>
-                                                        Shimmer.fromColors(
+                                                    fit: BoxFit.cover,
+                                                    placeholder:
+                                                        (context, url) =>
+                                                            Shimmer.fromColors(
                                                       baseColor:
                                                           Colors.grey[300]!,
                                                       highlightColor:
@@ -228,9 +231,9 @@ class _ProfilePageState extends State<ProfilePage> {
                                                         color: Colors.white,
                                                       ),
                                                     ),
-                                                    errorWidget: (context, url,
-                                                        error) =>
-                                                        Icon(
+                                                    errorWidget:
+                                                        (context, url, error) =>
+                                                            Icon(
                                                       Iconsax.save_2_outline,
                                                       color: Colors.black,
                                                       size: 24,
@@ -334,7 +337,7 @@ class CircularAvatarWithShimmer extends StatelessWidget {
                       size: 24,
                     ),
                   ),
-                ),
+          ),
         ),
       ],
     );

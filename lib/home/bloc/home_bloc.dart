@@ -9,6 +9,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:meta/meta.dart';
 import 'package:http/http.dart' as http;
@@ -31,25 +32,30 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
 
   Future<void> _detectExtractVideoLink(
       HomeDetectExtractVideoLink event, Emitter<HomeState> emit) async {
-    //Check in clipboard for link
-    final ClipboardData? clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
-    String link = clipboardData?.text ?? "";
-    //Detect the link part and remove the rest
-    // Extract link from text by looking for http/https
-    final RegExp urlRegex = RegExp(r'https?://[^\s]+');
-    final Match? match = urlRegex.firstMatch(link);
-    link = match?.group(0) ?? link;
-    bool isValidUrl = Uri.tryParse(link)?.hasAbsolutePath ?? false;
+    List<RouteMatchBase> matches =
+        navService.router.routerDelegate.currentConfiguration.matches;
+    if (matches.length <= 1) {
+      //Check in clipboard for link
+      final ClipboardData? clipboardData =
+          await Clipboard.getData(Clipboard.kTextPlain);
+      String link = clipboardData?.text ?? "";
+      //Detect the link part and remove the rest
+      // Extract link from text by looking for http/https
+      final RegExp urlRegex = RegExp(r'https?://[^\s]+');
+      final Match? match = urlRegex.firstMatch(link);
+      link = match?.group(0) ?? link;
+      bool isValidUrl = Uri.tryParse(link)?.hasAbsolutePath ?? false;
 
-    if (link.contains("instagram") && link.contains("reel")) {
-      isValidUrl = true;
-    } else if (link.contains("youtube") && link.contains("shorts")) {
-      isValidUrl = true;
-    } else {
-      isValidUrl = false;
-    }
-    if (isValidUrl) {
-      navService.goTo("/addVideo");
+      if (link.contains("instagram") && link.contains("reel")) {
+        isValidUrl = true;
+      } else if (link.contains("youtube") && link.contains("shorts")) {
+        isValidUrl = true;
+      } else {
+        isValidUrl = false;
+      }
+      if (isValidUrl) {
+        navService.goTo("/addVideo");
+      }
     }
   }
 

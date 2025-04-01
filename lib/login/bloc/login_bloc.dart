@@ -8,10 +8,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:equatable/equatable.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:meta/meta.dart';
 import 'package:http/http.dart' as http;
+import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 part 'login_event.dart';
@@ -23,6 +25,16 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
     on<LoginInfoScrolled>(_changeInfoPosition);
     on<LoginAttemptGoogle>(_handleGoogleSignIn);
     on<LoginInitialize>(_handleInitialize);
+    on<LoginInitiateMixpanel>(_initMixpanel);
+  }
+
+  late Mixpanel mixpanel;
+  Future<void> _initMixpanel(
+      LoginInitiateMixpanel event, Emitter<LoginState> emit) async {
+    // initialize Mixpanel
+    mixpanel = await Mixpanel.init(dotenv.get("MIXPANEL_PROJECT_KEY"),
+        trackAutomaticEvents: false);
+    mixpanel.track("sign_in_view");
   }
 
   String initialVideoId = "C6auaneCk05";
@@ -30,23 +42,25 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
       "https://bavi.s3.ap-south-1.amazonaws.com/videos/instagram_C6auaneCk05.mp4";
   String initialThumbnailUrl =
       "https://bavi.s3.ap-south-1.amazonaws.com/thumbnails/instagram_C6auaneCk05.jpg";
-   String initialPlatform = "instagram";
+  String initialPlatform = "instagram";
 
   //Tutorial Video Links
-  String instagramTutorialVideoUrl = "https://bavi.s3.ap-south-1.amazonaws.com/videos/save_instagram_video.mp4";
-  String youtubeTutorialVideoUrl = "https://bavi.s3.ap-south-1.amazonaws.com/videos/save_youtube_video.mp4";
+  String instagramTutorialVideoUrl =
+      "https://bavi.s3.ap-south-1.amazonaws.com/videos/save_instagram_video.mp4";
+  String youtubeTutorialVideoUrl =
+      "https://bavi.s3.ap-south-1.amazonaws.com/videos/save_youtube_video.mp4";
   Future<void> _handleInitialize(
       LoginInitialize event, Emitter<LoginState> emit) async {
-    await DefaultCacheManager().getSingleFile(initialVideoUrl,
-        key: initialVideoUrl);
+    await DefaultCacheManager()
+        .getSingleFile(initialVideoUrl, key: initialVideoUrl);
     await DefaultCacheManager().getSingleFile(
       initialThumbnailUrl,
       key: initialThumbnailUrl, // Unique cache key
     );
     await DefaultCacheManager().getSingleFile(instagramTutorialVideoUrl,
         key: instagramTutorialVideoUrl);
-    await DefaultCacheManager().getSingleFile(youtubeTutorialVideoUrl,
-        key: youtubeTutorialVideoUrl);
+    await DefaultCacheManager()
+        .getSingleFile(youtubeTutorialVideoUrl, key: youtubeTutorialVideoUrl);
   }
 
   Future<void> _changeInfoPosition(
@@ -65,10 +79,9 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
     try {
       // Sign out first to force account picker
       await _googleSignIn.signOut();
-      
+
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      print(googleUser?.displayName);
-      print(googleUser?.email);
+      emit(state.copyWith(status: LoginStatus.loading));
       if (googleUser != null) {
         final GoogleSignInAuthentication googleAuth =
             await googleUser.authentication;
@@ -87,8 +100,10 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
 
         await saveUserData(googleUser);
       }
+      emit(state.copyWith(status: LoginStatus.success));
     } catch (error) {
       print("Google Sign-In Error: $error");
+      emit(state.copyWith(status: LoginStatus.failure));
     }
   }
 
@@ -109,6 +124,7 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
         .get();
 
     if (querySnapshot.docs.isNotEmpty) {
+      await prefs.setBool('isOnboarded', true);
       print("asdasd");
       // Document with the same email exists, update it
       String documentId = querySnapshot.docs.first.id;
@@ -116,9 +132,13 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
         'updated_at': Timestamp.now(),
       }, SetOptions(merge: true)).then((onValue) {
         print("aaa");
+        String username = googleUser.email.split("@").first;
+        mixpanel.identify(username);
+        mixpanel.track("sign_in");
         navService.goTo('/home');
       }); // Merge to update only specified fields
     } else {
+      await prefs.setBool('isOnboarded', false);
       // Create a new user with a first and last name
       String username = googleUser.email.split("@").first;
       final user = <String, dynamic>{
@@ -128,26 +148,28 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
         "profile_pic_url": googleUser.photoUrl ?? "",
         "created_at": Timestamp.now(),
         "updated_at": Timestamp.now(),
-        "video_collections": [
-          VideoCollectionInfo(
-            collectionId: -1,
-            name: "All",
-            type: CollectionStatus.public,
-            videos: [
-              CollectionVideoData(
-                  videoId: initialVideoId,
-                  createdAt: Timestamp.now(),
-                  updatedAt: Timestamp.now(),
-                  )
-            ],
-            createdAt: Timestamp.now(),
-            updatedAt: Timestamp.now(),
-          ).toJson()
-        ],
+        // "video_collections": [
+        //   VideoCollectionInfo(
+        //     collectionId: -1,
+        //     name: "All",
+        //     type: CollectionStatus.public,
+        //     videos: [
+        //       CollectionVideoData(
+        //           videoId: initialVideoId,
+        //           createdAt: Timestamp.now(),
+        //           updatedAt: Timestamp.now(),
+        //           )
+        //     ],
+        //     createdAt: Timestamp.now(),
+        //     updatedAt: Timestamp.now(),
+        //   ).toJson()
+        // ],
       };
       // Add a new document with a generated ID
       await db.collection("users").add(user).then((onValue) {
-        navService.goTo('/home');
+        mixpanel.identify(username);
+        mixpanel.track("sign_up");
+        navService.goTo('/onboarding', queryParams: {"name":googleUser.displayName ?? ""});
       });
     }
   }

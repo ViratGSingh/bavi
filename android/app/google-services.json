@@ -22,6 +22,22 @@
           }
         },
         {
+          "client_id": "302105442862-l98fu22idjnca1apbrhom70g7b5l54pi.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.wooshir.bavi",
+            "certificate_hash": "0207dc3afc5e9b30516168216897043d19c4e1e8"
+          }
+        },
+        {
+          "client_id": "302105442862-nu364cur7efi89rosa69dne1bgu0aseg.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.wooshir.bavi",
+            "certificate_hash": "97a81543f76c003fd120016073552c2f414379c0"
+          }
+        },
+        {
           "client_id": "302105442862-o7rpmod94ggs1uu0qlsrij6le5p9vi0q.apps.googleusercontent.com",
           "client_type": 3
         }

@@ -2,18 +2,24 @@ part of 'home_bloc.dart';
 
 enum NavBarOption { home, search, player, profile }
 
-enum HomePageStatus { idle, loading }
+enum HomePageStatus { idle, loading, generateQuery, getSearchResults,summarize,  success, failure}
 
 final class HomeState extends Equatable {
   HomeState({
     UserProfileInfo? userData,
     this.page = NavBarOption.home,
     this.status = HomePageStatus.idle,
-    this.videos = const [],
-    this.collectionsVideos = const [],
-    this.collections = const [],
-    this.allVideoPlatformData = const {},
     this.searchResults = const [],
+    this.searchAnswer = "",
+    this.account = const ExtractedAccountInfo(
+      accountId: "bengaluru_food_scene", 
+      username: "Let us put one full scene together", 
+      fullname: "Bengaluru Food Scene", 
+      profilePicUrl: "https://bavi.s3.ap-south-1.amazonaws.com/profiles/bengaluru_food_scene.png", 
+      isVerified: false, 
+      isPrivate: false),
+    this.searchQuery = "",
+    this.searchHistory = const []
   }) : userData = userData ?? UserProfileInfo(
           email: "NA",
           fullname: "NA",
@@ -21,39 +27,38 @@ final class HomeState extends Equatable {
           profilePicUrl: "NA",
           createdAt: Timestamp.now(),
           updatedAt: Timestamp.now(),
-          videoCollections: [],
+          searchHistory: [],
         );
-
+  final String searchQuery;
   final UserProfileInfo userData;
   final NavBarOption page;
   final HomePageStatus status;
-  final Map<String, dynamic> allVideoPlatformData;
-  final List<ExtractedVideoInfo> videos;
-  final List<List<ExtractedVideoInfo>> collectionsVideos;
-  final List<VideoCollectionInfo> collections;
+  final List<ConversationData> searchHistory;
   final List<ExtractedVideoInfo> searchResults;
+  final String searchAnswer;
+  ExtractedAccountInfo account;
   HomeState copyWith({
+    String? searchQuery,
     UserProfileInfo? userData,
     NavBarOption? page,
+    ExtractedAccountInfo? account,
     HomePageStatus? status,
-    List<ExtractedVideoInfo>? videos,
-    List<List<ExtractedVideoInfo>>? collectionsVideos,
-    List<VideoCollectionInfo>? collections,
-    Map<String, dynamic>? allVideoPlatformData,
+    String? searchAnswer,
+    List<ConversationData>? searchHistory,
     List<ExtractedVideoInfo>? searchResults,
   }) {
     return HomeState(
+      searchHistory: searchHistory ?? this.searchHistory,
+      searchAnswer: searchAnswer ?? this.searchAnswer,
+      searchQuery: searchQuery ?? this.searchQuery,
+      account: account ?? this.account,
       userData: userData ?? this.userData,
       page: page ?? this.page,
       status: status ?? this.status,
-      videos: videos ?? this.videos,
-      collectionsVideos: collectionsVideos ?? this.collectionsVideos,
-      collections: collections ?? this.collections,
-      allVideoPlatformData: allVideoPlatformData ?? this.allVideoPlatformData,
       searchResults: searchResults ?? this.searchResults,
     );
   }
 
   @override
-  List<Object> get props => [page, status, videos, collectionsVideos, collections, userData, allVideoPlatformData, searchResults];
+  List<Object?> get props => [page,account, status, userData,searchHistory, searchResults, searchAnswer];
 }

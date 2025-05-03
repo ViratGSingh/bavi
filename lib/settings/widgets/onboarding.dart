@@ -13,7 +13,7 @@ class WelcomeScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              "Welcome to BaviSync",
+              "Welcome to Drissea",
               style: TextStyle(
                 color: Colors.black,
                 fontSize: 14,

@@ -6,20 +6,32 @@ class ExtractedVideoInfo extends Equatable {
     required this.caption,
     required this.userData,
     required this.videoData,
+    required this.videoId,
+    required this.platform,
+    required this.videoDescription,
+    required this.audioDescription,
   });
 
   final String searchContent;
   final String caption;
+  final String videoDescription;
+  final String audioDescription;
   final UserData userData;
   final VideoData videoData;
+  final String videoId;
+  final String platform;
 
   @override
-  List<Object> get props => [searchContent, caption, userData, videoData];
+  List<Object> get props => [searchContent, videoDescription,audioDescription, caption, userData, videoData, videoId, platform];
 
   factory ExtractedVideoInfo.fromJson(Map<String, dynamic> json) {
     return ExtractedVideoInfo(
+      platform: json["platform"] as String,
+      videoId: json["video_id"] as String,
       searchContent: json['search_content'] as String,
       caption: json['caption'] as String,
+      videoDescription: json['video_description'] as String,
+      audioDescription: json['audio_description'] as String,
       userData: UserData.fromJson(json['user_data'] as Map<String, dynamic>),
       videoData: VideoData.fromJson(json['video_data'] as Map<String, dynamic>),
     );
@@ -27,8 +39,12 @@ class ExtractedVideoInfo extends Equatable {
 
   Map<String, dynamic> toJson() {
     return {
+      'video_id':videoId,
+      'platform': platform,
       'search_content': searchContent,
       'caption': caption,
+      'video_description': videoDescription,
+      'audio_description': audioDescription,
       'user_data': userData.toJson(),
       'video_data': videoData.toJson(),
     };

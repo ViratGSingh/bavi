@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:bavi/models/collection.dart';
 import 'package:bavi/models/short_video.dart';
@@ -24,6 +25,7 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
   LoginBloc({required this.httpClient}) : super(LoginState()) {
     on<LoginInfoScrolled>(_changeInfoPosition);
     on<LoginAttemptGoogle>(_handleGoogleSignIn);
+    on<LoginAttemptGuest>(_handleGuestSignIn);
     on<LoginInitialize>(_handleInitialize);
     on<LoginInitiateMixpanel>(_initMixpanel);
   }
@@ -124,7 +126,6 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
         .get();
 
     if (querySnapshot.docs.isNotEmpty) {
-      await prefs.setBool('isOnboarded', true);
       print("asdasd");
       // Document with the same email exists, update it
       String documentId = querySnapshot.docs.first.id;
@@ -135,10 +136,9 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
         String username = googleUser.email.split("@").first;
         mixpanel.identify(username);
         mixpanel.track("sign_in");
-        navService.goTo('/home');
+      navService.goToAndPopUntil('/home');
       }); // Merge to update only specified fields
     } else {
-      await prefs.setBool('isOnboarded', false);
       // Create a new user with a first and last name
       String username = googleUser.email.split("@").first;
       final user = <String, dynamic>{
@@ -148,30 +148,59 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
         "profile_pic_url": googleUser.photoUrl ?? "",
         "created_at": Timestamp.now(),
         "updated_at": Timestamp.now(),
-        // "video_collections": [
-        //   VideoCollectionInfo(
-        //     collectionId: -1,
-        //     name: "All",
-        //     type: CollectionStatus.public,
-        //     videos: [
-        //       CollectionVideoData(
-        //           videoId: initialVideoId,
-        //           createdAt: Timestamp.now(),
-        //           updatedAt: Timestamp.now(),
-        //           )
-        //     ],
-        //     createdAt: Timestamp.now(),
-        //     updatedAt: Timestamp.now(),
-        //   ).toJson()
-        // ],
+        "search_history": [],
       };
       // Add a new document with a generated ID
       await db.collection("users").add(user).then((onValue) {
         mixpanel.identify(username);
         mixpanel.track("sign_up");
-        navService.goTo('/onboarding', queryParams: {"name":googleUser.displayName ?? ""});
+      navService.goToAndPopUntil('/home');
       });
     }
+  }
+
+  Future<void> _handleGuestSignIn(
+      LoginAttemptGuest event, Emitter<LoginState> emit) async {
+    try {
+      emit(state.copyWith(status: LoginStatus.guestLoading));
+      await FirebaseAuth.instance.signOut();
+      await FirebaseAuth.instance.signInAnonymously();
+      await saveGuestData();
+      emit(state.copyWith(status: LoginStatus.success));
+    } catch (error) {
+      print("Google Sign-In Error: $error");
+      emit(state.copyWith(status: LoginStatus.failure));
+    }
+  }
+
+  Future<void> saveGuestData() async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    final rand = Random.secure();
+    String username = List.generate(10, (index) => chars[rand.nextInt(chars.length)]).join();
+    String email = "$username@gmail.com";
+    await prefs.setString('displayName', "Guest");
+    await prefs.setString('email', email);
+    await prefs.setString('profile_pic_url', "");
+    await prefs.setBool('isLoggedIn', true);
+
+    FirebaseFirestore db = FirebaseFirestore.instance;
+    // Check if a document with the same email exists
+    final user = <String, dynamic>{
+      "username": username,
+      "email": email,
+      "fullname": "Guest",
+      "profile_pic_url": "",
+      "created_at": Timestamp.now(),
+      "updated_at": Timestamp.now(),
+      "search_history": [],
+    };
+    // Add a new document with a generated ID
+    await db.collection("users").add(user).then((onValue) {
+      mixpanel.identify(username);
+      mixpanel.track("sign_up");
+      navService.goToAndPopUntil('/home');
+    });
   }
 
   Future<void> signOutGoogle() async {

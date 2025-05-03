@@ -2,6 +2,7 @@
 import 'package:bavi/navigation_service.dart';
 import 'package:bavi/routes.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:bavi/app.dart';
@@ -13,11 +14,21 @@ void main() async{
   Bloc.observer = BaviBlocObserver();
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
-  await Firebase.initializeApp();
-  final bool isLoggedIn = await _checkUserLogin(); 
-  final bool isOnboarded = await _checkUserOnboard(); 
-  final String displayName = await _getDisplayName();
-  final router = AppRouter(isLoggedIn, isOnboarded, displayName).router;  
+ if (kIsWeb) {
+    await Firebase.initializeApp(
+      options: FirebaseOptions(
+        apiKey: "IzaSyCbOYEqzlOsDhCsJhGkCcWOO9ZvRPu9ISg",
+        authDomain: "baviblrdbc.firebaseapp.com",
+        projectId: "baviblrdbc",
+        messagingSenderId: "302105442862",
+        appId: "1:302105442862:web:cf1f2026aa0f5230967dbf",
+      ),
+    );
+  } else {
+    await Firebase.initializeApp();
+  }
+  final bool isLoggedIn = await _checkUserLogin();
+  final router = AppRouter(isLoggedIn).router;  
   navService.setRouter(router); 
   runApp(BaviApp(router: router));
 }
@@ -28,11 +39,11 @@ void main() async{
     return prefs.getBool('isLoggedIn') ?? false;
   }
 
-  Future<bool> _checkUserOnboard() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('isOnboarded') ?? false;
-  }
-  Future<String> _getDisplayName() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('displayName') ?? "";
-  }
+  // Future<bool> _checkUserOnboard() async {
+  //   final prefs = await SharedPreferences.getInstance();
+  //   return prefs.getBool('isOnboarded') ?? false;
+  // }
+  // Future<String> _getDisplayName() async {
+  //   final prefs = await SharedPreferences.getInstance();
+  //   return prefs.getString('displayName') ?? "";
+  // }

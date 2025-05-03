@@ -1,26 +1,35 @@
-import 'package:bavi/home/widgets/video_set_player.dart';
+import 'dart:convert';
+
+import 'package:bavi/home/widgets/video_activity.dart';
 import 'package:bavi/models/collection.dart';
 import 'package:bavi/models/short_video.dart';
+import 'package:bavi/models/user.dart';
+import 'package:bavi/widgets/profile_icon.dart';
 import 'package:cached_video_player_plus/cached_video_player_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:icons_plus/icons_plus.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
-class VideoGridScreen extends StatefulWidget {
+class SearchResultsGridScreen extends StatefulWidget {
   final List<ExtractedVideoInfo> savedVideos;
-  final bool isLoading;
-  final Map<String, dynamic> platformData;
-  final VideoCollectionInfo collection;
+  final ExtractedAccountInfo? account;
+  final String query;
+  final Function() onSelectSearch;
 
-  const VideoGridScreen(
-      {Key? key, required this.savedVideos, required this.isLoading, required this.platformData, required this.collection})
-      : super(key: key);
+  const SearchResultsGridScreen(
+      {super.key,
+      required this.savedVideos,
+      required this.query,
+      required this.onSelectSearch,
+      this.account});
 
   @override
-  _VideoGridScreenState createState() => _VideoGridScreenState();
+  _SearchResultsGridScreenState createState() =>
+      _SearchResultsGridScreenState();
 }
 
-class _VideoGridScreenState extends State<VideoGridScreen> {
+class _SearchResultsGridScreenState extends State<SearchResultsGridScreen> {
   // Map to track which video is being played
   final Map<int, CachedVideoPlayerPlusController> _videoControllers = {};
 
@@ -35,15 +44,13 @@ class _VideoGridScreenState extends State<VideoGridScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return widget.isLoading
-        ? _buildShimmerGrid() // Show shimmer loading when list is empty
-        : _buildVideoGrid(); // Show video grid when list is not empty
+    return _buildVideoGrid(); // Show video grid when list is not empty
   }
 
   // Build the shimmer loading grid
   Widget _buildShimmerGrid() {
     return GridView.builder(
-      padding: const EdgeInsets.all(8.0),
+      padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3, // 3 columns
         crossAxisSpacing: 8.0,
@@ -68,65 +75,268 @@ class _VideoGridScreenState extends State<VideoGridScreen> {
 
   // Build the video grid
   Widget _buildVideoGrid() {
-    return GridView.builder(
-      padding: const EdgeInsets.all(8.0),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3, // 3 columns
-        crossAxisSpacing: 8.0,
-        mainAxisSpacing: 8.0,
-        childAspectRatio: 9 / 16, // 9:16 aspect ratio
-      ),
-      itemCount: widget.savedVideos.length,
-      itemBuilder: (context, index) {
-        final videoInfo = widget.savedVideos[index];
-        return GestureDetector(
-          onTap: () {
-            FocusScope.of(context).unfocus();
-            Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          VideoSetPlayer(
-                                        videoList: widget.savedVideos,
-                                        initialPosition: index,
-                                        platform: widget.platformData,
-                                        collectionInfo: widget.collection,
-                                      ),
-                                    ),
-                                  );
+    final savedVideos = widget.savedVideos;
+
+    return Column(
+      children: [
+        InkWell(
+          onTap: (){
+            widget.onSelectSearch();
           },
-          onLongPress: () {
-            // Play video on long press
-            _playVideo(index, videoInfo.videoData.videoUrl);
-          },
-          onLongPressEnd: (_) {
-            // Stop video and show thumbnail when long-press ends
-            _stopVideo(index);
-          },
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(12.0), // Rounded corners
-            child: Stack(
-              fit: StackFit.expand,
+          child: Container(
+            width: MediaQuery.of(context).size.width - 16,
+            height: 105,
+            padding: const EdgeInsets.all(12),
+            decoration: ShapeDecoration(
+              color: Colors.white,
+              shape: RoundedRectangleBorder(
+                side: BorderSide(width: 1, color: Color(0xFF090E1D)),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              shadows: [
+                BoxShadow(
+                  color: Color(0xFF080E1D),
+                  blurRadius: 0,
+                  offset: Offset(0, 4),
+                  spreadRadius: 0,
+                )
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Thumbnail with caching
-                CachedNetworkImage(
-                  imageUrl: videoInfo.videoData.thumbnailUrl,
-                  fit: BoxFit.cover,
-                  placeholder: (context, url) => Container(
-                    color: Colors.grey[300], // Placeholder color while loading
-                  ),
-                  errorWidget: (context, url, error) =>
-                      Icon(Icons.error), // Error widget
+                Row(
+                  children: [
+                    CircularAvatarWithShimmer(
+                        imageUrl: widget.account?.profilePicUrl ?? ""),
+                    const SizedBox(width: 10),
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 2 * MediaQuery.of(context).size.width / 3,
+                          child: Text(
+                            widget.account?.fullname != null
+                                ? utf8.decode(
+                                    widget.account!.fullname.runes.toList())
+                                : "Explore",
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black,
+                                fontSize: 16),
+                          ),
+                        ),
+                        Container(
+                          width: 2 * MediaQuery.of(context).size.width / 3 ,
+                          child: Text(
+                            widget.account?.username != null
+                                ? utf8.decode(
+                                    widget.account!.username.runes.toList())
+                                : "@drissea",
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: Colors.black, fontSize: 14),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                // Video player (if playing)
-                if (_videoControllers.containsKey(index) &&
-                    _videoControllers[index]!.value.isInitialized)
-                  CachedVideoPlayerPlus(_videoControllers[index]!),
+                SizedBox(height: 10),
+                Padding(
+                  padding: const EdgeInsets.only(left: 5),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Iconsax.search_normal_outline,
+                        size: 20,
+                        color: Colors.black,
+                      ),
+                      SizedBox(width: 7),
+                      Container(
+                        width: 3*MediaQuery.of(context).size.width/4,
+                        child: Text(
+                          widget.query,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.black,
+                            fontSize: 14,
+                            fontFamily: 'Poppins',
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
               ],
             ),
           ),
-        );
+        ),
+        SizedBox(height: 8),
+        Container(
+          height: MediaQuery.of(context).size.height 
+          - MediaQuery.of(context).padding.bottom
+          - MediaQuery.of(context).padding.top
+          - 70
+          - 140,
+          child: CustomScrollView(
+            slivers: [
+              Visibility(
+                visible: savedVideos.length >= 5,
+                child: SliverPadding(
+                  padding: const EdgeInsets.all(8.0),
+                  sliver: SliverToBoxAdapter(
+                    child: Container(
+                      padding: EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        color: Color(0xFF8A2BE2),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Top Results",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Color(0xFFDFFF00),
+                              fontSize: 22,
+                              fontFamily: 'Poppins',
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          SizedBox(height: 10),
+                          LayoutBuilder(
+                            builder: (context, constraints) {
+                              final totalWidth = constraints.maxWidth;
+                              final leftWidth = totalWidth * 0.484;
+                              final rightWidth = totalWidth -
+                                  leftWidth -
+                                  8; // Subtract spacing
+
+                              return Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  SizedBox(
+                                    width: leftWidth,
+                                    child: AspectRatio(
+                                      aspectRatio: 9 / 16,
+                                      child: _buildVideoTile(0),
+                                    ),
+                                  ),
+                                  SizedBox(width: 8),
+                                  SizedBox(
+                                    width: rightWidth,
+                                    child: Column(
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: AspectRatio(
+                                                aspectRatio: 9 / 16,
+                                                child: _buildVideoTile(1),
+                                              ),
+                                            ),
+                                            SizedBox(width: 8),
+                                            Expanded(
+                                              child: AspectRatio(
+                                                aspectRatio: 9 / 16,
+                                                child: _buildVideoTile(2),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        SizedBox(height: 8),
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: AspectRatio(
+                                                aspectRatio: 9 / 16,
+                                                child: _buildVideoTile(3),
+                                              ),
+                                            ),
+                                            SizedBox(width: 8),
+                                            Expanded(
+                                              child: AspectRatio(
+                                                aspectRatio: 9 / 16,
+                                                child: _buildVideoTile(4),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                sliver: SliverGrid(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) => _buildVideoTile(
+                        savedVideos.length > 5 ? (index + 5) : index),
+                    childCount: savedVideos.length > 5
+                        ? (savedVideos.length - 5)
+                        : savedVideos.length,
+                  ),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
+                    childAspectRatio: 9 / 16,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildVideoTile(int index) {
+    final videoInfo = widget.savedVideos[index];
+    return GestureDetector(
+      onTap: () {
+        FocusScope.of(context).unfocus();
+        Navigator.push(context,
+    MaterialPageRoute<void>(
+      builder: (BuildContext context) => VideoSearchFeed(videoList: widget.savedVideos,initialPosition: index),
+    ),);
       },
+      onLongPress: () {
+        _playVideo(index, videoInfo.videoData.videoUrl);
+      },
+      onLongPressEnd: (_) {
+        _stopVideo(index);
+      },
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12.0),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            CachedNetworkImage(
+              imageUrl: videoInfo.videoData.thumbnailUrl,
+              fit: BoxFit.cover,
+              placeholder: (context, url) => Container(color: Colors.grey[300]),
+              errorWidget: (context, url, error) => Icon(Icons.error),
+            ),
+            if (_videoControllers.containsKey(index) &&
+                _videoControllers[index]!.value.isInitialized)
+              CachedVideoPlayerPlus(_videoControllers[index]!),
+          ],
+        ),
+      ),
     );
   }
 
@@ -140,6 +350,7 @@ class _VideoGridScreenState extends State<VideoGridScreen> {
         setState(() {
           _videoControllers[index] = controller;
         });
+        controller.setVolume(0);
         controller.play(); // Play the video after initialization
       }).catchError((error) {
         // Handle initialization errors
@@ -154,6 +365,7 @@ class _VideoGridScreenState extends State<VideoGridScreen> {
       if (controller.value.isPlaying) {
         controller.pause();
       } else {
+        controller.setVolume(0);
         controller.play();
       }
     }

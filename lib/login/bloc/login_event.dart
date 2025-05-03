@@ -9,6 +9,8 @@ final class LoginInfoScrolled extends LoginEvent {
 }
 final class LoginAttemptGoogle extends LoginEvent {
 }
+final class LoginAttemptGuest extends LoginEvent {
+}
 final class LoginAttemptApple extends LoginEvent {
 }
 final class LoginInitialize extends LoginEvent {

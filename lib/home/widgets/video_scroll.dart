@@ -2,6 +2,9 @@ import 'package:bavi/models/short_video.dart';
 import 'package:bavi/navigation_service.dart';
 import 'package:chewie/chewie.dart'; // For video controls
 import 'package:flutter/material.dart';
+import 'package:gal/gal.dart';
+import 'package:icons_plus/icons_plus.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart'; // For video playback
 import 'package:flutter_cache_manager/flutter_cache_manager.dart'; // For caching videos
 import 'package:cached_network_image/cached_network_image.dart'; // For caching thumbnails
@@ -37,14 +40,37 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> with WidgetsBindingOb
     // Preload all videos at the start
     _preloadAllVideos();
   }
+  // Pause all videos
+  void _pauseAllVideos() {
+    _chewieControllers.forEach((_, controller) {
+      if (controller != null) {
+        try {
+          final videoController = controller.videoPlayerController;
+          if (videoController.value.isPlaying) {
+            videoController.pause();
+          }
+        } catch (e) {
+          print('Error pausing video: $e');
+        }
+      }
+    });
+  }
 
   @override
   void dispose() {
-    // Dispose all Chewie controllers
+    _pauseAllVideos();
+    // Dispose all Chewie controllers and their video controllers
     _chewieControllers.forEach((_, controller) {
-      controller?.dispose();
+      if (controller != null) {
+        final videoController = controller.videoPlayerController;
+        videoController.pause(); // Ensure video is paused
+        videoController.dispose(); // Dispose video controller
+        controller.dispose(); // Dispose chewie controller
+      }
     });
-    WidgetsBinding.instance.removeObserver(this); // Remove observer
+    _chewieControllers.clear(); // Clear the controllers map
+
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
@@ -57,13 +83,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> with WidgetsBindingOb
       // Resume the current video when the app is resumed
       _playCurrentVideo(_currentIndex);
     }
-  }
-
-  // Pause all videos
-  void _pauseAllVideos() {
-    _chewieControllers.forEach((_, controller) {
-      controller?.videoPlayerController.pause();
-    });
   }
 
   // Preload all videos at the start
@@ -110,7 +129,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> with WidgetsBindingOb
         cupertinoProgressColors: ChewieProgressColors(playedColor: Color(0xFF8A2BE2)),
         autoInitialize: true,
         zoomAndPan: true,
-        showOptions: false,
+        showOptions: true,
         autoPlay: index == widget.initialPosition, // Autoplay the initial video
         looping: true, // Loop the video
         showControls: true, // Show controls
@@ -130,6 +149,106 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> with WidgetsBindingOb
       });
     });
   }
+
+  //Open bottomsheet to show caption
+  void _showCaption(String caption) {
+    //String decodedCaption = utf8.decode(caption.runes.toList());
+
+    String decodedCaption = caption;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Color(0xFF8A2BE2),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(20),
+        ),
+      ),
+      isScrollControlled: true,
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.5,
+      ),
+      builder: (context) => Container(
+        padding: EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "Caption",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontFamily: 'Poppins',
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                InkWell(
+                  onTap: () => Navigator.pop(context),
+                  child: Icon(
+                    Iconsax.close_circle_bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 20),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Text(
+                  decodedCaption,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontFamily: 'Poppins',
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    //mixpanel.track("home_caption_video");
+  }
+
+  //Download video
+  void _downloadVideo(String videoUrl) async {
+    final fileInfo = await _cacheManager.getFileFromCache(videoUrl);
+    if (fileInfo != null) {
+      try {
+        // Save video to gallery using gal package in 'Bavi Videos' album
+        await Gal.putVideo(fileInfo.file.path, album: 'Bavi Videos');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Video saved to Bavi Videos album')),
+        );
+      } catch (e) {
+        print('Error saving video: $e');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save video')),
+        );
+      }
+    }
+
+    //mixpanel.track("home_download_video");
+  }
+
+  // Share video
+  void _shareVideo(String videoId, String platform) {
+    //Generate a share link based on the platform and video id
+    String shareLink = "";
+    if (platform == "instagram") {
+      shareLink = "https://www.instagram.com/reels/$videoId/";
+    } else if (platform == "youtube") {
+      shareLink = "https://www.youtube.com/shorts/$videoId";
+    }
+    Share.share(shareLink);
+    //mixpanel.track("home_share_video");
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -159,10 +278,15 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> with WidgetsBindingOb
               ),
               itemBuilder: (context, index, realIndex) {
                 final videoInfo = widget.videoList[index];
-                return _buildVideoPlayer(videoInfo, index);
-              },
-            ),
-            Positioned(
+
+              // String decodedUserName =
+              //     utf8.decode(videoInfo.userData.fullname.runes.toList());
+              String decodedUserName = videoInfo.userData.fullname;
+                return Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    _buildVideoPlayer(videoInfo, index),
+                       Positioned(
               left: 10,
               top: 10,
               child: IconButton(
@@ -176,6 +300,157 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> with WidgetsBindingOb
                 ),
               ),
             ),
+              // GestureDetector(
+              //       onTap: () {
+              //         // VideoPlayerController currVideoPlayerController =
+              //         //     _chewieControllers[index]!.videoPlayerController;
+              //         // if (currVideoPlayerController.value.isPlaying) {
+              //         //   currVideoPlayerController.pause();
+              //         // } else {
+              //         //   currVideoPlayerController.play();
+              //         // }
+              //         //mixpanel.track("home_play_video");
+              //       },
+              //       onDoubleTap: () {
+              //         // VideoPlayerController currVideoPlayerController =
+              //         //     _chewieControllers[index]!.videoPlayerController;
+              //         // if (currVideoPlayerController.value.volume > 0) {
+              //         //   currVideoPlayerController.setVolume(0);
+              //         //   //mixpanel.track("home_mute_video");
+              //         //   isMute = true;
+              //         // } else {
+              //         //   currVideoPlayerController.setVolume(1.0);
+              //         //   mixpanel.track("home_unmute_video");
+              //         //   isMute = false;
+              //         //}
+              //       },
+              //       child: Container(
+              //         width: MediaQuery.of(context).size.width,
+              //         height: 3 * MediaQuery.of(context).size.height / 4,
+              //         color: Colors.transparent,
+              //       ),
+              //     ),
+                  // Positioned(
+                  //   left: 20,
+                  //   top: 0,
+                  //   child: Text(
+                  //     'BaviSync',
+                  //     style: TextStyle(
+                  //       color: Colors.white,
+                  //       fontSize: 24,
+                  //       fontFamily: 'Gugi',
+                  //       fontWeight: FontWeight.w600,
+                  //     ),
+                  //   ),
+                  // ),
+                  Positioned(
+                    left: 15,
+                    bottom: 80,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                               Iconsax.instagram_bold,
+                              color: Colors.white,
+                              size: 40,
+                            ),
+                            SizedBox(width: 5),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SizedBox(
+                                  width: 2 * MediaQuery.of(context).size.width / 3,
+                                  child: Text(
+                                    decodedUserName,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                      fontFamily: 'Poppins',
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: 2 * MediaQuery.of(context).size.width / 3,
+                                  child: Text(
+                                    "@${videoInfo.userData.username.replaceAll("@", "")}",
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontFamily: 'Poppins',
+                                      fontWeight: FontWeight.w400,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        //SizedBox(height: 10),
+                        // Padding(
+                        //   padding: EdgeInsets.only(left: 4),
+                        //   child: Text(
+                        //     "Saved on ${formatTimestamp(widget.collectionInfo!.videos.reversed.toList()[index].createdAt)}",
+                        //     style: TextStyle(
+                        //       color: Colors.white,
+                        //       fontSize: 12,
+                        //       fontFamily: 'Poppins',
+                        //       fontWeight: FontWeight.w400,
+                        //     ),
+                        //   ),
+                        // ),
+                      ],
+                    ),
+                  ),
+                  Positioned(
+                    right: 10,
+                    bottom: 72,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        IconButton(
+                          onPressed: () => _showCaption(videoInfo.caption),
+                          icon: Icon(
+                            Iconsax.info_circle_bold,
+                            color: Colors.white,
+                            size: 24,
+                          ),
+                        ),
+                        SizedBox(height: 10),
+                        IconButton(
+                          onPressed: () => _shareVideo(
+                              videoInfo.videoId ,
+                            "instagram"),
+                          icon: Icon(
+                            Iconsax.send_2_bold,
+                            color: Colors.white,
+                            size: 24,
+                          ),
+                        ),
+                        // SizedBox(height: 10),
+                        // IconButton(
+                        //   onPressed: () =>
+                        //       _downloadVideo(videoInfo.videoData.videoUrl),
+                        //   icon: Icon(
+                        //     Icons.download,
+                        //     color: Colors.white,
+                        //     size: 24,
+                        //   ),
+                        // ),
+                      ],
+                    ),
+                  )
+                  ],
+                );
+              },
+            ),
+         
           ],
         ),
       ),

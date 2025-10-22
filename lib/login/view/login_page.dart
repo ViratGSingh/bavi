@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'package:bavi/login/bloc/login_bloc.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:flutter/material.dart';
@@ -6,6 +7,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:lottie/lottie.dart';
 import 'package:http/http.dart' as http;
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -81,120 +83,127 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     Column(
                       children: [
-                        ElevatedButton(
-                            onPressed: state.status == LoginStatus.loading || state.status == LoginStatus.guestLoading 
-                                ? null
-                                : () {
-                                    context.read<LoginBloc>().add(
-                                          LoginAttemptGoogle(),
-                                        );
-                                  },
-                            style: ButtonStyle(
-                                shape: WidgetStatePropertyAll(
-                                  RoundedRectangleBorder(
-                                    side: BorderSide(
-                                        width: 1, color: Color(0xFFE6E7E8)),
-                                    borderRadius: BorderRadius.circular(16),
+                        Visibility(
+                          visible: Platform.isAndroid,
+                          child: ElevatedButton(
+                              onPressed: state.status == LoginStatus.loading || state.status == LoginStatus.guestLoading 
+                                  ? null
+                                  : () {
+                                      context.read<LoginBloc>().add(
+                                            LoginAttemptGoogle(),
+                                          );
+                                    },
+                              style: ButtonStyle(
+                                  shape: WidgetStatePropertyAll(
+                                    RoundedRectangleBorder(
+                                      side: BorderSide(
+                                          width: 1, color: Color(0xFFE6E7E8)),
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
                                   ),
-                                ),
-                                backgroundColor:
-                                    WidgetStatePropertyAll(Color(0xFF8A2BE2)),
-                                fixedSize: WidgetStatePropertyAll(
-                                  Size(MediaQuery.of(context).size.width - 40,
-                                      56),
-                                )),
-                            child: state.status == LoginStatus.loading
-                                ? CircularProgressIndicator(
-                                    color: Colors.white,
-                                  )
-                                : Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.center,
-                                    children: [
-                                      Container(
-                                        width: 24,
-                                        height: 24,
-                                        decoration: BoxDecoration(
+                                  backgroundColor:
+                                      WidgetStatePropertyAll(Color(0xFF8A2BE2)),
+                                  fixedSize: WidgetStatePropertyAll(
+                                    Size(MediaQuery.of(context).size.width - 40,
+                                        56),
+                                  )),
+                              child: state.status == LoginStatus.loading
+                                  ? CircularProgressIndicator(
+                                      color: Colors.white,
+                                    )
+                                  : Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.center,
+                                      children: [
+                                        Container(
+                                          width: 24,
+                                          height: 24,
+                                          decoration: BoxDecoration(
+                                              color: Colors.white,
+                                              borderRadius:
+                                                  BorderRadius.circular(12)),
+                                          padding: EdgeInsets.all(4),
+                                          child: SvgPicture.asset(
+                                              "assets/images/login/google.svg",
+                                              fit: BoxFit.cover),
+                                        ),
+                                        SizedBox(width: 12),
+                                        Text(
+                                          'Continue with Google',
+                                          style: TextStyle(
                                             color: Colors.white,
-                                            borderRadius:
-                                                BorderRadius.circular(12)),
-                                        padding: EdgeInsets.all(4),
-                                        child: SvgPicture.asset(
-                                            "assets/images/login/google.svg",
-                                            fit: BoxFit.cover),
-                                      ),
-                                      SizedBox(width: 12),
-                                      Text(
-                                        'Continue with Google',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 16,
-                                          fontFamily: 'Poppins',
-                                          fontWeight: FontWeight.w500,
+                                            fontSize: 16,
+                                            fontFamily: 'Poppins',
+                                            fontWeight: FontWeight.w500,
+                                          ),
                                         ),
-                                      ),
-                                    ],
-                                  )),
-                        SizedBox(height: 15),
-                        ElevatedButton(
-                            onPressed: state.status == LoginStatus.loading || state.status == LoginStatus.guestLoading 
-                                ? null
-                                : () {
-                                    context.read<LoginBloc>().add(
-                                          LoginAttemptGuest(),
-                                        );
-                                  },
-                            style: ButtonStyle(
-                                shape: WidgetStatePropertyAll(
-                                  RoundedRectangleBorder(
-                                    side: BorderSide(
-                                        width: 1, color: Color(0xFFE6E7E8)),
-                                    borderRadius: BorderRadius.circular(16),
+                                      ],
+                                    )),
+                        ),
+ 
+                        // SizedBox(height: 15),
+                        Visibility(
+                          visible: Platform.isIOS,
+                          child: ElevatedButton(
+                              onPressed: state.status == LoginStatus.loading || state.status == LoginStatus.guestLoading 
+                                  ? null
+                                  : () {
+                                      context.read<LoginBloc>().add(
+                                            LoginAttemptGuest(),
+                                          );
+                                    },
+                              style: ButtonStyle(
+                                  shape: WidgetStatePropertyAll(
+                                    RoundedRectangleBorder(
+                                      // side: BorderSide(
+                                      //     width: 1, color: Color(0xFFE6E7E8)),
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
                                   ),
-                                ),
-                                backgroundColor:
-                                    WidgetStatePropertyAll(Colors.white),
-                                fixedSize: WidgetStatePropertyAll(
-                                  Size(MediaQuery.of(context).size.width - 40,
-                                      56),
-                                )),
-                            child: state.status == LoginStatus.guestLoading
-                                ? CircularProgressIndicator(
-                                    color: Color(0xFF8A2BE2),
-                                  )
-                                : Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.center,
-                                    children: [
-                                      // Container(
-                                      //   width: 24,
-                                      //   height: 24,
-                                      //   decoration: BoxDecoration(
-                                      //   color: Colors.white,
-                                      //   borderRadius: BorderRadius.circular(12)
-
-                                      //   ),
-                                      //   padding: EdgeInsets.all(4),
-                                      //   child: SvgPicture.asset(
-                                      //       "assets/images/login/google.svg",
-                                      //       fit: BoxFit.cover),
-                                      // ),
-                                      // SizedBox(width: 12),
-                                      Text(
-                                        'Continue as Guest',
-                                        style: TextStyle(
-                                          color: Color(0xFF090E1D),
-                                          fontSize: 16,
-                                          fontFamily: 'Poppins',
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ],
+                                  backgroundColor:
+                                      WidgetStatePropertyAll(Color(0xFF8A2BE2)),
+                                  fixedSize: WidgetStatePropertyAll(
+                                    Size(MediaQuery.of(context).size.width - 40,
+                                        56),
                                   )),
+                              child: state.status == LoginStatus.guestLoading
+                                  ? CircularProgressIndicator(
+                                      color: Colors.white,
+                                    )
+                                  : Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.center,
+                                      children: [
+                                        // Container(
+                                        //   width: 24,
+                                        //   height: 24,
+                                        //   decoration: BoxDecoration(
+                                        //   color: Colors.white,
+                                        //   borderRadius: BorderRadius.circular(12)
+                          
+                                        //   ),
+                                        //   padding: EdgeInsets.all(4),
+                                        //   child: SvgPicture.asset(
+                                        //       "assets/images/login/google.svg",
+                                        //       fit: BoxFit.cover),
+                                        // ),
+                                        // SizedBox(width: 12),
+                                        Text(
+                                          'Continue',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 16,
+                                            fontFamily: 'Poppins',
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
+                                    )),
+                        ),
                       ],
                     ),
                   ],

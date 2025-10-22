@@ -14,32 +14,36 @@ class CircularAvatarWithShimmer extends StatelessWidget {
     return Stack(
       alignment: Alignment.center,
       children: [
-        Container(
-          width: 46,
-          height: 46,
-          decoration: BoxDecoration(
-            color: Color(0xFF8A2BE2),
-            border: Border.all(
-              color: Color(0xFF8A2BE2),
-              width: 2,
-            ),
-            shape: BoxShape.circle,
-          ),
-        ),
-        ClipOval(
+        // Container(
+        //   width: 42,
+        //   height: 42,
+        //   decoration: BoxDecoration(
+        //     color: Color(0xFF8A2BE2),
+        //     border: Border.all(
+        //       color: Color(0xFF8A2BE2),
+        //       width: 2,
+        //     ),
+        //     shape: BoxShape.circle,
+        //   ),
+        // ),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(14),
           child: Container(
-            width: 42,
-            height: 42,
+            width: 32,
+            height: 32,
             decoration: BoxDecoration(
-              border: Border.all(
-                color: Color(0xFFDFFF00),
-                width: 2.0,
-              ),
+
+            color: Color(0xFF8A2BE2),
+              // border: Border.all(
+              //   color: Color(0xFFDFFF00),
+              //   width: 2.0,
+              // ),
               shape: BoxShape.circle,
             ),
             child: imageUrl.isEmpty
                 ? Icon(
                     Iconsax.frame_bold,
+                    size: 18,
                     color: Color(0xFFDFFF00),
                   )
                 : CachedNetworkImage(
@@ -59,7 +63,7 @@ class CircularAvatarWithShimmer extends StatelessWidget {
                       return Icon(
                       Iconsax.frame_bold,
                       color: Color(0xFFDFFF00),
-                      size: 24,
+                      size: 18,
                     );},
                   ),
           ),

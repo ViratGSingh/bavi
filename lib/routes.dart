@@ -1,4 +1,6 @@
+import 'package:bavi/answer/view/answer_page.dart';
 import 'package:bavi/home/view/home_page.dart';
+import 'package:bavi/home/widgets/answers_view.dart';
 import 'package:bavi/home/widgets/video_grid.dart';
 import 'package:bavi/home/widgets/video_scroll.dart';
 import 'package:bavi/login/view/login_page.dart';
@@ -18,7 +20,7 @@ class AppRouter {
   final bool isLoggedIn;
   AppRouter(this.isLoggedIn);
   late final GoRouter router = GoRouter(
-    initialLocation: isLoggedIn==true?'/home':'/login',
+    initialLocation: isLoggedIn == true ? '/home' : '/login',
     routes: [
       GoRoute(
         path: '/login',
@@ -26,7 +28,15 @@ class AppRouter {
       ),
       GoRoute(
         path: '/home',
-        builder: (context, state) => const HomePage(),
+        builder: (context, state) {
+          if (state.extra != null) {
+            final extra = state.extra as Map<String, dynamic>;
+            final query = extra['query'] as String;
+            return HomePage(query: query);
+          } else {
+            return HomePage();
+          }
+        },
       ),
       GoRoute(
         path: '/profile',
@@ -36,25 +46,85 @@ class AppRouter {
         path: '/reply',
         builder: (context, state) {
           final extra = state.extra as Map<String, dynamic>;
-          final markdownText = extra['markdownText'] as String;
           final query = extra['query'] as String;
-          final conversationId = extra['conversationId'] as String;
-          final account = extra['account'] as ExtractedAccountInfo?;
-          final conversation = extra["conversation"] as ConversationData?;
+          final searchTime = extra['searchTime'] as int;
+          final isGlanceMode = extra['isGlanceMode'] as bool;
+          String? searchId;
+          if (extra.containsKey("searchId") == true) {
+            searchId = extra['searchId'] as String;
+          }
+          final videos = extra["videos"] as List<ExtractedVideoInfo>;
 
           return WillPopScope(
             onWillPop: () async {
-              Navigator.push(context, MaterialPageRoute<void>(
-      builder: (BuildContext context) => const HomePage(),
-    ),);
+              Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (BuildContext context) => const HomePage(),
+                ),
+              );
               return false;
             },
             child: ReplyView(
-              markdownText: markdownText,
+              isGlanceMode:isGlanceMode,
+              similarVideos: videos,
               query: query,
-              account: account,
-              conversationId: conversationId,
-              conversation: conversation,
+              searchId: searchId,
+              searchTime: searchTime,
+            ),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/answer',
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>;
+          final query = extra['query'] as String;
+          final process = extra['process'] as String;
+          final answer = extra['answer'] as String;
+          final videos = extra["videos"] as List<String>;
+          final searchTime = extra['searchTime'] as int;
+          final searchId = extra['searchId'] as String;
+
+          return WillPopScope(
+            onWillPop: () async {
+              Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (BuildContext context) => const HomePage(),
+                ),
+              );
+              return false;
+            },
+            child: AnswerView(
+              sourceUrls: videos,
+              query: query,
+              process: process,
+              answer: answer,
+              searchTime: searchTime,
+              searchId:searchId
+            ),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/search',
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>;
+          final videos = extra["videos"] as List<ExtractedVideoInfo>;
+
+          return WillPopScope(
+            onWillPop: () async {
+              Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (BuildContext context) => const HomePage(),
+                ),
+              );
+              return false;
+            },
+            child: AnswersView(
+              videos: videos,
             ),
           );
         },
@@ -121,5 +191,3 @@ class AppRouter {
     ],
   );
 }
-
-      

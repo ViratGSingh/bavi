@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:bavi/models/short_video.dart';
 import 'package:bavi/navigation_service.dart';
 import 'package:chewie/chewie.dart'; // For video controls
@@ -152,9 +154,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> with WidgetsBindingOb
 
   //Open bottomsheet to show caption
   void _showCaption(String caption) {
-    //String decodedCaption = utf8.decode(caption.runes.toList());
+    String decodedCaption = utf8.decode(caption.runes.toList());
 
-    String decodedCaption = caption;
+    //String decodedCaption = caption;
     showModalBottomSheet(
       context: context,
       backgroundColor: Color(0xFF8A2BE2),
@@ -279,9 +281,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> with WidgetsBindingOb
               itemBuilder: (context, index, realIndex) {
                 final videoInfo = widget.videoList[index];
 
-              // String decodedUserName =
-              //     utf8.decode(videoInfo.userData.fullname.runes.toList());
-              String decodedUserName = videoInfo.userData.fullname;
+              String decodedUserName =
+                  utf8.decode(videoInfo.userData.fullname.runes.toList());
+              //tring decodedUserName = videoInfo.userData.fullname;
                 return Stack(
                   clipBehavior: Clip.none,
                   children: [
@@ -292,7 +294,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> with WidgetsBindingOb
               child: IconButton(
                 onPressed: () {
                   _pauseAllVideos(); // Pause all videos before navigating back
-                  navService.goTo("/home");
+                  Navigator.pop(context);
                 },
                 icon: Icon(
                   Icons.arrow_back_ios,

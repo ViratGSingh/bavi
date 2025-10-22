@@ -34,9 +34,13 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
   Future<void> _initMixpanel(
       LoginInitiateMixpanel event, Emitter<LoginState> emit) async {
     // initialize Mixpanel
+    try{
     mixpanel = await Mixpanel.init(dotenv.get("MIXPANEL_PROJECT_KEY"),
         trackAutomaticEvents: false);
-    mixpanel.track("sign_in_view");
+    mixpanel.track("sign_in_view");}
+    catch(e){
+      print("Mixpanel Error: $e");
+    }
   }
 
   String initialVideoId = "C6auaneCk05";
@@ -130,7 +134,7 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
       // Document with the same email exists, update it
       String documentId = querySnapshot.docs.first.id;
       await db.collection("users").doc(documentId).set({
-        'updated_at': Timestamp.now(),
+        'updatedAt': DateTime.now().toUtc().toIso8601String(),
       }, SetOptions(merge: true)).then((onValue) {
         print("aaa");
         String username = googleUser.email.split("@").first;
@@ -144,11 +148,14 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
       final user = <String, dynamic>{
         "username": username,
         "email": googleUser.email,
-        "fullname": googleUser.displayName ?? "",
-        "profile_pic_url": googleUser.photoUrl ?? "",
-        "created_at": Timestamp.now(),
-        "updated_at": Timestamp.now(),
-        "search_history": [],
+        "name": googleUser.displayName ?? "",
+        "image": googleUser.photoUrl ?? "",
+        "createdAt": DateTime.now().toUtc().toIso8601String(),
+        "updatedAt": DateTime.now().toUtc().toIso8601String(),
+        "id":"",
+        "userId":googleUser.id,
+        "sessionToken":"",
+        "userAgent": ""
       };
       // Add a new document with a generated ID
       await db.collection("users").add(user).then((onValue) {
@@ -198,7 +205,7 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
     // Add a new document with a generated ID
     await db.collection("users").add(user).then((onValue) {
       mixpanel.identify(username);
-      mixpanel.track("sign_up");
+      mixpanel.track("guest_sign_up");
       navService.goToAndPopUntil('/home');
     });
   }

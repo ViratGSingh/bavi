@@ -1,26 +1,29 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:equatable/equatable.dart';
 
-class QuestionAnswerData extends Equatable {
-  const QuestionAnswerData({
+class AnswerData extends Equatable {
+  const AnswerData({
     required this.reply,
-    required this.query,
+    required this.process,
+    required this.sourceLinks,
     required this.createdAt,
     required this.updatedAt,
   });
 
   final String reply;
-  final String query;
+  final String process;
+  final List<String> sourceLinks;
   final Timestamp? createdAt;
   final Timestamp? updatedAt;
 
   @override
-  List<Object?> get props => [reply, query];
+  List<Object?> get props => [reply, process, sourceLinks, createdAt, updatedAt];
 
-  factory QuestionAnswerData.fromJson(Map<String, dynamic> json) {
-    return QuestionAnswerData(
-      query: json['query'] as String,
+  factory AnswerData.fromJson(Map<String, dynamic> json) {
+    return AnswerData(
       reply: json['reply'] as String,
+      process: json['process'] as String,
+      sourceLinks: (json['source_links'] as List<dynamic>).map((e) => e.toString()).toList(),
       createdAt: json['created_at'] != null ? json['created_at'] as Timestamp : null,
       updatedAt: json['updated_at'] != null ? json['updated_at'] as Timestamp : null,
     );
@@ -28,36 +31,44 @@ class QuestionAnswerData extends Equatable {
 
   Map<String, dynamic> toJson() {
     return {
-      'query': query,
       'reply': reply,
+      'process': process,
+      'source_links': sourceLinks,
       'created_at': createdAt,
       'updated_at': updatedAt,
     };
   }
 }
 
-class ConversationData extends Equatable {
-  const ConversationData({
+class SearchData extends Equatable {
+  const SearchData({
     required this.id,
-    required this.conversation,
+    required this.query,
+    required this.answer,
+    required this.process,
     required this.createdAt,
     required this.updatedAt,
+    required this.sourceLinks
   });
 
   final String id;
-  final List<QuestionAnswerData> conversation;
+  final String query;
+  final String answer;
+  final String process;
   final Timestamp? createdAt;
   final Timestamp? updatedAt;
+  final List<String> sourceLinks;
 
   @override
-  List<Object?> get props => [id, conversation, createdAt, updatedAt];
+  List<Object?> get props => [id, query, answer, process, sourceLinks, createdAt, updatedAt];
 
-  factory ConversationData.fromJson(Map<String, dynamic> json) {
-    return ConversationData(
+  factory SearchData.fromJson(Map<String, dynamic> json) {
+    return SearchData(
       id: json['id'] as String,
-      conversation: (json['conversation'] as List)
-          .map((e) => QuestionAnswerData.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      query: json['query'] as String,
+      answer: json['answer'] as String,
+      process: json['process'] as String,
+      sourceLinks: (json['source_links'] as List<dynamic>).map((e) => e.toString()).toList(),
       createdAt: json['created_at'] != null ? json['created_at'] as Timestamp : null,
       updatedAt: json['updated_at'] != null ? json['updated_at'] as Timestamp : null,
     );
@@ -66,7 +77,10 @@ class ConversationData extends Equatable {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'conversation': conversation.map((e) => e.toJson()).toList(),
+      'query':query,
+      'answer': answer,
+      'process':process,
+      'source_links': sourceLinks,
       'created_at': createdAt,
       'updated_at': updatedAt,
     };

@@ -13,20 +13,61 @@ final class ReplyCancelTaskGen extends ReplyEvent {}
 
 
 //Cancel Flow Event
-final class ReplySetInitialConversation extends ReplyEvent {  
-  final ConversationData? conversation;
+final class ReplySetInitialAnswer extends ReplyEvent {  
+  final String query;
+  final String? searchId;
+  final List<ExtractedVideoInfo> similarVideos;
 
-  ReplySetInitialConversation(this.conversation);
+  ReplySetInitialAnswer(this.query, this.searchId, this.similarVideos);
 
 }
 
+final class ReplyUpdateQuery extends ReplyEvent {  
+  final String query;
+  final List<ExtractedVideoInfo> similarVideos;
+
+  ReplyUpdateQuery(this.query, this.similarVideos);
+
+}
+
+final class ReplyUpdateThumbnails extends ReplyEvent {  
+  final List<ExtractedVideoInfo> similarVideos;
+
+  ReplyUpdateThumbnails(this.similarVideos);
+
+}
+
+final class ReplySearchResultShare extends ReplyEvent {}
+
+final class ReplyRefreshAnswer extends ReplyEvent {  
+  final String query;
+  final int answerNumber;
+  final List<ExtractedVideoInfo> similarVideos;
+
+  ReplyRefreshAnswer( this.query, this.answerNumber, this.similarVideos);
+
+}
+
+final class ReplyNextAnswer extends ReplyEvent {  
+  final String query;
+  final int answerNumber;
+  final List<ExtractedVideoInfo> similarVideos;
+
+  ReplyNextAnswer(this.query, this.answerNumber,this.similarVideos);
+}
+
+final class ReplyPreviousAnswer extends ReplyEvent {  
+  
+  ReplyPreviousAnswer();
+}
+
 //Show Me Flow Events
-final class ReplyFollowUpSearchVideos extends ReplyEvent {
+final class ReplyFollowUpAnswer extends ReplyEvent {
   final String query;
   final List<ExtractedVideoInfo> savedVideos;
   final ScrollController scrollController;
   final String conversationId;
 
-  ReplyFollowUpSearchVideos(this.query, this.savedVideos, this.conversationId, this.scrollController);
+  ReplyFollowUpAnswer(this.query, this.savedVideos, this.conversationId, this.scrollController);
 }
 

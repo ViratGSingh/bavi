@@ -1,3 +1,4 @@
+import 'package:bavi/answer/bloc/answer_bloc.dart';
 import 'package:bavi/home/bloc/home_bloc.dart';
 import 'package:bavi/home/view/home_page.dart';
 import 'package:bavi/login/bloc/login_bloc.dart';
@@ -45,6 +46,9 @@ class _BaviAppState extends State<BaviApp> {
         // ),
         BlocProvider(
           create: (_) => ReplyBloc(httpClient: http.Client()),
+        ),
+        BlocProvider(
+          create: (_) => AnswerBloc(httpClient: http.Client()),
         )
       ],
       child: MaterialApp.router(

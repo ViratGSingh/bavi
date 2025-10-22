@@ -51,6 +51,41 @@ class ExtractedVideoInfo extends Equatable {
   }
 }
 
+class ExtractedResultInfo extends Equatable {
+  const ExtractedResultInfo({
+    required this.url,
+    required this.title,
+    required this.excerpts,
+    required this.thumbnailUrl
+  });
+
+  final String url;
+  final String title;
+  final String excerpts;
+  final String thumbnailUrl;
+
+  @override
+  List<Object> get props => [url, title, excerpts, thumbnailUrl];
+
+  factory ExtractedResultInfo.fromJson(Map<String, dynamic> json) {
+    return ExtractedResultInfo(
+      url: json["url"] as String,
+      title: json["title"] as String,
+      excerpts: json['excerpts'] as String,
+      thumbnailUrl: json['thumbnailUrl'] != null ? json['thumbnailUrl'] as String : '',
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'url':url,
+      'title': title,
+      'excerpts': excerpts,
+      'thumbnailUrl':thumbnailUrl
+    };
+  }
+}
+
 class UserData extends Equatable {
   const UserData({
     required this.username,

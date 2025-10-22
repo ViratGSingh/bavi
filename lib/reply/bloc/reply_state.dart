@@ -2,69 +2,59 @@ part of 'reply_bloc.dart';
 
 enum NavBarOption { home, search, player, profile }
 
-enum ReplyPageStatus { idle, loading, generateQuery, getSearchResults,summarize,  success, failure}
+enum ReplyPageStatus { idle, thinking, loading, summarize,  loadingPics, loadedPics}
+enum ReplyThumbnailStatus { idle, loading}
 
 final class ReplyState extends Equatable {
   ReplyState({
     this.page = NavBarOption.home,
     this.status = ReplyPageStatus.idle,
-    this.searchResults = const [],
-    this.conversationData = const [],
-    this.searchInstaResults = const [],
-    this.searchYouTubeResults = const [],
+    this.assetStatus = ReplyThumbnailStatus.idle,
     this.searchAnswer = "",
-    this.videos = const [],
-    this.collectionsVideos = const [],
-    this.collections = const [],
-    this.allVideoPlatformData = const {},
-    this.account = const ExtractedAccountInfo.empty(),
-    this.searchQuery = ""
+    this.searchQuery = "",
+    this.searchId = "",
+    this.answerNumber = 1,
+    this.thinking = "",
+    this.videoThumbnails=const [],
+    this.videoUrls=const []
   });
+  final String thinking;
   final String searchQuery;
+  final String searchId;
+  final List<String> videoThumbnails;
+  final List<String> videoUrls;
+  final int answerNumber;
   final NavBarOption page;
   final ReplyPageStatus status;
-  final List<QuestionAnswerData> conversationData;
-  final List<ExtractedVideoInfo> searchResults;
-  final List<ExtractedVideoInfo> searchInstaResults;
-  final List<ExtractedVideoInfo> searchYouTubeResults;
-  final Map<String, dynamic> allVideoPlatformData;
-  final List<ExtractedVideoInfo> videos;
-  final List<List<ExtractedVideoInfo>> collectionsVideos;
-  final List<VideoCollectionInfo> collections;
+  final ReplyThumbnailStatus assetStatus;
   final String searchAnswer;
-  ExtractedAccountInfo account;
   ReplyState copyWith({
+    int? answerNumber,
+    List<String>? videoThumbnails,
+    List<String>? videoUrls,
+    String? thinking,
     String? searchQuery,
+    String? searchId,
     NavBarOption? page,
     ExtractedAccountInfo? account,
     ReplyPageStatus? status,
+    ReplyThumbnailStatus? assetStatus,
     String? searchAnswer,
-    List<ExtractedVideoInfo>? searchResults,
-    List<QuestionAnswerData>? conversationData,
-    List<ExtractedVideoInfo>? searchInstaResults,
-    List<ExtractedVideoInfo>? searchYouTubeResults,
-    List<ExtractedVideoInfo>? videos,
-    List<List<ExtractedVideoInfo>>? collectionsVideos,
-    List<VideoCollectionInfo>? collections,
-    Map<String, dynamic>? allVideoPlatformData,
   }) {
     return ReplyState(
+      videoThumbnails: videoThumbnails ?? this.videoThumbnails,
+      videoUrls: videoUrls ?? this.videoUrls,
+      answerNumber: answerNumber?? this.answerNumber,
       searchAnswer: searchAnswer ?? this.searchAnswer,
+      thinking: thinking ?? this.thinking,
       searchQuery: searchQuery ?? this.searchQuery,
-      account: account ?? this.account,
+      searchId: searchId ?? this.searchId,
       page: page ?? this.page,
       status: status ?? this.status,
-      searchResults: searchResults ?? this.searchResults,
-      conversationData: conversationData ?? this.conversationData,
-      searchInstaResults: searchInstaResults ?? this.searchInstaResults,
-      searchYouTubeResults: searchYouTubeResults ?? this.searchYouTubeResults,
-      videos: videos ?? this.videos,
-      collectionsVideos: collectionsVideos ?? this.collectionsVideos,
-      collections: collections ?? this.collections,
-      allVideoPlatformData: allVideoPlatformData ?? this.allVideoPlatformData,
-    );
+      assetStatus: assetStatus ?? this.assetStatus,
+      );
   }
 
   @override
-  List<Object?> get props => [page,account, status, conversationData, searchResults, searchAnswer, searchInstaResults, searchYouTubeResults, videos, collectionsVideos, collections, allVideoPlatformData];
+  List<Object?> get props => [page, answerNumber, videoThumbnails,videoUrls, searchId, thinking, status, assetStatus, searchAnswer, searchQuery];
 }

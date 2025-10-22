@@ -10,6 +10,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:equatable/equatable.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -25,10 +26,19 @@ class ReplyBloc extends Bloc<ReplyEvent, ReplyState> {
   final http.Client httpClient;
   ReplyBloc({required this.httpClient}) : super(ReplyState()) {
     on<ReplyNavOptionSelect>(_changeNavOption);
-    //Show Me
-    on<ReplyFollowUpSearchVideos>(_searchPinecone);
+
     on<ReplyCancelTaskGen>(_cancelTaskSearchQuery);
-    on<ReplySetInitialConversation>(_setInitialData);
+
+    on<ReplySearchResultShare>(_shareSearchResult);
+
+    //Next answers
+    on<ReplySetInitialAnswer>(_setInitialData);
+    on<ReplyRefreshAnswer>(_refreshAnswer);
+    // on<ReplyNextAnswer>(_getNextAnswer);
+    // on<ReplyPreviousAnswer>(_getPreviousAnswer);
+
+    on<ReplyUpdateQuery>(_updateSearchData);
+    on<ReplyUpdateThumbnails>(_updateThumbnailUrls);
   }
 
   late Mixpanel mixpanel;
@@ -37,84 +47,6 @@ class ReplyBloc extends Bloc<ReplyEvent, ReplyState> {
     mixpanel = await Mixpanel.init(dotenv.get("MIXPANEL_PROJECT_KEY"),
         trackAutomaticEvents: false);
     mixpanel.track("reply_view");
-  }
-
-  /// Function to search Pinecone using a vector
-  Future<void> _searchPinecone(
-      ReplyFollowUpSearchVideos event, Emitter<ReplyState> emit) async {
-
-    mixpanel.timeEvent("chat_reply");
-    _cancelTaskGen = false;
-    //Get Answer
-    emit(state.copyWith(status: ReplyPageStatus.summarize));
-
-    // Get Conversation Data using the event.conversationId
-    // Get the current conversation info from it
-    final db = FirebaseFirestore.instance;
-    final conversationSnapshot =
-        await db.collection('conversations').doc(event.conversationId).get();
-
-    List<QuestionAnswerData> currentConversations = [];
-
-    if (conversationSnapshot.exists) {
-      Map<String, dynamic>? data = conversationSnapshot.data();
-      ConversationData conversationData = ConversationData.fromJson(data!);
-      currentConversations = conversationData.conversation;
-
-      // Get reply
-      String? searchAnswer = await generateMarkdownStyledAnswer(
-          videos: event.savedVideos,
-          userQuery: event.query,
-          prevAnswer: currentConversations.last.reply);
-      if (_cancelTaskGen) {
-        emit(state.copyWith(status: ReplyPageStatus.idle));
-        return;
-      }
-
-      //Add Conversation Data
-      currentConversations.add(QuestionAnswerData(
-        reply: searchAnswer ?? "",
-        query: event.query,
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      ));
-
-      //Update the conversation data
-      ConversationData updConversationData = ConversationData(
-        id: event.conversationId,
-        conversation: currentConversations,
-        createdAt: conversationData.createdAt,
-        updatedAt: Timestamp.now(),
-      );
-      await db
-          .collection('conversations')
-          .doc(event.conversationId)
-          .update(updConversationData.toJson());
-
-      emit(
-        state.copyWith(
-          status: ReplyPageStatus.idle,
-          conversationData: currentConversations,
-        ),
-      );
-
-      await Future.delayed(Duration(milliseconds: 300));
-      event.scrollController.animateTo(
-        event.scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 500),
-        curve: Curves.easeOut,
-      );
-    }
-
-    mixpanel.track("chat_reply");
-
-    // //Collect Sort Video links
-    // List<String> updSortedVideoids = updSortedTaskVideos.map((video) {
-    //   return video.videoId;
-    // }).toList();
-    // //Save Task Info
-    // _saveUserTask(event.task, taskSearchQuery, updSortedVideoids);
-    //navService.goTo("/searchResult", extra: updSortedTaskVideos);
   }
 
   Future<String?> generateMarkdownStyledAnswer(
@@ -232,35 +164,836 @@ class ReplyBloc extends Bloc<ReplyEvent, ReplyState> {
     }
   }
 
-  Future<void> _setInitialData(
-      ReplySetInitialConversation event, Emitter<ReplyState> emit) async {
-    initMixpanel();
-    emit(state.copyWith(conversationData: event.conversation?.conversation));
-  }
-
-  Future<List<ExtractedVideoInfo>> updateThumbnailUrls(
-      List<ExtractedVideoInfo> videos) async {
-    List<ExtractedVideoInfo> updatedVideos = [];
+  Future<String?> altGenerateMarkdownStyledAnswer({
+    required List<ExtractedVideoInfo> videos,
+    required String userQuery,
+  }) async {
+    final prompt = StringBuffer()
+      ..writeln(
+          "You are a helpful and concise assistant that answers user questions using a list of insights extracted from short videos.")
+      ..writeln("")
+      ..writeln("The user has asked:")
+      ..writeln("\"$userQuery\"")
+      ..writeln("")
+      ..writeln(
+          "You are given brief content summaries from multiple videos. Each including a caption, video description and audio description from the respective short video")
+      ..writeln("")
+      ..writeln(
+          "Your job is to write a clean, readable answer based only on the Caption/Transcript/Video Description available. Follow these rules:")
+      ..writeln("")
+      ..writeln("1. ✅ Structure the response clearly")
+      ..writeln(
+          "2. ✅ **Bold key insights** and highlight notable places, dishes, or experiences.")
+      ..writeln(
+          "3. ✅ For any place, food item, or experience that was featured in a video, wrap the **main word or phrase** (not the whole sentence) in this format:  \n   `[text to show](<reel_link>)`\n   Example: Try the **[Dum Pukht Biryani](https://instagram.com/reel/abc123)** for something royal.")
+      ..writeln(
+          "4. ✅ Write naturally as if you're recommending or informing — never say “based on search results” or “these videos say.”")
+      ..writeln(
+          "5. From the Caption/Transcript/Video Description available, only use those that exactly answers the query. And the answer should be exactly according to the query")
+      ..writeln(
+          "6. ✅ If no strong or direct matches are found, gracefully say:  \n   _“There isn’t a perfect match for that, but here are a few options that might still interest you.”_")
+      ..writeln("6. ❌ Do not repeat the question or use generic filler lines.")
+      ..writeln(
+          "7. ⚡ Keep your language short, engaging, and optimized for mobile readability.")
+      ..writeln("")
+      ..writeln("Here’s the video content:\n");
 
     for (final video in videos) {
-      final ogImage = await getOgImageFromUrl(video.videoData.videoUrl);
-      final updatedVideo = ExtractedVideoInfo(
-        videoId: video.videoId,
-        platform: video.platform,
-        searchContent: video.searchContent,
-        caption: video.caption,
-        videoDescription: video.videoDescription,
-        audioDescription: video.audioDescription,
-        userData: video.userData,
-        videoData: VideoData(
-          thumbnailUrl: ogImage ?? video.videoData.thumbnailUrl,
-          videoUrl: video.videoData.videoUrl,
-        ),
-      );
-      updatedVideos.add(updatedVideo);
+      prompt.writeln("Caption: ${video.caption}");
+      prompt.writeln("Transcript: ${video.audioDescription}");
+      prompt.writeln("Video Description: ${video.videoDescription}");
+      prompt.writeln(
+          "Video URL: https://www.instagram.com/${video.userData.username}/reel/${video.videoId}");
+      prompt.writeln("---");
     }
 
-    return updatedVideos;
+    final request = http.Request(
+      "POST",
+      Uri.parse("https://api.groq.com/openai/v1/chat/completions"),
+    );
+    request.headers.addAll({
+      "Authorization": "Bearer ${dotenv.get("GROQ_API_KEY")}",
+      "Content-Type": "application/json",
+    });
+    request.body = jsonEncode({
+      "model": "deepseek-r1-distill-llama-70b",
+      "messages": [
+        {
+          "role": "user",
+          "content": prompt.toString(),
+        }
+      ],
+      "temperature": 0.3,
+      "max_tokens": 1000,
+      "stream": true,
+      "stop": null
+    });
+
+    final streamedResponse = await httpClient.send(request);
+
+    if (streamedResponse.statusCode == 200) {
+      final buffer = StringBuffer();
+      final stream = streamedResponse.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter());
+
+      await for (final line in stream) {
+        if (line.startsWith("data: ")) {
+          final chunk = line.substring(6).trim();
+          if (chunk == "[DONE]") break;
+
+          try {
+            final jsonChunk = jsonDecode(chunk);
+            final delta = jsonChunk['choices'][0]['delta'];
+            if (delta != null && delta.containsKey('content')) {
+              final content = delta['content'];
+              buffer.write(content);
+              print(content); // Or emit to UI
+            }
+          } catch (e) {
+            print("Error decoding chunk: $e");
+          }
+        }
+      }
+
+      return buffer.toString();
+    } else {
+      print("❌ Groq API Error: ${streamedResponse.statusCode}");
+      return null;
+    }
+  }
+
+  Future<void> _setInitialData(
+      ReplySetInitialAnswer event, Emitter<ReplyState> emit) async {
+    initMixpanel();
+    emit(state.copyWith(
+        status: ReplyPageStatus.loading, searchQuery: event.query));
+    int startPoint = 0;
+    int endPoint = event.similarVideos.length;
+    List<ExtractedVideoInfo> videos =
+        event.similarVideos.sublist(startPoint, endPoint);
+    String userQuery = event.query;
+
+    final prompt = StringBuffer()
+      ..writeln(
+          "You are a helpful and concise assistant that answers user questions using a list of insights extracted from short videos.")
+      ..writeln("")
+      ..writeln("The user has asked:")
+      ..writeln("\"$userQuery\"")
+      ..writeln("")
+      ..writeln(
+          "You are given brief content summaries from multiple videos. Each including a caption, video description and audio description from the respective short video")
+      ..writeln("")
+      ..writeln(
+          "Your job is to write a clean, readable answer based only on the Caption/Transcript/Video Description available. Follow these rules:")
+      ..writeln("")
+      ..writeln("1. ✅ Structure the response clearly")
+      ..writeln(
+          "2. ✅ **Bold key insights** and highlight notable places, dishes, or experiences. Wrap the **word or phrase** (not the whole sentence) in this format:  \n   `[text to show](<reel_link>)`\n   Example: Try the **[Dum Pukht Biryani](https://instagram.com/reel/abc123)** for something royal.")
+      ..writeln(
+          "3. ✅ For any place, food item, or experience that was featured in a video, wrap the **main word or phrase** (not the whole sentence) in this format:  \n   `[text to show](<reel_link>)`\n   Example: Try the **[Dum Pukht Biryani](https://instagram.com/reel/abc123)** for something royal.")
+      ..writeln(
+          "4. ✅ Write naturally as if you're recommending or informing — never say “based on search results” or “these videos say.”")
+      ..writeln(
+          "5. From the Caption/Transcript/Video Description available, only use those that exactly answers the query. And the answer should be exactly according to the query")
+      ..writeln(
+          "6. ✅ If no strong or direct matches are found, gracefully say:  \n   _“There isn’t a perfect match for that, but here are a few options that might still interest you.”_")
+      ..writeln("6. ❌ Do not repeat the question or use generic filler lines.")
+      ..writeln(
+          "7. ⚡ Keep your language short, engaging, and optimized for mobile readability.")
+      ..writeln("7. ⚡ Keep it under 800 characters")
+      ..writeln("")
+      ..writeln("Here’s the video content:\n");
+
+    for (final video in videos) {
+      print(video.videoData.videoUrl);
+      print(video.caption.length);
+      print(video.audioDescription.length);
+      print(video.videoDescription.length);
+      prompt.writeln("Caption: ${video.caption}");
+      prompt.writeln("Transcript: ${video.audioDescription}");
+      prompt.writeln("Video Description: ${video.videoDescription}");
+      prompt.writeln(
+          "Video URL: https://www.instagram.com/${video.userData.username}/reel/${video.videoId}");
+      prompt.writeln("---");
+    }
+
+    final request = http.Request(
+      "POST",
+      Uri.parse("https://api.groq.com/openai/v1/chat/completions"),
+    );
+    request.headers.addAll({
+      "Authorization": "Bearer ${dotenv.get("GROQ_API_KEY")}",
+      "Content-Type": "application/json",
+    });
+    request.body = jsonEncode({
+      "model": "deepseek-r1-distill-llama-70b",
+      "messages": [
+        {
+          "role": "user",
+          "content": prompt.toString(),
+        }
+      ],
+      "temperature": 0.3,
+      "max_tokens": 1000,
+      "stream": true,
+      "stop": null
+    });
+
+    final streamedResponse = await httpClient.send(request);
+
+    if (streamedResponse.statusCode == 200) {
+      final buffer = StringBuffer();
+      final stream = streamedResponse.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter());
+
+      await for (final line in stream) {
+        if (line.startsWith("data: ")) {
+          final chunk = line.substring(6).trim();
+          if (chunk == "[DONE]") break;
+
+          try {
+            final jsonChunk = jsonDecode(chunk);
+            final delta = jsonChunk['choices'][0]['delta'];
+            if (delta != null && delta.containsKey('content')) {
+              final content = delta['content'];
+              if (content.toString().contains("<think>") == false) {
+                buffer.write(content);
+              }
+
+              emit(state.copyWith(
+                  status: ReplyPageStatus.thinking,
+                  thinking: buffer.toString().split("</think>").first));
+            }
+          } catch (e) {
+            print("Error decoding chunk: $e");
+          }
+        }
+      }
+      String answer = buffer.toString();
+      answer = answer.split("</think>").last;
+      emit(state.copyWith(status: ReplyPageStatus.idle, searchAnswer: answer));
+
+      //Save answer data
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      String? userEmaildId = prefs.getString("email");
+      if (userEmaildId != null) {
+        FirebaseFirestore db = FirebaseFirestore.instance;
+        final CollectionReference usersCollection = db.collection('users');
+
+        // Query the users collection for a document with the matching email
+        final QuerySnapshot querySnapshot = await usersCollection
+            .where('email', isEqualTo: userEmaildId)
+            .limit(1)
+            .get();
+
+        // Check if any documents were found
+        if (querySnapshot.docs.isEmpty) {
+          throw Exception('User not found');
+        } else {
+          //Set search data and updated search history in user data
+          SearchData searchData = SearchData(
+            id: event.searchId ??
+                DateTime.now().millisecondsSinceEpoch.toString(),
+            answer: answer,
+            process: buffer.toString().split("</think>").first,
+            sourceLinks: event.similarVideos.map((data){
+                  return data.videoData.videoUrl;
+                }).toList(),
+            query: event.query,
+            createdAt: Timestamp.now(),
+            updatedAt: Timestamp.now(),
+          );
+
+          final docRef = usersCollection.doc(querySnapshot.docs.first.id);
+          final userDoc = await docRef.get();
+          final data = userDoc.data() as Map<String, dynamic>;
+          List<dynamic> currentHistory = data['search_history'] ?? [];
+
+          currentHistory.add(searchData.id);
+
+          //Update to answers collection
+          await db
+              .collection("answers")
+              .doc(searchData.id)
+              .set(searchData.toJson());
+
+          //Update answer id in user data
+          if (event.searchId == null) {
+            await docRef.update({'search_history': currentHistory});
+          }
+
+          emit(state.copyWith(searchId: searchData.id, answerNumber: 1));
+        }
+      }
+      //return buffer.toString();
+    } else {
+      print("❌ Groq API Error: ${streamedResponse.statusCode}");
+    }
+  }
+
+  Future<void> _updateSearchData(
+      ReplyUpdateQuery event, Emitter<ReplyState> emit) async {
+    emit(state.copyWith(
+        status: ReplyPageStatus.loading, searchQuery: event.query));
+    print("Started");
+    print(state.status.toString());
+    int startPoint = 0;
+    int endPoint = 11;
+    List<ExtractedVideoInfo> videos =
+        event.similarVideos.sublist(startPoint, endPoint);
+    String userQuery = event.query;
+
+    final prompt = StringBuffer()
+      ..writeln(
+          "You are a helpful and concise assistant that answers user questions using a list of insights extracted from short videos.")
+      ..writeln("")
+      ..writeln("The user has asked:")
+      ..writeln("\"$userQuery\"")
+      ..writeln("")
+      ..writeln(
+          "You are given brief content summaries from multiple videos. Each including a caption, video description and audio description from the respective short video")
+      ..writeln("")
+      ..writeln(
+          "Your job is to write a clean, readable answer based only on the Caption/Transcript/Video Description available. Follow these rules:")
+      ..writeln("")
+      ..writeln("1. ✅ Structure the response clearly")
+      ..writeln(
+          "2. ✅ **Bold key insights** and highlight notable places, dishes, or experiences. Wrap the **word or phrase** (not the whole sentence) in this format:  \n   `[text to show](<reel_link>)`\n   Example: Try the **[Dum Pukht Biryani](https://instagram.com/reel/abc123)** for something royal.")
+      ..writeln(
+          "3. ✅ For any place, food item, or experience that was featured in a video, wrap the **main word or phrase** (not the whole sentence) in this format:  \n   `[text to show](<reel_link>)`\n   Example: Try the **[Dum Pukht Biryani](https://instagram.com/reel/abc123)** for something royal.")
+      ..writeln(
+          "4. ✅ Write naturally as if you're recommending or informing — never say “based on search results” or “these videos say.”")
+      ..writeln(
+          "5. From the Caption/Transcript/Video Description available, only use those that exactly answers the query. And the answer should be exactly according to the query")
+      ..writeln(
+          "6. ✅ If no strong or direct matches are found, gracefully say:  \n   _“There isn’t a perfect match for that, but here are a few options that might still interest you.”_")
+      ..writeln("6. ❌ Do not repeat the question or use generic filler lines.")
+      ..writeln(
+          "7. ⚡ Keep your language short, engaging, and optimized for mobile readability.")
+      ..writeln("7. ⚡ Keep it under 800 characters")
+      ..writeln("")
+      ..writeln("Here’s the video content:\n");
+
+    for (final video in videos) {
+      prompt.writeln("Caption: ${video.caption}");
+      prompt.writeln("Transcript: ${video.audioDescription}");
+      prompt.writeln("Video Description: ${video.videoDescription}");
+      prompt.writeln(
+          "Video URL: https://www.instagram.com/${video.userData.username}/reel/${video.videoId}");
+      prompt.writeln("---");
+    }
+
+    final request = http.Request(
+      "POST",
+      Uri.parse("https://api.groq.com/openai/v1/chat/completions"),
+    );
+    request.headers.addAll({
+      "Authorization": "Bearer ${dotenv.get("GROQ_API_KEY")}",
+      "Content-Type": "application/json",
+    });
+    request.body = jsonEncode({
+      "model": "deepseek-r1-distill-llama-70b",
+      "messages": [
+        {
+          "role": "user",
+          "content": prompt.toString(),
+        }
+      ],
+      "temperature": 0.3,
+      "max_tokens": 1000,
+      "stream": true,
+      "stop": null
+    });
+
+    final streamedResponse = await httpClient.send(request);
+
+    if (streamedResponse.statusCode == 200) {
+      final buffer = StringBuffer();
+      final stream = streamedResponse.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter());
+
+      await for (final line in stream) {
+        if (line.startsWith("data: ")) {
+          final chunk = line.substring(6).trim();
+          if (chunk == "[DONE]") break;
+
+          try {
+            final jsonChunk = jsonDecode(chunk);
+            final delta = jsonChunk['choices'][0]['delta'];
+            if (delta != null && delta.containsKey('content')) {
+              final content = delta['content'];
+              if (content.toString().contains("<think>") == false) {
+                buffer.write(content);
+              }
+
+              emit(state.copyWith(
+                  status: ReplyPageStatus.thinking,
+                  thinking: buffer.toString().split("</think>").first));
+            }
+          } catch (e) {
+            print("Error decoding chunk: $e");
+          }
+        }
+      }
+      String answer = buffer.toString();
+      answer = answer.split("</think>").last;
+      emit(state.copyWith(status: ReplyPageStatus.idle, searchAnswer: answer));
+
+      //Save answer data
+
+      FirebaseFirestore db = FirebaseFirestore.instance;
+      //Set search data and updated search history in user data
+      SearchData searchData = SearchData(
+        id: state.searchId,
+        answer: answer,
+        process: buffer.toString().split("</think>").first,
+        sourceLinks: event.similarVideos.map((data){
+                  return data.videoData.videoUrl;
+                }).toList(),
+        query: event.query,
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      );
+      print(searchData.id);
+      //Update to answers collection
+      await db
+          .collection("answers")
+          .doc(searchData.id)
+          .set(searchData.toJson());
+
+      emit(state.copyWith(searchId: searchData.id, answerNumber: 1));
+
+      //return buffer.toString();
+    } else {
+      print("❌ Groq API Error: ${streamedResponse.statusCode}");
+    }
+  }
+
+  Future<void> _shareSearchResult(
+      ReplySearchResultShare event, Emitter<ReplyState> emit) async {
+    mixpanel.track("share_answer_result");
+    final searchResultLink = "https://drissea.com/search/${state.searchId}";
+    print("Asd");
+    Clipboard.setData(ClipboardData(text: searchResultLink));
+  }
+
+  Future<void> _refreshAnswer(
+      ReplyRefreshAnswer event, Emitter<ReplyState> emit) async {
+    emit(state.copyWith(status: ReplyPageStatus.loading));
+    int startPoint = 0;
+    // event.answerNumber == 1 ? 0 : 11 + 10 * (event.answerNumber - 2);
+    int endPoint = event.similarVideos
+        .length; //startPoint + (event.answerNumber == 1 ? 11 : 10);
+    List<ExtractedVideoInfo> videos =
+        event.similarVideos.sublist(startPoint, endPoint);
+    String userQuery = event.query;
+    final prompt = StringBuffer()
+      ..writeln(
+          "You are a helpful and concise assistant that answers user questions using a list of insights extracted from short videos.")
+      ..writeln("")
+      ..writeln("The user has asked:")
+      ..writeln("\"$userQuery\"")
+      ..writeln("")
+      ..writeln(
+          "You are given brief content summaries from multiple videos. Each including a caption, video description and audio description from the respective short video")
+      ..writeln("")
+      ..writeln(
+          "Your job is to write a clean, readable answer based only on the Caption/Transcript/Video Description available. Follow these rules:")
+      ..writeln("")
+      ..writeln("1. ✅ Structure the response clearly")
+      ..writeln(
+          "2. ✅ **Bold key insights** and highlight notable places, dishes, or experiences. Wrap the **word or phrase** (not the whole sentence) in this format:  \n   `[text to show](<reel_link>)`\n   Example: Try the **[Dum Pukht Biryani](https://instagram.com/reel/abc123)** for something royal.")
+      ..writeln(
+          "3. ✅ For any place, food item, or experience that was featured in a video, wrap the **main word or phrase** (not the whole sentence) in this format:  \n   `[text to show](<reel_link>)`\n   Example: Try the **[Dum Pukht Biryani](https://instagram.com/reel/abc123)** for something royal.")
+      ..writeln(
+          "4. ✅ Write naturally as if you're recommending or informing — never say “based on search results” or “these videos say.”")
+      ..writeln(
+          "5. From the Caption/Transcript/Video Description available, only use those that exactly answers the query. And the answer should be exactly according to the query")
+      ..writeln(
+          "6. ✅ If no strong or direct matches are found, gracefully say:  \n   _“There isn’t a perfect match for that, but here are a few options that might still interest you.”_")
+      ..writeln("6. ❌ Do not repeat the question or use generic filler lines.")
+      ..writeln(
+          "7. ⚡ Keep your language short, engaging, and optimized for mobile readability.")
+      ..writeln("7. ⚡ Keep it under 800 characters")
+      ..writeln("")
+      ..writeln("Here’s the video content:\n");
+
+    for (final video in videos) {
+      prompt.writeln("Caption: ${video.caption}");
+      prompt.writeln("Transcript: ${video.audioDescription}");
+      prompt.writeln("Video Description: ${video.videoDescription}");
+      prompt.writeln(
+          "Video URL: https://www.instagram.com/${video.userData.username}/reel/${video.videoId}");
+      prompt.writeln("---");
+    }
+
+    final request = http.Request(
+      "POST",
+      Uri.parse("https://api.groq.com/openai/v1/chat/completions"),
+    );
+    request.headers.addAll({
+      "Authorization": "Bearer ${dotenv.get("GROQ_API_KEY")}",
+      "Content-Type": "application/json",
+    });
+    request.body = jsonEncode({
+      "model": "deepseek-r1-distill-llama-70b",
+      "messages": [
+        {
+          "role": "user",
+          "content": prompt.toString(),
+        }
+      ],
+      "temperature": 0.3,
+      "max_tokens": 1000,
+      "stream": true,
+      "stop": null
+    });
+
+    final streamedResponse = await httpClient.send(request);
+
+    if (streamedResponse.statusCode == 200) {
+      final buffer = StringBuffer();
+      final stream = streamedResponse.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter());
+
+      await for (final line in stream) {
+        if (line.startsWith("data: ")) {
+          final chunk = line.substring(6).trim();
+          if (chunk == "[DONE]") break;
+
+          try {
+            final jsonChunk = jsonDecode(chunk);
+            final delta = jsonChunk['choices'][0]['delta'];
+            if (delta != null && delta.containsKey('content')) {
+              final content = delta['content'];
+              if (content.toString().contains("<think>") == false) {
+                buffer.write(content);
+              }
+
+              emit(state.copyWith(
+                  status: ReplyPageStatus.thinking,
+                  thinking: buffer.toString().split("</think>").first));
+            }
+          } catch (e) {
+            print("Error decoding chunk: $e");
+          }
+        }
+      }
+      String answer = buffer.toString();
+      answer = answer.split("</think>").last;
+      emit(state.copyWith(status: ReplyPageStatus.idle, searchAnswer: answer));
+
+      //Updated answer data
+      FirebaseFirestore db = FirebaseFirestore.instance;
+      final CollectionReference searchCollection = db.collection('answers');
+
+      // Query the answer collection for a document with the matching email
+      final QuerySnapshot querySnapshot = await searchCollection
+          .where('id', isEqualTo: state.searchId)
+          .limit(1)
+          .get();
+
+      // Check if any documents were found
+      if (querySnapshot.docs.isEmpty) {
+        throw Exception('Search data not found');
+      } else {
+        //Update search data
+        final docRef = searchCollection.doc(querySnapshot.docs.first.id);
+        final userDoc = await docRef.get();
+        final data = userDoc.data() as Map<String, dynamic>;
+        SearchData currSearchData = SearchData.fromJson(data);
+
+        //Replace current answer with new answer in answers list
+        SearchData updSearchData = SearchData(
+          id: currSearchData.id,
+          answer: answer,
+          query: event.query,
+          process: buffer.toString().split("</think>").first,
+          sourceLinks: event.similarVideos.map((data){
+                  return data.videoData.videoUrl;
+                }).toList(),
+          createdAt: currSearchData.createdAt,
+          updatedAt: Timestamp.now(),
+        );
+
+        //Update to answers collection
+        await db
+            .collection("answers")
+            .doc(currSearchData.id)
+            .set(updSearchData.toJson());
+      }
+
+      //return buffer.toString();
+    } else {
+      print("❌ Groq API Error: ${streamedResponse.statusCode}");
+    }
+    mixpanel.track("refresh_answer_result");
+  }
+
+  // Future<void> _getPreviousAnswer(
+  //     ReplyPreviousAnswer event, Emitter<ReplyState> emit) async {
+  //   emit(state.copyWith(status: ReplyPageStatus.loading));
+
+  //   //Get previous answer data
+  //   FirebaseFirestore db = FirebaseFirestore.instance;
+  //   final CollectionReference searchCollection = db.collection('answers');
+
+  //   // Query the answer collection for a document with the matching email
+  //   final QuerySnapshot querySnapshot = await searchCollection
+  //       .where('id', isEqualTo: state.searchId)
+  //       .limit(1)
+  //       .get();
+
+  //   // Check if any documents were found
+  //   if (querySnapshot.docs.isEmpty) {
+  //     throw Exception('Search data not found');
+  //   } else {
+  //     //Update search data
+  //     final docRef = searchCollection.doc(querySnapshot.docs.first.id);
+  //     final userDoc = await docRef.get();
+  //     final data = userDoc.data() as Map<String, dynamic>;
+  //     SearchData currSearchData = SearchData.fromJson(data);
+
+  //     //Get previous answer
+  //     AnswerData prevAnswerData =
+  //         currSearchData.answers[state.answerNumber - 2];
+  //     emit(state.copyWith(
+  //         status: ReplyPageStatus.idle,
+  //         searchAnswer: prevAnswerData.reply,
+  //         answerNumber: state.answerNumber - 1));
+  //   }
+  // }
+
+  // Future<void> _getNextAnswer(
+  //     ReplyNextAnswer event, Emitter<ReplyState> emit) async {
+  //   emit(state.copyWith(status: ReplyPageStatus.loading));
+
+  //   //Check answer data exist
+  //   FirebaseFirestore db = FirebaseFirestore.instance;
+  //   final CollectionReference searchCollection = db.collection('answers');
+
+  //   // Query the answer collection for a document with the matching email
+  //   final QuerySnapshot querySnapshot = await searchCollection
+  //       .where('id', isEqualTo: state.searchId)
+  //       .limit(1)
+  //       .get();
+
+  //   // Check if any documents were found
+  //   if (querySnapshot.docs.isEmpty) {
+  //     throw Exception('Search data not found');
+  //   } else {
+  //     //Update search data
+  //     final docRef = searchCollection.doc(querySnapshot.docs.first.id);
+  //     final userDoc = await docRef.get();
+  //     final data = userDoc.data() as Map<String, dynamic>;
+  //     SearchData currSearchData = SearchData.fromJson(data);
+
+  //     //Get current answers
+  //     List<AnswerData> currAnswerData = currSearchData.answers;
+
+  //     //Check if answer exists
+  //     if (currAnswerData.length >= event.answerNumber) {
+  //       print("donee");
+  //       emit(state.copyWith(
+  //           status: ReplyPageStatus.idle,
+  //           thinking: currAnswerData[event.answerNumber - 1].process,
+  //           searchAnswer: currAnswerData[event.answerNumber - 1].reply,
+  //           answerNumber: event.answerNumber));
+  //     } else {
+  //       //Get Answer
+  //       int startPoint =
+  //           event.answerNumber == 1 ? 0 : 11 + 10 * (event.answerNumber - 2);
+
+  //       int endPoint = startPoint + (event.answerNumber == 1 ? 11 : 10);
+  //       List<ExtractedVideoInfo> videos =
+  //           event.similarVideos.sublist(startPoint, endPoint);
+  //       String userQuery = event.query;
+
+  //       final prompt = StringBuffer()
+  //         ..writeln(
+  //             "You are a helpful and concise assistant that answers user questions using a list of insights extracted from short videos.")
+  //         ..writeln("")
+  //         ..writeln("The user has asked:")
+  //         ..writeln("\"$userQuery\"")
+  //         ..writeln("")
+  //         ..writeln(
+  //             "You are given brief content summaries from multiple videos. Each including a caption, video description and audio description from the respective short video")
+  //         ..writeln("")
+  //         ..writeln(
+  //             "Your job is to write a clean, readable answer based only on the Caption/Transcript/Video Description available. Follow these rules:")
+  //         ..writeln("")
+  //         ..writeln("1. ✅ Structure the response clearly")
+  //         ..writeln(
+  //             "2. ✅ **Bold key insights** and highlight notable places, dishes, or experiences. Wrap the **word or phrase** (not the whole sentence) in this format:  \n   `[text to show](<reel_link>)`\n   Example: Try the **[Dum Pukht Biryani](https://instagram.com/reel/abc123)** for something royal.")
+  //         ..writeln(
+  //             "3. ✅ For any place, food item, or experience that was featured in a video, wrap the **main word or phrase** (not the whole sentence) in this format:  \n   `[text to show](<reel_link>)`\n   Example: Try the **[Dum Pukht Biryani](https://instagram.com/reel/abc123)** for something royal.")
+  //         ..writeln(
+  //             "4. ✅ Write naturally as if you're recommending or informing — never say “based on search results” or “these videos say.”")
+  //         ..writeln(
+  //             "5. From the Caption/Transcript/Video Description available, only use those that exactly answers the query. And the answer should be exactly according to the query")
+  //         ..writeln(
+  //             "6. ✅ If no strong or direct matches are found, gracefully say:  \n   _“There isn’t a perfect match for that, but here are a few options that might still interest you.”_")
+  //         ..writeln(
+  //             "6. ❌ Do not repeat the question or use generic filler lines.")
+  //         ..writeln(
+  //             "7. ⚡ Keep your language short, engaging, and optimized for mobile readability.")
+  //         ..writeln("7. ⚡ Keep it under 800 characters")
+  //         ..writeln("")
+  //         ..writeln("Here’s the video content:\n");
+
+  //       for (final video in videos) {
+  //         prompt.writeln("Caption: ${video.caption}");
+  //         prompt.writeln("Transcript: ${video.audioDescription}");
+  //         prompt.writeln("Video Description: ${video.videoDescription}");
+  //         prompt.writeln(
+  //             "Video URL: https://www.instagram.com/${video.userData.username}/reel/${video.videoId}");
+  //         prompt.writeln("---");
+  //       }
+
+  //       final request = http.Request(
+  //         "POST",
+  //         Uri.parse("https://api.groq.com/openai/v1/chat/completions"),
+  //       );
+  //       request.headers.addAll({
+  //         "Authorization": "Bearer ${dotenv.get("GROQ_API_KEY")}",
+  //         "Content-Type": "application/json",
+  //       });
+  //       request.body = jsonEncode({
+  //         "model": "deepseek-r1-distill-llama-70b",
+  //         "messages": [
+  //           {
+  //             "role": "user",
+  //             "content": prompt.toString(),
+  //           }
+  //         ],
+  //         "temperature": 0.3,
+  //         "max_tokens": 1000,
+  //         "stream": true,
+  //         "stop": null
+  //       });
+
+  //       final streamedResponse = await httpClient.send(request);
+
+  //       if (streamedResponse.statusCode == 200) {
+  //         final buffer = StringBuffer();
+  //         final stream = streamedResponse.stream
+  //             .transform(utf8.decoder)
+  //             .transform(const LineSplitter());
+
+  //         await for (final line in stream) {
+  //           if (line.startsWith("data: ")) {
+  //             final chunk = line.substring(6).trim();
+  //             if (chunk == "[DONE]") break;
+
+  //             try {
+  //               final jsonChunk = jsonDecode(chunk);
+  //               final delta = jsonChunk['choices'][0]['delta'];
+  //               if (delta != null && delta.containsKey('content')) {
+  //                 final content = delta['content'];
+  //                 if (content.toString().contains("<think>") == false) {
+  //                   buffer.write(content);
+  //                 }
+
+  //                 emit(state.copyWith(
+  //                     status: ReplyPageStatus.thinking,
+  //                     thinking: buffer.toString().split("</think>").first));
+  //               }
+  //             } catch (e) {
+  //               print("Error decoding chunk: $e");
+  //             }
+  //           }
+  //         }
+  //         String answer = buffer.toString();
+  //         answer = answer.split("</think>").last;
+  //         emit(state.copyWith(
+  //             status: ReplyPageStatus.idle,
+  //             searchAnswer: answer,
+  //             answerNumber: event.answerNumber));
+
+  //         //Updated answer data
+  //         FirebaseFirestore db = FirebaseFirestore.instance;
+  //         final CollectionReference searchCollection = db.collection('answers');
+
+  //         // Query the answer collection for a document with the matching email
+  //         final QuerySnapshot querySnapshot = await searchCollection
+  //             .where('id', isEqualTo: state.searchId)
+  //             .limit(1)
+  //             .get();
+
+  //         // Check if any documents were found
+  //         if (querySnapshot.docs.isEmpty) {
+  //           throw Exception('Search data not found');
+  //         } else {
+  //           //Update search data
+  //           final docRef = searchCollection.doc(querySnapshot.docs.first.id);
+  //           final userDoc = await docRef.get();
+  //           final data = userDoc.data() as Map<String, dynamic>;
+  //           SearchData currSearchData = SearchData.fromJson(data);
+
+  //           //Get current answers
+  //           List<AnswerData> currAnswerData = currSearchData.answers;
+
+  //           //Add new answer data
+  //           AnswerData updAnswerData = AnswerData(
+  //               reply: answer,
+  //               process: buffer.toString().split("</think>").first,
+  //               sourceLinks: event.similarVideos.map((data){
+  //                 return data.videoData.videoUrl;
+  //               }).toList(),
+  //               createdAt: Timestamp.now(),
+  //               updatedAt: Timestamp.now());
+  //           currAnswerData.add(updAnswerData);
+
+  //           //Replace current answers with new answers list
+  //           List<AnswerData> updAnswers = currAnswerData;
+  //           SearchData updSearchData = SearchData(
+  //             id: currSearchData.id,
+  //             answers: updAnswers,
+  //             query: event.query,
+  //             createdAt: currSearchData.createdAt,
+  //             updatedAt: Timestamp.now(),
+  //           );
+
+  //           //Update to answers collection
+  //           await db
+  //               .collection("answers")
+  //               .doc(currSearchData.id)
+  //               .set(updSearchData.toJson());
+  //         }
+
+  //         //return buffer.toString();
+  //       } else {
+  //         print("❌ Groq API Error: ${streamedResponse.statusCode}");
+  //       }
+  //     }
+  //   }
+  // }
+
+  Future<void> _updateThumbnailUrls(
+      ReplyUpdateThumbnails event, Emitter<ReplyState> emit) async {
+    List<String> videoThumbnails = [];
+    List<String> videoUrls = [];
+
+    emit(state.copyWith(
+        assetStatus: ReplyThumbnailStatus.loading,
+        videoThumbnails: [],
+        videoUrls: []));
+    for (final video in event.similarVideos) {
+      emit(state.copyWith(assetStatus: ReplyThumbnailStatus.loading));
+      final ogImage = await getOgImageFromUrl(video.videoData.videoUrl);
+      if (ogImage != null) {
+        videoThumbnails.add(ogImage.toString());
+        videoUrls.add(video.videoData.videoUrl);
+      }
+      emit(state.copyWith(
+          assetStatus: ReplyThumbnailStatus.idle,
+          videoThumbnails: videoThumbnails,
+          videoUrls: videoUrls));
+    }
   }
 
   Future<String?> getOgImageFromUrl(String url) async {
@@ -276,6 +1009,7 @@ class ReplyBloc extends Bloc<ReplyEvent, ReplyState> {
 
       if (response.statusCode == 200) {
         final document = parse(response.body);
+        print(response.body);
         final meta = document.getElementsByTagName('meta').firstWhere(
               (e) =>
                   e.attributes['property'] == 'og:image' ||

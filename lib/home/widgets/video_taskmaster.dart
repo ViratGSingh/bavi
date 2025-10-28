@@ -176,13 +176,13 @@ class _VideoTaskmasterState extends State<VideoTaskmaster> {
                                     borderRadius: BorderRadius.circular(8),
                                     border: Border.all(color: Color(0xFF8A2BE2))),
                                 child: Text(
-                                  "Short Videos",
+                                  "Instagram",
                                   style: TextStyle(
                                     fontFamily: 'Poppins',
                                     fontWeight: _selectedTab == "Short Videos"
                                         ? FontWeight.w700
                                         : FontWeight.w500,
-                                    fontSize: 14,
+                                    fontSize: 12,
                                     color: _selectedTab == "Short Videos"
                                         ? Color(0xFFDFFF00)
                                         : Color(0xFF8A2BE2),
@@ -207,13 +207,13 @@ class _VideoTaskmasterState extends State<VideoTaskmaster> {
                                     borderRadius: BorderRadius.circular(8),
                                     border: Border.all(color: Color(0xFF8A2BE2))),
                                 child: Text(
-                                  "Long Videos",
+                                  "YouTube",
                                   style: TextStyle(
                                     fontFamily: 'Poppins',
                                     fontWeight: _selectedTab == "Long Videos"
                                         ? FontWeight.w700
                                         : FontWeight.w500,
-                                    fontSize: 14,
+                                    fontSize: 12,
                                     color: _selectedTab == "Long Videos"
                                         ? Color(0xFFDFFF00)
                                         : Color(0xFF8A2BE2),

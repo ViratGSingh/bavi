@@ -148,9 +148,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         videoResults: [],
         shortVideoResults: [],
         generalSearchResults: [],
-        searchAnswer: utf8.decode(
-            event.sessionData.answers.first.runes.toList(),
-            allowMalformed: true),
+        searchAnswer: event.sessionData.answers.first,
       ),
     );
 
@@ -399,26 +397,24 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     //Format watchedVideos to different json structure
     String query = state.userQuery;
     List<Map<String, String>> formattedResults = [];
-    if(event.isSearchMode==false){
-      formattedResults =
-        state.replyContext.map((video) {
-      return {
-        "title": "",
-        "url": video.sourceUrl,
-        "snippet":
-            "${video.user.username} | ${video.user.fullname} | ${video.video.caption} | ${video.video.transcription} | ${video.video.framewatch} | ${DateTime.fromMillisecondsSinceEpoch(video.video.timestamp * 1000).toLocal().toString()}"
-                .trim(),
-      };
-    }).toList();
-    }else{
-      formattedResults =
-        state.generalSearchResults.map((webpage) {
-      return {
-        "title": webpage.title,
-        "url": webpage.url,
-        "snippet":webpage.excerpts,
-      };
-    }).toList();
+    if (event.isSearchMode == false) {
+      formattedResults = state.replyContext.map((video) {
+        return {
+          "title": "",
+          "url": video.sourceUrl,
+          "snippet":
+              "${video.user.username} | ${video.user.fullname} | ${video.video.caption} | ${video.video.transcription} | ${video.video.framewatch} | ${DateTime.fromMillisecondsSinceEpoch(video.video.timestamp * 1000).toLocal().toString()}"
+                  .trim(),
+        };
+      }).toList();
+    } else {
+      formattedResults = state.generalSearchResults.map((webpage) {
+        return {
+          "title": webpage.title,
+          "url": webpage.url,
+          "snippet": webpage.excerpts,
+        };
+      }).toList();
     }
     //Come up with Reply
     String? answer;
@@ -486,25 +482,28 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         status: HomePageStatus.generateQuery,
         userQuery: query,
         savedStatus: HomeSavedStatus.idle));
-    try {
-      final body = jsonEncode(genSearchReqBody);
-      final resp = await http.post(
-        Uri.parse("https://$drisseaApiHost/api/generate/query"),
-        headers: {
-          'Authorization': 'Bearer ${dotenv.get("API_SECRET")}',
-          'Content-Type': 'application/json',
-        },
-        body: body,
-      );
-      if (resp.statusCode == 200) {
-        final Map<String, dynamic> respJson = jsonDecode(resp.body);
-        if (respJson["success"] == true && respJson.containsKey("query")) {
-          searchQuery = respJson["query"];
+    if (state.isIncognito == false) {
+      try {
+        final body = jsonEncode(genSearchReqBody);
+        final resp = await http.post(
+          Uri.parse("https://$drisseaApiHost/api/generate/query"),
+          headers: {
+            'Authorization': 'Bearer ${dotenv.get("API_SECRET")}',
+            'Content-Type': 'application/json',
+          },
+          body: body,
+        );
+        if (resp.statusCode == 200) {
+          final Map<String, dynamic> respJson = jsonDecode(resp.body);
+          if (respJson["success"] == true && respJson.containsKey("query")) {
+            searchQuery = respJson["query"];
+          }
         }
+      } catch (e) {
+        print("Error in understanding query: $e");
       }
-    } catch (e) {
-      print("Error in understanding query: $e");
     }
+
     if (_cancelTaskGen) {
       emit(state.copyWith(status: HomePageStatus.idle));
       return;
@@ -608,7 +607,11 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       };
     }).toList();
 
-    String? answer = await generateReply(state.followupQuestions.isNotEmpty?"Previous Question:${state.followupQuestions.first} | Current Question:$query | Answer the current question without mentioning it as 'current question'" :query, formattedResults);
+    String? answer = await generateReply(
+        state.followupQuestions.isNotEmpty
+            ? "Previous Question:${state.followupQuestions.first} | Current Question:$query | Answer the current question without mentioning it as 'current question'"
+            : query,
+        formattedResults);
     emit(state.copyWith(
         replyStatus: HomeReplyStatus.success,
         searchAnswer: answer,
@@ -708,7 +711,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       HomeWatchSearchVideos event, Emitter<HomeState> emit) async {
     //mixpanel.timeEvent("watch_answer_result");
     String query = event.query;
-    String searchQuery = "";
+    String searchQuery = event.query;
     String drisseaApiHost = dotenv.get('API_HOST');
     DateTime startDatetime = DateTime.now();
     _cancelTaskGen = false;
@@ -732,24 +735,26 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         status: HomePageStatus.generateQuery,
         userQuery: query,
         savedStatus: HomeSavedStatus.idle));
-    try {
-      final body = jsonEncode(genSearchReqBody);
-      final resp = await http.post(
-        Uri.parse("https://$drisseaApiHost/api/generate/query"),
-        headers: {
-          'Authorization': 'Bearer ${dotenv.get("API_SECRET")}',
-          'Content-Type': 'application/json',
-        },
-        body: body,
-      );
-      if (resp.statusCode == 200) {
-        final Map<String, dynamic> respJson = jsonDecode(resp.body);
-        if (respJson["success"] == true && respJson.containsKey("query")) {
-          searchQuery = respJson["query"];
+    if (state.isIncognito == false) {
+      try {
+        final body = jsonEncode(genSearchReqBody);
+        final resp = await http.post(
+          Uri.parse("https://$drisseaApiHost/api/generate/query"),
+          headers: {
+            'Authorization': 'Bearer ${dotenv.get("API_SECRET")}',
+            'Content-Type': 'application/json',
+          },
+          body: body,
+        );
+        if (resp.statusCode == 200) {
+          final Map<String, dynamic> respJson = jsonDecode(resp.body);
+          if (respJson["success"] == true && respJson.containsKey("query")) {
+            searchQuery = respJson["query"];
+          }
         }
+      } catch (e) {
+        print("Error in understanding query: $e");
       }
-    } catch (e) {
-      print("Error in understanding query: $e");
     }
     if (_cancelTaskGen) {
       emit(state.copyWith(status: HomePageStatus.idle));
@@ -779,6 +784,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       );
       final Map<String, dynamic> searchResultData =
           jsonDecode(searchResultResponse.body);
+      print(searchResultData);
       sourceLinks = (searchResultData['source_links'] as List<dynamic>? ?? [])
           .map((e) => e.toString())
           .toList();

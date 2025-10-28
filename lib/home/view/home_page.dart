@@ -415,7 +415,7 @@ class _HomePageState extends State<HomePage>
                   backgroundColor: Colors.white,
                   surfaceTintColor: Colors.white,
                   leadingWidth: 40,
-                  centerTitle: true,
+                  centerTitle: state.status==HomePageStatus.idle?true:false,
                   leading: Builder(
                       builder: (context) => Padding(
                             padding: const EdgeInsets.only(left: 10),
@@ -439,48 +439,72 @@ class _HomePageState extends State<HomePage>
                               ),
                             ),
                           )),
-                  title: InkWell(
-                    onTap: () async {
-                      context.read<HomeBloc>().add(
-                            HomeCancelTaskGen(),
-                          );
-                      taskTextController.clear();
-                      setState(() {
-                        isTaskValid = false;
-                      });
-                      mixpanel.track("close_search");
-                    },
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'Drissea',
-                          style: TextStyle(
-                            color: Colors.black,
-                            fontSize: 28,
-                            fontFamily: 'Jua',
-                            fontWeight: FontWeight.w500,
+                          
+                  title: Padding(
+                    padding:  EdgeInsets.only(left: state.status==HomePageStatus.idle?0:10),
+                    child: InkWell(
+                      onTap: () async {
+                        // context.read<HomeBloc>().add(
+                        //       HomeCancelTaskGen(),
+                        //     );
+                        // taskTextController.clear();
+                        // setState(() {
+                        //   isTaskValid = false;
+                        // });
+                        // mixpanel.track("close_search");
+                      },
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Drissea',
+                            style: TextStyle(
+                              color: Colors.black,
+                              fontSize: 18,
+                              fontFamily: 'Jua',
+                              fontWeight: FontWeight.w500,
+                            ),
+                            textHeightBehavior: TextHeightBehavior(
+                              applyHeightToFirstAscent: false,
+                              applyHeightToLastDescent: false,
+                            ),
                           ),
-                        ),
-                        Visibility(
-                          visible:
-                              false, // state.status != HomePageStatus.idle,
-                          child: Padding(
-                            padding: const EdgeInsets.only(left: 6),
-                            child: Container(
-                              width: 28,
-                              height: 28,
-                              child: Center(
-                                child: Icon(
-                                  Iconsax.edit_outline,
-                                  color: Colors.black,
-                                  size: 20,
+                          Visibility(
+                            visible: state.isIncognito &&state.status!=HomePageStatus.idle,
+                            child: Text(
+                              'Incognito Search',
+                              style: TextStyle(
+                                color: Colors.black,
+                                fontSize: 12,
+                                fontFamily: 'Poppins',
+                              ),
+                              textHeightBehavior: TextHeightBehavior(
+                                applyHeightToFirstAscent: false,
+                                applyHeightToLastDescent: false,
+                              ),
+                            ),
+                          ),
+                          Visibility(
+                            visible:
+                                false, // state.status != HomePageStatus.idle,
+                            child: Padding(
+                              padding: const EdgeInsets.only(left: 6),
+                              child: Container(
+                                width: 28,
+                                height: 28,
+                                child: Center(
+                                  child: Icon(
+                                    Iconsax.edit_outline,
+                                    color: Colors.black,
+                                    size: 20,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
 
@@ -603,7 +627,7 @@ class _HomePageState extends State<HomePage>
                   actions: [
                     Padding(
                       padding: const EdgeInsets.only(right: 12),
-                      child: InkWell(
+                      child: state.status==HomePageStatus.idle?InkWell(
                         onTap: () async {
                           context.read<HomeBloc>().add(
                                 HomeSwitchPrivacyType(
@@ -634,7 +658,35 @@ class _HomePageState extends State<HomePage>
                                   ),
                           ),
                         ),
-                      ),
+                      ):
+                      InkWell(
+                        onTap: () async {
+                        context.read<HomeBloc>().add(
+                              HomeCancelTaskGen(),
+                            );
+                        taskTextController.clear();
+                        setState(() {
+                          isTaskValid = false;
+                        });
+                        mixpanel.track("edit_search");
+                        },
+                        child: Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(18),
+                              color: Color(0xFFDFFF00),
+                              border: Border.all()),
+                          child: Center(
+                            child: Icon(
+                                    Iconsax.edit_outline,
+                                    color: Colors.black,
+                                    size: 18,
+                                  ),
+                          ),
+                        ),
+                      )
+                      ,
                     ),
                   ],
                 ),
@@ -660,10 +712,10 @@ class _HomePageState extends State<HomePage>
                               focusNode: taskTextFieldFocusNode,
                               decoration: InputDecoration(
                                 hintText:
-                                    // state.status == HomePageStatus.success
-                                    //     ? "Ask follow-up.."
-                                    //     :
-                                    '${state.isSearchMode == true ? "Search" : "Watch"}...',
+                                    state.status == HomePageStatus.success
+                                        ? "Ask follow-up"
+                                        :
+                                    'Ask anything',
                                 hintStyle: TextStyle(color: Colors.grey),
                                 border: InputBorder.none,
                               ),

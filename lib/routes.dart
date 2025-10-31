@@ -107,28 +107,28 @@ class AppRouter {
           );
         },
       ),
-      GoRoute(
-        path: '/search',
-        builder: (context, state) {
-          final extra = state.extra as Map<String, dynamic>;
-          final videos = extra["videos"] as List<ExtractedVideoInfo>;
+      // GoRoute(
+      //   path: '/search',
+      //   builder: (context, state) {
+      //     final extra = state.extra as Map<String, dynamic>;
+      //     final videos = extra["videos"] as List<ExtractedVideoInfo>;
 
-          return WillPopScope(
-            onWillPop: () async {
-              Navigator.push(
-                context,
-                MaterialPageRoute<void>(
-                  builder: (BuildContext context) => const HomePage(),
-                ),
-              );
-              return false;
-            },
-            child: AnswersView(
-              videos: videos,
-            ),
-          );
-        },
-      ),
+      //     return WillPopScope(
+      //       onWillPop: () async {
+      //         Navigator.push(
+      //           context,
+      //           MaterialPageRoute<void>(
+      //             builder: (BuildContext context) => const HomePage(),
+      //           ),
+      //         );
+      //         return false;
+      //       },
+      //       child: AnswersView(
+      //         videos: videos,
+      //       ),
+      //     );
+      //   },
+      // ),
       GoRoute(
         path: '/taskResult',
         builder: (context, state) {

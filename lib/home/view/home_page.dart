@@ -1,6 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:bavi/answer/view/answer_page.dart';
+import 'package:bavi/home/widgets/answers_view.dart';
+import 'package:bavi/home/widgets/search_view.dart';
+import 'package:bavi/models/thread.dart';
 import 'package:flutter/rendering.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:upgrader/upgrader.dart';
@@ -42,47 +46,47 @@ class _HomePageState extends State<HomePage>
     with SingleTickerProviderStateMixin {
   // GlobalKey to identify the widget
   final GlobalKey _screnshotGlobalKey = GlobalKey();
-  Future<void> _captureScreen(HomeState state) async {
-    try {
-      // Get the RenderRepaintBoundary
-      RenderRepaintBoundary boundary = _screnshotGlobalKey.currentContext!
-          .findRenderObject() as RenderRepaintBoundary;
+  // Future<void> _captureScreen(HomeState state) async {
+  //   try {
+  //     // Get the RenderRepaintBoundary
+  //     RenderRepaintBoundary boundary = _screnshotGlobalKey.currentContext!
+  //         .findRenderObject() as RenderRepaintBoundary;
 
-      // Convert to image
-      ui.Image image = await boundary.toImage(pixelRatio: 3.0);
+  //     // Convert to image
+  //     ui.Image image = await boundary.toImage(pixelRatio: 3.0);
 
-      // Convert image to bytes
-      ByteData? byteData =
-          await image.toByteData(format: ui.ImageByteFormat.png);
-      Uint8List pngBytes = byteData!.buffer.asUint8List();
+  //     // Convert image to bytes
+  //     ByteData? byteData =
+  //         await image.toByteData(format: ui.ImageByteFormat.png);
+  //     Uint8List pngBytes = byteData!.buffer.asUint8List();
 
-      // Save to file
-      final directory = await getApplicationDocumentsDirectory();
-      final filePath = '${directory.path}/screenshot.png';
-      final file = File(filePath);
-      await file.writeAsBytes(pngBytes);
+  //     // Save to file
+  //     final directory = await getApplicationDocumentsDirectory();
+  //     final filePath = '${directory.path}/screenshot.png';
+  //     final file = File(filePath);
+  //     await file.writeAsBytes(pngBytes);
 
-      print("✅ Screenshot saved at $filePath");
+  //     print("✅ Screenshot saved at $filePath");
 
-      // Build the text and url for sharing
-      final url = "https://drissea.com/session/${state.sessionId}";
-      final actualIsSearchMode =
-          state.isSearchMode && state.generalSearchResults.isEmpty
-              ? false
-              : state.isSearchMode == false && state.searchResults.isEmpty
-                  ? true
-                  : state.isSearchMode;
-      final text = actualIsSearchMode
-          ? "I used Drissea to search '${state.searchQuery}' and go through ${state.generalSearchResults.length} webpages. Here’s what it had to say 👇"
-          : "I used Drissea to search '${state.searchQuery}' and watch ${state.searchResults.length} videos without watching. Here’s what it had to say 👇";
-      // Share the screenshot with the text and url
-      await Share.shareXFiles([XFile(filePath)], text: "$text\n$url");
-      mixpanel
-          .track("whatsapp_share_${actualIsSearchMode ? 'search' : 'session'}");
-    } catch (e) {
-      print("❌ Error capturing screenshot: $e");
-    }
-  }
+  //     // Build the text and url for sharing
+  //     final url = "https://drissea.com/session/${state.sessionId}";
+  //     final actualIsSearchMode =
+  //         state.isSearchMode && state.generalSearchResults.isEmpty
+  //             ? false
+  //             : state.isSearchMode == false && state.searchResults.isEmpty
+  //                 ? true
+  //                 : state.isSearchMode;
+  //     final text = actualIsSearchMode
+  //         ? "I used Drissea to search '${state.searchQuery}' and go through ${state.generalSearchResults.length} webpages. Here’s what it had to say 👇"
+  //         : "I used Drissea to search '${state.searchQuery}' and watch ${state.searchResults.length} videos without watching. Here’s what it had to say 👇";
+  //     // Share the screenshot with the text and url
+  //     await Share.shareXFiles([XFile(filePath)], text: "$text\n$url");
+  //     mixpanel
+  //         .track("whatsapp_share_${actualIsSearchMode ? 'search' : 'session'}");
+  //   } catch (e) {
+  //     print("❌ Error capturing screenshot: $e");
+  //   }
+  // }
 
   bool isExpanded = false;
   late AnimationController _animationController;
@@ -135,21 +139,7 @@ class _HomePageState extends State<HomePage>
     });
   }
 
-  void _switchToGlance() {
-    context.read<HomeBloc>().add(
-          HomeSwitchSearchType("general"),
-        );
-    _animationController.reset();
-    _animationController.forward();
-  }
-
-  void _switchToWatch() {
-    context.read<HomeBloc>().add(
-          HomeSwitchSearchType("social"),
-        );
-    _animationController.reset();
-    _animationController.forward();
-  }
+  final ScrollController _scrollController = ScrollController();
 
   late Mixpanel mixpanel;
   TextEditingController taskTextController = TextEditingController();
@@ -214,10 +204,10 @@ class _HomePageState extends State<HomePage>
               showPrompt: Platform.isAndroid ? false : true,
               child: Scaffold(
                 drawer: ChatAppDrawer(
-                  sessions: state.sessionHistory,
+                  sessions: state.threadHistory,
                   historyStatus: state.historyStatus,
-                  onSessionTap: (SessionData session) {
-                    mixpanel.track("user_tap_search");
+                  onSessionTap: (ThreadSessionData session) {
+                    mixpanel.track("user_tap_thread");
                     Navigator.pop(context);
                     context.read<HomeBloc>().add(
                           HomeRetrieveSearchData(session),
@@ -415,23 +405,25 @@ class _HomePageState extends State<HomePage>
                   backgroundColor: Colors.white,
                   surfaceTintColor: Colors.white,
                   leadingWidth: 40,
-                  centerTitle: state.status==HomePageStatus.idle?true:false,
+                  centerTitle:true,
+                      //state.status == HomePageStatus.idle ? true : false,
                   leading: Builder(
                       builder: (context) => Padding(
-                            padding: const EdgeInsets.only(left: 10),
+                            padding: const EdgeInsets.only(left: 0),
                             child: InkWell(
                               onTap: () => Scaffold.of(context).openDrawer(),
                               child: Container(
                                 width: 32,
                                 height: 32,
                                 decoration: BoxDecoration(
-                                    color: Color(0xFFDFFF00),
+                                    //color: Color(0xFFDFFF00),
                                     shape: BoxShape.circle,
-                                    border: Border.all()),
+                                    //border: Border.all()
+                                    ),
                                 padding: EdgeInsets.fromLTRB(1, 0, 2, 0),
                                 child: Center(
                                   child: Icon(
-                                    Icons.history,
+                                    Icons.menu,
                                     color: Colors.black,
                                     size: 20,
                                   ),
@@ -439,9 +431,10 @@ class _HomePageState extends State<HomePage>
                               ),
                             ),
                           )),
-                          
+                  
                   title: Padding(
-                    padding:  EdgeInsets.only(left: state.status==HomePageStatus.idle?0:10),
+                    padding: EdgeInsets.only(
+                        left: state.status == HomePageStatus.idle ? 0 : 5),
                     child: InkWell(
                       onTap: () async {
                         // context.read<HomeBloc>().add(
@@ -455,7 +448,7 @@ class _HomePageState extends State<HomePage>
                       },
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           Text(
                             'Drissea',
@@ -471,11 +464,12 @@ class _HomePageState extends State<HomePage>
                             ),
                           ),
                           Visibility(
-                            visible: state.isIncognito &&state.status!=HomePageStatus.idle,
+                            visible: state.isIncognito &&
+                                state.status != HomePageStatus.idle,
                             child: Text(
-                              'Incognito Search',
+                              'Incognito Mode',
                               style: TextStyle(
-                                color: Colors.black,
+                                color: Colors.grey.shade600,
                                 fontSize: 12,
                                 fontFamily: 'Poppins',
                               ),
@@ -626,67 +620,71 @@ class _HomePageState extends State<HomePage>
                   // ),
                   actions: [
                     Padding(
-                      padding: const EdgeInsets.only(right: 12),
-                      child: state.status==HomePageStatus.idle?InkWell(
-                        onTap: () async {
-                          context.read<HomeBloc>().add(
-                                HomeSwitchPrivacyType(
-                                    state.isIncognito == true ? false : true),
-                              );
-                          mixpanel.track(state.isIncognito == true
-                              ? "set_incognito_mode"
-                              : "set_normal_mode");
-                        },
-                        child: Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(18),
-                              color: Color(0xFFDFFF00),
-                              border: Border.all()),
-                          child: Center(
-                            child: state.isIncognito == false
-                                ? Icon(
-                                    RemixIcons.eye_line,
-                                    color: Colors.black,
-                                    size: 20,
-                                  )
-                                : Icon(
-                                    RemixIcons.eye_close_line,
-                                    color: Colors.black,
-                                    size: 20,
-                                  ),
-                          ),
-                        ),
-                      ):
-                      InkWell(
-                        onTap: () async {
-                        context.read<HomeBloc>().add(
-                              HomeCancelTaskGen(),
-                            );
-                        taskTextController.clear();
-                        setState(() {
-                          isTaskValid = false;
-                        });
-                        mixpanel.track("edit_search");
-                        },
-                        child: Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(18),
-                              color: Color(0xFFDFFF00),
-                              border: Border.all()),
-                          child: Center(
-                            child: Icon(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: state.status == HomePageStatus.idle
+                          ? InkWell(
+                              onTap: () async {
+                                context.read<HomeBloc>().add(
+                                      HomeSwitchPrivacyType(
+                                          state.isIncognito == true
+                                              ? false
+                                              : true),
+                                    );
+                                mixpanel.track(state.isIncognito == true
+                                    ? "set_incognito_mode"
+                                    : "set_normal_mode");
+                              },
+                              child: Container(
+                                width: 32,
+                                height: 32,
+                                decoration: BoxDecoration(
+                                    // borderRadius: BorderRadius.circular(18),
+                                    // color: Color(0xFFDFFF00),
+                                    // border: Border.all()
+                                    ),
+                                child: Center(
+                                  child: state.isIncognito == false
+                                      ? Icon(
+                                          RemixIcons.eye_line,
+                                          color: Colors.black,
+                                          size: 20,
+                                        )
+                                      : Icon(
+                                          RemixIcons.eye_close_line,
+                                          color: Colors.black,
+                                          size: 20,
+                                        ),
+                                ),
+                              ),
+                            )
+                          : InkWell(
+                              onTap: () async {
+                                context.read<HomeBloc>().add(
+                                      HomeStartNewThread(),
+                                    );
+                                taskTextController.clear();
+                                setState(() {
+                                  isTaskValid = false;
+                                });
+                                mixpanel.track("start_new_thread");
+                              },
+                              child: Container(
+                                width: 32,
+                                height: 32,
+                                decoration: BoxDecoration(
+                                    // borderRadius: BorderRadius.circular(18),
+                                    // color: Color(0xFFDFFF00),
+                                    // border: Border.all()
+                                    ),
+                                child: Center(
+                                  child: Icon(
                                     Iconsax.edit_outline,
                                     color: Colors.black,
-                                    size: 18,
+                                    size: 20,
                                   ),
-                          ),
-                        ),
-                      )
-                      ,
+                                ),
+                              ),
+                            ),
                     ),
                   ],
                 ),
@@ -711,11 +709,7 @@ class _HomePageState extends State<HomePage>
                               controller: taskTextController,
                               focusNode: taskTextFieldFocusNode,
                               decoration: InputDecoration(
-                                hintText:
-                                    state.status == HomePageStatus.success
-                                        ? "Ask follow-up"
-                                        :
-                                    'Ask anything',
+                                hintText: state.isSearchMode? "Search": 'Ask',
                                 hintStyle: TextStyle(color: Colors.grey),
                                 border: InputBorder.none,
                               ),
@@ -749,9 +743,9 @@ class _HomePageState extends State<HomePage>
                                 children: [
                                   GestureDetector(
                                     onTap: () {
-                                      if (state.isSearchMode) {
+                                      if (!state.isSearchMode) {
                                         context.read<HomeBloc>().add(
-                                              HomeSwitchSearchType("social"),
+                                              HomeSwitchType(false),
                                             );
                                         _animationController.reset();
                                         _animationController.forward();
@@ -769,11 +763,11 @@ class _HomePageState extends State<HomePage>
                                           height: 36,
                                           padding: EdgeInsets.symmetric(
                                             horizontal:
-                                                !state.isSearchMode ? 10 : 0,
+                                                state.isSearchMode ? 10 : 0,
                                             vertical: 8,
                                           ),
                                           decoration: BoxDecoration(
-                                            color: !state.isSearchMode
+                                            color: state.isSearchMode
                                                 ? const Color(0xFFF4EBFF)
                                                 : Colors.white,
                                             borderRadius:
@@ -788,10 +782,11 @@ class _HomePageState extends State<HomePage>
                                                 MainAxisAlignment.center,
                                             children: [
                                               const Icon(
-                                                  RemixIcons.search_eye_line,
+                                                  Iconsax
+                                                      .search_normal_1_outline,
                                                   color: Colors.purple,
                                                   size: 16),
-                                              if (!state.isSearchMode)
+                                              if (state.isSearchMode)
                                                 SizeTransition(
                                                   sizeFactor: _animation,
                                                   axis: Axis.horizontal,
@@ -801,7 +796,7 @@ class _HomePageState extends State<HomePage>
                                                         const EdgeInsets.only(
                                                             left: 3),
                                                     child: Text(
-                                                      'Social',
+                                                      'Search',
                                                       overflow:
                                                           TextOverflow.clip,
                                                       style: const TextStyle(
@@ -821,49 +816,63 @@ class _HomePageState extends State<HomePage>
                                   SizedBox(width: 12),
                                   GestureDetector(
                                     onTap: () {
-                                      if (!state.isSearchMode) {
+                                      if (state.isSearchMode) {
                                         context.read<HomeBloc>().add(
-                                              HomeSwitchSearchType("general"),
+                                              HomeSwitchType(true),
                                             );
                                         _animationController.reset();
                                         _animationController.forward();
                                       }
                                     },
                                     child: AnimatedSize(
-                                      duration: const Duration(milliseconds: 300),
+                                      duration:
+                                          const Duration(milliseconds: 300),
                                       curve: Curves.easeInOut,
                                       child: ConstrainedBox(
-                                        constraints: const BoxConstraints(minWidth: 35),
+                                        constraints:
+                                            const BoxConstraints(minWidth: 35),
                                         child: Container(
                                           height: 36,
                                           padding: EdgeInsets.symmetric(
-                                            horizontal: state.isSearchMode ? 10 : 0,
+                                            horizontal:
+                                                !state.isSearchMode ? 10 : 0,
                                             vertical: 8,
                                           ),
                                           decoration: BoxDecoration(
-                                            color: state.isSearchMode ? const Color(0xFFF4EBFF) : Colors.white,
-                                            borderRadius: BorderRadius.circular(28),
-                                            border: Border.all(color: Colors.purple),
+                                            color: !state.isSearchMode
+                                                ? const Color(0xFFF4EBFF)
+                                                : Colors.white,
+                                            borderRadius:
+                                                BorderRadius.circular(28),
+                                            border: Border.all(
+                                                color: Colors.purple),
                                           ),
                                           child: Row(
                                             mainAxisSize: MainAxisSize.min,
-                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
                                             children: [
-                                              const Icon(Iconsax.global_search_outline,
-                                                  color: Colors.purple, size: 16),
-                                              if (state.isSearchMode)
+                                              const Icon(
+                                                  Iconsax.magicpen_outline,
+                                                  color: Colors.purple,
+                                                  size: 16),
+                                              if (!state.isSearchMode)
                                                 SizeTransition(
                                                   sizeFactor: _animation,
                                                   axis: Axis.horizontal,
                                                   axisAlignment: -1,
                                                   child: Padding(
-                                                    padding: const EdgeInsets.only(left: 3),
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                            left: 3),
                                                     child: Text(
-                                                      'Web',
-                                                      overflow: TextOverflow.clip,
+                                                      'Answer',
+                                                      overflow:
+                                                          TextOverflow.clip,
                                                       style: const TextStyle(
                                                         color: Colors.purple,
-                                                        fontWeight: FontWeight.bold,
+                                                        fontWeight:
+                                                            FontWeight.bold,
                                                       ),
                                                     ),
                                                   ),
@@ -880,70 +889,70 @@ class _HomePageState extends State<HomePage>
                           ),
                           Row(
                             children: [
-                              state.status != HomePageStatus.success
-                                  ? Padding(
-                                      padding: const EdgeInsets.only(right: 12),
-                                      child: InkWell(
-                                        onTap: () async {
-                                          final url = Uri.encodeComponent(Platform
-                                                  .isIOS
-                                              ? "https://apps.apple.com/us/app/drissea/id6743215602"
-                                              : "https://play.google.com/store/apps/details?id=com.wooshir.bavi");
-                                          final text = Uri.encodeComponent(
-                                              "Found this super helpful app called Drissea for learning what people online think about anything. Try it out!");
-                                          final shareLink =
-                                              "https://wa.me/?text=$text%20$url";
+                              // state.status != HomePageStatus.success
+                              //     ? Padding(
+                              //         padding: const EdgeInsets.only(right: 12),
+                              //         child: InkWell(
+                              //           onTap: () async {
+                              //             final url = Uri.encodeComponent(Platform
+                              //                     .isIOS
+                              //                 ? "https://apps.apple.com/us/app/drissea/id6743215602"
+                              //                 : "https://play.google.com/store/apps/details?id=com.wooshir.bavi");
+                              //             final text = Uri.encodeComponent(
+                              //                 "Found this super helpful app called Drissea for learning what people online think about anything. Try it out!");
+                              //             final shareLink =
+                              //                 "https://wa.me/?text=$text%20$url";
 
-                                          await launchUrl(Uri.parse(shareLink),
-                                              mode: LaunchMode
-                                                  .externalApplication);
-                                          mixpanel.track("whatsapp_share_app");
-                                        },
-                                        child: Container(
-                                          width: 36,
-                                          height: 36,
-                                          decoration: BoxDecoration(
-                                            borderRadius:
-                                                BorderRadius.circular(18),
-                                            color: Colors.green,
-                                            //border: Border.all()
-                                          ),
-                                          child: Center(
-                                            child: Icon(
-                                              Iconsax.whatsapp_outline,
-                                              color: Colors.white,
-                                              size: 20,
-                                            ),
-                                          ),
-                                        ),
-                                      ))
-                                  : Padding(
-                                      padding: const EdgeInsets.only(right: 12),
-                                      child: InkWell(
-                                        onTap: () async {
-                                          context.read<HomeBloc>().add(
-                                                HomeGenScreenshot(
-                                                    _screnshotGlobalKey),
-                                              );
-                                        },
-                                        child: Container(
-                                          width: 36,
-                                          height: 36,
-                                          decoration: BoxDecoration(
-                                              borderRadius:
-                                                  BorderRadius.circular(18),
-                                              color: Color(0xFFDFFF00),
-                                              border: Border.all()),
-                                          child: Center(
-                                            child: Icon(
-                                              Iconsax.send_2_bold,
-                                              color: Colors.black,
-                                              size: 20,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
+                              //             await launchUrl(Uri.parse(shareLink),
+                              //                 mode: LaunchMode
+                              //                     .externalApplication);
+                              //             mixpanel.track("whatsapp_share_app");
+                              //           },
+                              //           child: Container(
+                              //             width: 36,
+                              //             height: 36,
+                              //             decoration: BoxDecoration(
+                              //               borderRadius:
+                              //                   BorderRadius.circular(18),
+                              //               color: Colors.green,
+                              //               //border: Border.all()
+                              //             ),
+                              //             child: Center(
+                              //               child: Icon(
+                              //                 Iconsax.whatsapp_outline,
+                              //                 color: Colors.white,
+                              //                 size: 20,
+                              //               ),
+                              //             ),
+                              //           ),
+                              //         ))
+                              //     : Padding(
+                              //         padding: const EdgeInsets.only(right: 12),
+                              //         child: InkWell(
+                              //           onTap: () async {
+                              //             context.read<HomeBloc>().add(
+                              //                   HomeGenScreenshot(
+                              //                       _screnshotGlobalKey),
+                              //                 );
+                              //           },
+                              //           child: Container(
+                              //             width: 36,
+                              //             height: 36,
+                              //             decoration: BoxDecoration(
+                              //                 borderRadius:
+                              //                     BorderRadius.circular(18),
+                              //                 color: Color(0xFFDFFF00),
+                              //                 border: Border.all()),
+                              //             child: Center(
+                              //               child: Icon(
+                              //                 Iconsax.send_2_bold,
+                              //                 color: Colors.black,
+                              //                 size: 20,
+                              //               ),
+                              //             ),
+                              //           ),
+                              //         ),
+                              //       ),
                               state.status == HomePageStatus.idle ||
                                       state.status == HomePageStatus.success
                                   ? IconButton(
@@ -968,8 +977,8 @@ class _HomePageState extends State<HomePage>
                                             // } else {
                                             taskTextController.text = "";
                                             context.read<HomeBloc>().add(
-                                                  HomeWatchSearchResults(
-                                                      taskText),
+                                                  HomeGetSearch(
+                                                      taskText, "web"),
                                                 );
                                             //}
                                           } else {
@@ -983,11 +992,16 @@ class _HomePageState extends State<HomePage>
                                             // } else {
                                             taskTextController.text = "";
                                             context.read<HomeBloc>().add(
-                                                  HomeWatchSearchVideos(
-                                                      taskText, ""),
+                                                  HomeGetAnswer(taskText),
                                                 );
                                             //}
                                           }
+                                          _scrollController.animateTo(
+                                              _scrollController
+                                                  .position.maxScrollExtent,
+                                              duration:
+                                                  Duration(milliseconds: 300),
+                                              curve: Curves.easeOut);
                                         }
                                       },
                                       icon: Container(
@@ -1042,126 +1056,161 @@ class _HomePageState extends State<HomePage>
                 ),
                 extendBodyBehindAppBar:
                     state.status == HomePageStatus.idle ? true : false,
-                body: RefreshIndicator(
-                  onRefresh: () async {
-                    //context.read<HomeBloc>().add(HomeInitialUserData());
-                    if (state.isSearchMode == false) {
-                      context.read<HomeBloc>().add(
-                            HomeWatchSearchVideos(state.userQuery, ""),
-                          );
-                    } else {
-                      context.read<HomeBloc>().add(
-                            HomeWatchSearchResults(state.userQuery),
-                          );
-                    }
+                body: GestureDetector(
+                  onTap: () {
+                    FocusScope.of(context).unfocus();
                   },
-                  child: GestureDetector(
-                    onTap: () {
-                      FocusScope.of(context).unfocus();
-                    },
-                    child: RepaintBoundary(
-                      key: _screnshotGlobalKey,
-                      child: Stack(
-                        children: [
-                          Container(
-                            color: Colors.white,
-                            height: MediaQuery.of(context).size.height -
-                                MediaQuery.of(context).padding.top -
-                                MediaQuery.of(context).padding.bottom,
-                            child: VideoTaskmaster(
-                              query: state.userQuery,
-                              isIncognito: state.isIncognito,
-                              savedStatus: state.savedStatus,
-                              followUpAnswers: state.followupAnswers,
-                              followUpQuestions: state.followupQuestions,
-                              status: state.status,
-                              replyStatus: state.replyStatus,
-                              task: state.isSearchMode ? "search" : "watch",
-                              isSearchMode:
-                                  //Tapped to retrieve search data
-                                  state.isSearchMode &&
-                                          state.generalSearchResults.isEmpty &&
-                                          state.searchResults.isEmpty
-                                      ? true
-                                      : state.isSearchMode == false &&
-                                              state.generalSearchResults
-                                                  .isEmpty &&
-                                              state.searchResults.isEmpty
-                                          ? false
-                                          :
-                                          //Tapped to general mode but hasn't done yet
-                                          state.isSearchMode &&
-                                                  state.generalSearchResults
-                                                      .isEmpty
-                                              ? false
-                                              :
+                  child: state.status == HomePageStatus.idle
+                      ? Container(
 
-                                              //Tapped to social mode but hasn't done yet
-                                              state.isSearchMode == false &&
-                                                      state
-                                                          .searchResults.isEmpty
-                                                  ? true
-                                                  : state.isSearchMode,
-                              totalVideos: state.videosCount,
-                              videos: state.searchResults,
-                              searchResults: state.generalSearchResults,
-                              shortVideos: state.shortVideoResults,
-                              longVideos: state.videoResults,
-                              totalContentDuration: state.totalContentDuration,
-                              answer: state.searchAnswer,
-                              onRefresh: () {
-                                context.read<HomeBloc>().add(
-                                      HomeRefreshReply(
-                                          //Tapped to retrieve search data
-                                          state.isSearchMode &&
-                                                  state.generalSearchResults
-                                                      .isEmpty &&
-                                                  state.searchResults.isEmpty
-                                              ? true
-                                              : state.isSearchMode == false &&
-                                                      state.generalSearchResults
-                                                          .isEmpty &&
-                                                      state
-                                                          .searchResults.isEmpty
-                                                  ? false
-                                                  :
-                                                  //Tapped to general mode but hasn't done yet
-                                                  state.isSearchMode &&
-                                                          state
-                                                              .generalSearchResults
-                                                              .isEmpty
-                                                      ? false
-                                                      :
-
-                                                      //Tapped to social mode but hasn't done yet
-                                                      state.isSearchMode ==
-                                                                  false &&
-                                                              state
-                                                                  .searchResults
-                                                                  .isEmpty
-                                                          ? true
-                                                          : state.isSearchMode),
-                                    );
-                                mixpanel.track("refresh_reply");
-                              },
-                              onCancel: () {
-                                context.read<HomeBloc>().add(
-                                      HomeCancelTaskGen(),
-                                    );
-                                mixpanel.track("cancel_search");
-                              },
-                              onProfile: () {
-                                context.read<HomeBloc>().add(
-                                      HomeNavOptionSelect(NavBarOption.profile),
-                                    );
-                                mixpanel.track("profile_view");
-                              },
-                            ),
+                          color: Colors.white,
+                        height: MediaQuery.of(context).size.height- 170,
+                        child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Center(
+                                child: Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(40),
+                                      child: Container(
+                                        width: 80,
+                                        height: 80,
+                                        decoration: BoxDecoration(
+                                            borderRadius:
+                                                BorderRadius.circular(40),
+                                            color: Color(0xFF8A2BE2)),
+                                        child: state.isIncognito
+                                            ? Icon(
+                                                RemixIcons.spy_line,
+                                                color: Color(0xFFDFFF00),
+                                                size: 40,
+                                              )
+                                            : Image.asset(
+                                                "assets/images/logo/icon.png",
+                                                fit: BoxFit.cover,
+                                              ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              SizedBox(height: 5),
+                              Container(
+                                width: MediaQuery.of(context).size.width - 40,
+                                child:  Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    state.isIncognito
+                                          ? Text(
+                                              textAlign: TextAlign.center,
+                                              "Incognito Mode",
+                                              style: TextStyle(
+                                                color: Colors.black,
+                                                fontSize: 20,
+                                                fontFamily: 'Poppins',
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            )
+                                          : Text(
+                                              "How may I help you?",
+                                              style: TextStyle(
+                                                color: Colors.black,
+                                                fontSize: 20,
+                                                fontFamily: 'Poppins',
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                  ],
+                                ),
+                                
+                              )
+                            ],
                           ),
-                        ],
-                      ),
-                    ),
-                  ),
+                      )
+                      : Container(
+                          color: Colors.white,
+                          height: MediaQuery.of(context).size.height -
+                              MediaQuery.of(context).padding.top -
+                              MediaQuery.of(context).padding.bottom,
+                          padding: EdgeInsets.fromLTRB(10, 10, 10, 170),
+                          child: SingleChildScrollView(
+                            controller: _scrollController,
+                            child: Column(
+                              children: List.generate(
+                                state.threadData.results.length,
+                                (index) {
+                                  final result =
+                                      state.threadData.results[index];
+                                  return Column(
+                                    children: [
+                                      result.isSearchMode == true
+                                          ? ThreadSearchView(
+                                              onTabChanged: (String type) {
+                                                if (type == "news") {
+                                                  context.read<HomeBloc>().add(
+                                                        HomeGetNewsSearch(
+                                                            index),
+                                                      );
+                                                } else if (type == "videos") {
+                                                  context.read<HomeBloc>().add(
+                                                        HomeGetVideosSearch(
+                                                            index),
+                                                      );
+                                                } else if (type ==
+                                                    "shortVideos") {
+                                                  context.read<HomeBloc>().add(
+                                                        HomeGetReelsSearch(
+                                                            index),
+                                                      );
+                                                } else if (type == "images") {
+                                                  context.read<HomeBloc>().add(
+                                                        HomeGetImagesSearch(
+                                                            index),
+                                                      );
+                                                }
+                                              },
+                                              web: result.web,
+                                              query: result.userQuery,
+                                              shortVideos: result.shortVideos,
+                                              videos: result.videos,
+                                              news: result.news,
+                                              images: result.images,
+                                              status:
+                                                  state.loadingIndex == index
+                                                      ? state.status
+                                                      : HomePageStatus.success)
+                                          : ThreadAnswerView(
+                                              answerResults: result.influence,
+                                              query: result.userQuery,
+                                              answer: result.answer,
+                                              onRefresh: () {
+                                                context.read<HomeBloc>().add(
+                                                      HomeRefreshReply(index),
+                                                    );
+                                              },
+                                              status: state.loadingIndex == index
+                                                      ? state.status
+                                                  : HomePageStatus.success,
+                                              replyStatus:
+                                                  state.loadingIndex == index
+                                                      ? state.replyStatus
+                                                      : HomeReplyStatus.success,
+                                            ),
+                                      if (index <
+                                          state.threadData.results.length - 1)
+                                        Divider(
+                                          color: Colors.grey.shade300,
+                                          thickness: 0.5,
+                                          height: 40,
+                                        ),
+                                    ],
+                                  );
+                                },
+                              ),
+                            ),
+                          )),
                 ),
               ),
             ),

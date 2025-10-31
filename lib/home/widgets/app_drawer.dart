@@ -1,6 +1,7 @@
 import 'package:bavi/home/bloc/home_bloc.dart';
 import 'package:bavi/models/question_answer.dart';
 import 'package:bavi/models/session.dart';
+import 'package:bavi/models/thread.dart';
 import 'package:bavi/widgets/profile_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:icons_plus/icons_plus.dart';
@@ -8,8 +9,8 @@ import 'package:intl/intl.dart';
 import 'package:shimmer/shimmer.dart';
 
 class ChatAppDrawer extends StatefulWidget {
-  final List<SessionData> sessions;
-  final Function(SessionData session) onSessionTap;
+  final List<ThreadSessionData> sessions;
+  final Function(ThreadSessionData session) onSessionTap;
   final String profilePicUrl;
   final String fullname;
   final String email;
@@ -282,7 +283,7 @@ class _ChatAppDrawerState extends State<ChatAppDrawer> {
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            data.questions.first,
+                                            data.results.first.userQuery,
                                             maxLines: 2,
                                             style: const TextStyle(
                                               fontSize: 14,
@@ -291,16 +292,16 @@ class _ChatAppDrawerState extends State<ChatAppDrawer> {
                                               fontWeight: FontWeight.w600,
                                             ),
                                           ),
-                                          Text(
-                                            data.searchTerms.first,
-                                            maxLines: 1,
-                                            style: const TextStyle(
-                                              fontSize: 14,
-                                              color: Colors.grey,
-                                              fontFamily: 'Poppins',
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
+                                          // Text(
+                                          //   "searchTerm",
+                                          //   maxLines: 1,
+                                          //   style: const TextStyle(
+                                          //     fontSize: 14,
+                                          //     color: Colors.grey,
+                                          //     fontFamily: 'Poppins',
+                                          //     fontWeight: FontWeight.w500,
+                                          //   ),
+                                          // ),
                                           Padding(
                                             padding: const EdgeInsets.only(top: 10),
                                             child: Row(
@@ -314,7 +315,7 @@ class _ChatAppDrawerState extends State<ChatAppDrawer> {
                                                     SizedBox(width: 4),
                                                     Text(
                                                       DateFormat("MMM d'' yy h:mm a")
-                                                          .format(data.createdAt),
+                                                          .format(data.createdAt.toDate()),
                                                       style: TextStyle(
                                                         fontSize: 12,
                                                         color: Colors.grey,
@@ -326,11 +327,11 @@ class _ChatAppDrawerState extends State<ChatAppDrawer> {
                                                 ),
                                                 Row(
                                                   children: [
-                                                    Icon(data.isSearchMode==true?Iconsax.link_2_outline:Iconsax.video_play_outline,
+                                                    Icon(Iconsax.link_2_outline,
                                                         size: 14, color: Colors.grey),
                                                     SizedBox(width: 4),
                                                     Text(
-                                                      "${data.sourceUrls.length}",
+                                                      "${data.results.length}",
                                                       style: TextStyle(
                                                         fontSize: 12,
                                                         color: Colors.grey,

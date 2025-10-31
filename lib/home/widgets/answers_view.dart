@@ -1,157 +1,384 @@
 import 'dart:convert';
 
+import 'package:bavi/home/bloc/home_bloc.dart';
 import 'package:bavi/home/view/home_page.dart';
 import 'package:bavi/models/short_video.dart';
+import 'package:bavi/models/thread.dart';
 import 'package:bavi/widgets/profile_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:icons_plus/icons_plus.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
+import 'package:shimmer/shimmer.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-class AnswersView extends StatefulWidget {
-  final List<ExtractedVideoInfo> videos;
-  const AnswersView({super.key, required this.videos});
+class ThreadAnswerView extends StatefulWidget {
+  final List<InfluenceData> answerResults;
+  final String query;
+  final String answer;
+  final HomePageStatus status;
+  final HomeReplyStatus replyStatus;
+  final Function() onRefresh;
+  const ThreadAnswerView(
+      {super.key,
+      required this.answerResults,
+      required this.query,
+      required this.answer,
+      required this.status,
+      required this.replyStatus,
+      required this.onRefresh});
 
   @override
-  State<AnswersView> createState() => _AnswersViewState();
+  State<ThreadAnswerView> createState() => _ThreadAnswerViewState();
 }
 
-class _AnswersViewState extends State<AnswersView> {
+class _ThreadAnswerViewState extends State<ThreadAnswerView> {
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Scaffold(
-        backgroundColor: Colors.white,
-        appBar:  AppBar(
-                      titleSpacing: 8,
-                      backgroundColor: Colors.white,
-                      surfaceTintColor: Colors.white,
-                      centerTitle: true,
-                      leadingWidth: 60,
-                      leading: InkWell(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute<void>(
-                              builder: (BuildContext context) => const HomePage(),
+    return Column(
+      children: [
+        Container(
+          constraints: BoxConstraints(maxHeight: 150),
+          width: MediaQuery.of(context).size.width,
+          decoration: BoxDecoration(
+              border: Border.all(),
+              borderRadius: BorderRadius.circular(12),
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(offset: Offset(0, 4), color: Colors.black)
+              ]),
+          padding: EdgeInsets.all(10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Iconsax.magicpen_outline,
+                color: Colors.black,
+                size: 20,
+              ),
+              SizedBox(width: 5),
+              Expanded(
+                child: Text(
+                  widget.query,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 2,
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontSize: 16,
+                    fontFamily: 'Poppins',
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: 10),
+        widget.status != HomePageStatus.success ||
+                widget.replyStatus != HomeReplyStatus.success
+            ? Column(
+                children: [
+                  AnswerLoader(
+                    loaderText: widget.status == HomePageStatus.generateQuery
+                        ? "Understanding your query"
+                        : widget.status == HomePageStatus.getSearchResults
+                            ? "Searching the web"
+                            : "Thinking of a reply",
+                  ),
+                  SizedBox(
+                    height: MediaQuery.of(context).size.height / 3,
+                  )
+                ],
+              )
+            : MarkdownBody(
+                data: widget.answer,
+                onTapLink: (text, href, title) async {
+                  if (href != null) {
+                    final uri = Uri.parse(href);
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri,
+                          mode: LaunchMode.externalApplication);
+                    }
+                  }
+                },
+                styleSheet:
+                    MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+                  h1: const TextStyle(
+                      color: Colors.black,
+                      fontFamily: 'Poppins',
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold),
+                  h2: const TextStyle(
+                      color: Colors.black,
+                      fontFamily: 'Poppins',
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold),
+                  h3: const TextStyle(
+                      color: Colors.black,
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600),
+                  p: const TextStyle(
+                      color: Colors.black,
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      height: 1.5),
+                  a: const TextStyle(
+                    fontFamily: 'Poppins',
+                    color: Color(0xFF8A2BE2),
+                    decoration: TextDecoration.underline,
+                    decorationColor: Color(0xFF8A2BE2),
+                  ),
+                  listBullet: const TextStyle(fontSize: 16),
+                ),
+              ),
+        Visibility(
+          visible: widget.status == HomePageStatus.success &&
+              widget.replyStatus == HomeReplyStatus.success,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  InkWell(
+                    onTap: () {
+                      // final textToCopy =
+                      //     isThoughtProcess == true
+                      //         ? state.thinking.trim()
+                      //         : state.searchAnswer.trim();
+                      // Clipboard.setData(
+                      //     ClipboardData(text: textToCopy));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          backgroundColor:
+                              Color(0xFF8A2BE2), // Purple background
+                          content: Text(
+                            'Copied to clipboard',
+                            style: TextStyle(
+                              color: Color(0xFFDFFF00), // Neon green text
+                              fontWeight: FontWeight.bold,
                             ),
-                          );
-                        },
-                        child: Container(
-                          width: 24,
-                          height: 24,
-                          clipBehavior: Clip.antiAlias,
-                          decoration: BoxDecoration(),
-                          child: Icon(Icons.arrow_back_ios, color: Colors.black),
+                          ),
+                          duration: Duration(seconds: 2),
                         ),
-                      ),
-                      title: Text(
-                        'Drissea',
-                        style: TextStyle(
-                          color: Colors.black,
-                          fontSize: 24,
-                          fontFamily: 'Jua',
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                      );
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(0, 5, 10, 5),
+                      child: Icon(Iconsax.copy_outline, size: 18),
                     ),
-        body: SingleChildScrollView(
-          child: Container(
-            padding: EdgeInsets.fromLTRB(20,10,20,10),
-            child: Column(
-              children: widget.videos.map((video) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  child: Container(
-                    decoration: BoxDecoration(
-                        border: Border.all(
-                          color: Color(0xFFE6E7E8),
-                        ),
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(8)),
-                    padding: EdgeInsets.all(12),
-                    constraints: BoxConstraints(
-                      maxHeight: MediaQuery.of(context).size.height/4
+                  ),
+                  InkWell(
+                    onTap: () async {
+                      widget.onRefresh();
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(10, 5, 5, 5),
+                      child: Icon(Iconsax.refresh_outline, size: 18),
                     ),
-                    child: Column(
-                      children: [
-                        Container(
-                          //margin: const EdgeInsets.only(bottom: 12),
-                          
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Container(
-                                child: Row(
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  //Source button
+                  InkWell(
+                    //padding: EdgeInsets.all(5)
+                    onTap: () {
+                      // context
+                      //     .read<HBloc>()
+                      //     .add(ReplySearchResultShare());
+                      showModalBottomSheet(
+                        context: context,
+                        shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.vertical(top: Radius.circular(16)),
+                        ),
+                        backgroundColor: Color(0xFF8A2BE2),
+                        builder: (context) {
+                          return Container(
+                            padding: EdgeInsets.all(16),
+                            height: MediaQuery.of(context).size.height / 2,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
-                                    CircularAvatarWithShimmer(
-                                        imageUrl: video.userData.profilePicUrl),
-                                    const SizedBox(width: 10),
-                                    Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Container(
-                                          width: 2 *
-                                                  MediaQuery.of(context).size.width /
-                                                  3 -
-                                              40,
-                                          child: Text(
-                                            video.userData?.username != null
-                                                ? utf8.decode(video
-                                                    .userData.fullname.runes
-                                                    .toList())
-                                                : "NA",
-                                            style: const TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.black,
-                                                fontSize: 16),
-                                          ),
+                                    Text(
+                                      "Sources",
+                                      style: TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    InkWell(
+                                      onTap: () => Navigator.pop(context),
+                                      child: Container(
+                                        width: 32,
+                                        height: 32,
+                                        decoration: BoxDecoration(
+                                          color: Colors.white24,
+                                          shape: BoxShape.circle,
                                         ),
-                                        Container(
-                                          width: 2 *
-                                                  MediaQuery.of(context).size.width /
-                                                  3 -
-                                              40,
-                                          child: Text(
-                                            video.userData.fullname != ""
-                                                ? utf8.decode(video
-                                                    .userData.username.runes
-                                                    .toList())
-                                                : "NA",
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                                color: Colors.black, fontSize: 14),
-                                          ),
-                                        ),
-                                      ],
+                                        child: Icon(Icons.close,
+                                            size: 18, color: Colors.white),
+                                      ),
                                     ),
                                   ],
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Container(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: Text(
-                           video.searchContent,
-                           //maxLines: 5,
-                          style:  TextStyle(
-                                color: Colors.black,
-                                fontFamily: 'Poppins',
-                                fontSize: 14
+                                SizedBox(height: 12),
+                                Expanded(
+                                  child: ListView.separated(
+                                    itemCount:
+                                        widget.answerResults?.length ?? 0,
+                                    separatorBuilder: (_, __) =>
+                                        Divider(color: Colors.purple),
+                                    itemBuilder: (context, index) {
+                                      final item = widget.answerResults?[index];
+                                      return GestureDetector(
+                                        onTap: () async {
+                                          final uri =
+                                              Uri.parse(item?.url ?? "");
+                                          if (await canLaunchUrl(uri)) {
+                                            await launchUrl(uri,
+                                                mode: LaunchMode
+                                                    .externalApplication);
+                                          }
+                                        },
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              item?.title ?? "",
+                                              maxLines: 3,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 16,
+                                                  color: Colors.white),
+                                            ),
+                                            SizedBox(height: 4),
+                                            Text(
+                                              item?.url ?? "",
+                                              style: TextStyle(
+                                                color: Color(0xFFDFFF00),
+                                                decoration:
+                                                    TextDecoration.underline,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  ),
                                 ),
-                        ),
-                      
-                    ),
-                      ],
+                              ],
+                            ),
+                          );
+                        },
+                      );
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 5),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Iconsax.link_2_outline,
+                            size: 18,
+                            color: Color(0xFF8A2BE2),
+                          ),
+                          SizedBox(width: 4),
+                          Text(
+                            'Sources',
+                            style: TextStyle(
+                              color: Color(0xFF8A2BE2),
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                );
-              }).toList(),
-            ),
+                ],
+              ),
+            ],
           ),
+        ),
+      ],
+    );
+  }
+}
+
+class AnswerLoader extends StatelessWidget {
+  final String loaderText;
+  const AnswerLoader({super.key, required this.loaderText});
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade400),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 24,
+              height: 24,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(40),
+                    child: Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(40),
+                          color: Color(0xFF8A2BE2)),
+                      child: Image.asset(
+                        "assets/images/logo/icon.png",
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(40),
+                    ),
+                    child: CircularProgressIndicator(
+                      color: Color(0xFFDFFF00),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(width: 12),
+            Shimmer.fromColors(
+              baseColor: Colors.grey.shade600,
+              highlightColor: Colors.grey.shade300,
+              child: Text(
+                loaderText,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontFamily: 'Poppins',
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

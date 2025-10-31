@@ -58,10 +58,10 @@ final class HomeWatchSearchVideos extends HomeEvent {
 }
 
 //Search Type Switch
-final class HomeSwitchSearchType extends HomeEvent {
-  final String searchType;
+final class HomeSwitchType extends HomeEvent {
+  final bool type;
 
-  HomeSwitchSearchType(this.searchType);
+  HomeSwitchType(this.type);
 }
 
 //Search Type Incognito Switch
@@ -78,10 +78,45 @@ final class HomeGenScreenshot extends HomeEvent {
 }
 
 //Watch Google Search
-final class HomeWatchSearchResults extends HomeEvent {
+final class HomeGetAnswer extends HomeEvent {
   final String query;
 
-  HomeWatchSearchResults(this.query);
+  HomeGetAnswer(this.query);
+}
+
+//Watch Google Search
+final class HomeGetSearch extends HomeEvent {
+  final String query;
+  final String type;
+
+  HomeGetSearch(this.query, this.type);
+}
+
+//Watch Reels Search
+final class HomeGetReelsSearch extends HomeEvent {
+  final int index;
+
+  HomeGetReelsSearch(this.index);
+}
+//Watch Videos Search
+final class HomeGetVideosSearch extends HomeEvent {
+  final int index;
+
+  HomeGetVideosSearch(this.index);
+}
+
+//Watch Images Search
+final class HomeGetImagesSearch extends HomeEvent {
+  final int index;
+
+  HomeGetImagesSearch(this.index);
+}
+
+//Watch News Search
+final class HomeGetNewsSearch extends HomeEvent {
+  final int index;
+
+  HomeGetNewsSearch(this.index);
 }
 
 //Ask Followup Search
@@ -97,9 +132,14 @@ final class HomeFollowUpRecallVideos extends HomeEvent {
   HomeFollowUpRecallVideos(this.query);
 }
 
+final class HomeStartNewThread extends HomeEvent {
+
+  HomeStartNewThread();
+}
+
 final class HomeRefreshReply extends HomeEvent {
-  final bool isSearchMode;
-  HomeRefreshReply(this.isSearchMode);
+  final int index;
+  HomeRefreshReply(this.index);
 }
 
 //Ask Recall Search
@@ -111,7 +151,7 @@ final class HomeRecallSearchVideos extends HomeEvent {
 
 //Retrieve Search Data
 final class HomeRetrieveSearchData extends HomeEvent {
-  final SessionData sessionData;
+  final ThreadSessionData sessionData;
 
   HomeRetrieveSearchData(this.sessionData);
 }

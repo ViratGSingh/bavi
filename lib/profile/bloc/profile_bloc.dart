@@ -21,32 +21,32 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   final http.Client httpClient;
   ProfileBloc({required this.httpClient}) : super(ProfileState()) {
     on<ProfileFetchAllVideos>(_getAllUserVideos);
-    on<ProfileAttemptGoogleSignOut>(_handleGoogleSignOut);
+    //on<ProfileAttemptGoogleSignOut>(_handleGoogleSignOut);
 
   }
 
-  GoogleSignIn _googleSignIn = GoogleSignIn();
+  //GoogleSignIn _googleSignIn = GoogleSignIn();
 
 
-  Future<void> _handleGoogleSignOut(
-      ProfileAttemptGoogleSignOut event, Emitter<ProfileState> emit) async {
-    print("asd");
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    try {
-      await _googleSignIn.disconnect();
-      await _googleSignIn.signOut();
-      await FirebaseAuth.instance.signOut();
-      await prefs.setString('displayName', "");
-      await prefs.setString('email', "");
-      await prefs.setString('profile_pic_url', "");
-      await prefs.setBool('isLoggedIn', false);
-      print("done");
-      navService.goToAndPopUntil('/login');
-    } catch (error) {
-      print("Google Sign-Out Error: $error");
-      //return null;
-    }
-  }
+  // Future<void> _handleGoogleSignOut(
+  //     ProfileAttemptGoogleSignOut event, Emitter<ProfileState> emit) async {
+  //   print("asd");
+  //   final SharedPreferences prefs = await SharedPreferences.getInstance();
+  //   try {
+  //     await _googleSignIn.disconnect();
+  //     await _googleSignIn.signOut();
+  //     await FirebaseAuth.instance.signOut();
+  //     await prefs.setString('displayName', "");
+  //     await prefs.setString('email', "");
+  //     await prefs.setString('profile_pic_url', "");
+  //     await prefs.setBool('isLoggedIn', false);
+  //     print("done");
+  //     navService.goToAndPopUntil('/login');
+  //   } catch (error) {
+  //     print("Google Sign-Out Error: $error");
+  //     //return null;
+  //   }
+  // }
 
 
   Future<void> _getAllUserVideos(

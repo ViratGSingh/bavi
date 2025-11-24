@@ -24,7 +24,7 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
   final http.Client httpClient;
   LoginBloc({required this.httpClient}) : super(LoginState()) {
     on<LoginInfoScrolled>(_changeInfoPosition);
-    on<LoginAttemptGoogle>(_handleGoogleSignIn);
+    //on<LoginAttemptGoogle>(_handleGoogleSignIn);
     on<LoginAttemptGuest>(_handleGuestSignIn);
     on<LoginInitialize>(_handleInitialize);
     on<LoginInitiateMixpanel>(_initMixpanel);
@@ -79,39 +79,39 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
   /// The scopes required by this application.
 // #docregion Initialize
 
-  GoogleSignIn _googleSignIn = GoogleSignIn();
-  Future<void> _handleGoogleSignIn(
-      LoginAttemptGoogle event, Emitter<LoginState> emit) async {
-    try {
-      // Sign out first to force account picker
-      await _googleSignIn.signOut();
+  // GoogleSignIn _googleSignIn = GoogleSignIn();
+  // Future<void> _handleGoogleSignIn(
+  //     LoginAttemptGoogle event, Emitter<LoginState> emit) async {
+  //   try {
+  //     // Sign out first to force account picker
+  //     await _googleSignIn.signOut();
 
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      emit(state.copyWith(status: LoginStatus.loading));
-      if (googleUser != null) {
-        final GoogleSignInAuthentication googleAuth =
-            await googleUser.authentication;
-        final OAuthCredential credential = GoogleAuthProvider.credential(
-          accessToken: googleAuth.accessToken,
-          idToken: googleAuth.idToken,
-        );
+  //     final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+  //     emit(state.copyWith(status: LoginStatus.loading));
+  //     if (googleUser != null) {
+  //       final GoogleSignInAuthentication googleAuth =
+  //           await googleUser.authentication;
+  //       final OAuthCredential credential = GoogleAuthProvider.credential(
+  //         accessToken: googleAuth.accessToken,
+  //         idToken: googleAuth.idToken,
+  //       );
 
-        // Sign out of Firebase first
-        await FirebaseAuth.instance.signOut();
+  //       // Sign out of Firebase first
+  //       await FirebaseAuth.instance.signOut();
 
-        final UserCredential userCredential =
-            await FirebaseAuth.instance.signInWithCredential(credential);
+  //       final UserCredential userCredential =
+  //           await FirebaseAuth.instance.signInWithCredential(credential);
 
-        print("User Signed In: ${userCredential.user?.email}");
+  //       print("User Signed In: ${userCredential.user?.email}");
 
-        await saveUserData(googleUser);
-      }
-      emit(state.copyWith(status: LoginStatus.success));
-    } catch (error) {
-      print("Google Sign-In Error: $error");
-      emit(state.copyWith(status: LoginStatus.failure));
-    }
-  }
+  //       await saveUserData(googleUser);
+  //     }
+  //     emit(state.copyWith(status: LoginStatus.success));
+  //   } catch (error) {
+  //     print("Google Sign-In Error: $error");
+  //     emit(state.copyWith(status: LoginStatus.failure));
+  //   }
+  // }
 
   Future<void> saveUserData(GoogleSignInAccount googleUser) async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -210,7 +210,7 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
     });
   }
 
-  Future<void> signOutGoogle() async {
-    await _googleSignIn.signOut();
-  }
+  // Future<void> signOutGoogle() async {
+  //   await _googleSignIn.signOut();
+  // }
 }

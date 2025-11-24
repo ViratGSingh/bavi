@@ -3,11 +3,13 @@ import 'package:bavi/home/view/home_page.dart';
 import 'package:bavi/home/widgets/answers_view.dart';
 import 'package:bavi/home/widgets/video_grid.dart';
 import 'package:bavi/home/widgets/video_scroll.dart';
+import 'package:bavi/home/widgets/web_view.dart';
 import 'package:bavi/login/view/login_page.dart';
 import 'package:bavi/login/widgets/onboarding.dart';
 import 'package:bavi/models/question_answer.dart';
 import 'package:bavi/models/short_video.dart';
 import 'package:bavi/models/user.dart';
+import 'package:bavi/navigation_service.dart';
 import 'package:bavi/profile/view/profile_page.dart';
 import 'package:bavi/reply/view/reply_page.dart';
 import 'package:bavi/settings/view/settings_page.dart';
@@ -21,6 +23,18 @@ class AppRouter {
   AppRouter(this.isLoggedIn);
   late final GoRouter router = GoRouter(
     initialLocation: isLoggedIn == true ? '/home' : '/login',
+    redirect:(context, state) {
+      final uriString = state.uri.toString();
+      if (uriString.startsWith('http') || uriString.startsWith('https')) {
+        navService.goTo('/webview', extra: {'url': uriString});
+      }
+      return null;
+    
+    },
+    errorBuilder: (context, state) {
+    // Fallback — show WebView for any unmatched URL
+    return WebViewPage(url: state.uri.toString(), isInitial: true);
+  },
     routes: [
       GoRoute(
         path: '/login',
@@ -33,6 +47,18 @@ class AppRouter {
             final extra = state.extra as Map<String, dynamic>;
             final query = extra['query'] as String;
             return HomePage(query: query);
+          } else {
+            return HomePage();
+          }
+        },
+      ),
+       GoRoute(
+        path: '/webview',
+        builder: (context, state) {
+          if (state.extra != null) {
+            final extra = state.extra as Map<String, dynamic>;
+            final webUrl = extra['url'] as String;
+            return WebViewPage(url: webUrl, isInitial: true);
           } else {
             return HomePage();
           }

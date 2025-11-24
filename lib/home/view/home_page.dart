@@ -1,9 +1,13 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:app_links/app_links.dart';
 import 'package:bavi/answer/view/answer_page.dart';
 import 'package:bavi/home/widgets/answers_view.dart';
 import 'package:bavi/home/widgets/search_view.dart';
+import 'package:bavi/home/widgets/tabs_view.dart';
+import 'package:bavi/home/widgets/web_view.dart';
 import 'package:bavi/models/thread.dart';
 import 'package:flutter/rendering.dart';
 import 'package:path_provider/path_provider.dart';
@@ -44,6 +48,22 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage>
     with SingleTickerProviderStateMixin {
+  StreamSubscription<Uri>? _linkSubscription;
+  final ValueNotifier<String> streamedText = ValueNotifier("");
+
+  Future<void> initDeepLinks() async {
+    // Handle links
+    _linkSubscription = AppLinks().uriLinkStream.listen((uri) {
+      print("");
+      print('Got appLink: $uri');
+      print("");
+      openAppLink(uri);
+    });
+  }
+
+  void openAppLink(Uri uri) {
+    //_navigatorKey.currentState?.pushNamed(uri.fragment);
+  }
   // GlobalKey to identify the widget
   final GlobalKey _screnshotGlobalKey = GlobalKey();
   // Future<void> _captureScreen(HomeState state) async {
@@ -109,6 +129,9 @@ class _HomePageState extends State<HomePage>
   void dispose() {
     ModalRoute.of(context)?.removeScopedWillPopCallback(_handlePop);
     _animationController.dispose();
+    _linkSubscription?.cancel();
+
+    streamedText.dispose();
     super.dispose();
   }
 
@@ -137,6 +160,7 @@ class _HomePageState extends State<HomePage>
       }
       //FocusScope.of(context).requestFocus(taskTextFieldFocusNode);
     });
+    initDeepLinks();
   }
 
   final ScrollController _scrollController = ScrollController();
@@ -144,6 +168,7 @@ class _HomePageState extends State<HomePage>
   late Mixpanel mixpanel;
   TextEditingController taskTextController = TextEditingController();
   bool isTaskValid = false;
+  bool isUrl = false;
   Future<void> initMixpanel() async {
     // initialize Mixpanel
     mixpanel = await Mixpanel.init(dotenv.get("MIXPANEL_PROJECT_KEY"),
@@ -212,7 +237,12 @@ class _HomePageState extends State<HomePage>
                     context.read<HomeBloc>().add(
                           HomeRetrieveSearchData(session),
                         );
-                    //}
+                    Future.delayed(Duration(milliseconds: 300)).then((onValue) {
+                      _scrollController.animateTo(
+                          _scrollController.position.maxScrollExtent,
+                          duration: Duration(milliseconds: 300),
+                          curve: Curves.easeOut);
+                    }); //}
                   },
                   profilePicUrl: state.userData.profilePicUrl,
                   email: state.userData.email != "" ? state.userData.email : "",
@@ -229,201 +259,42 @@ class _HomePageState extends State<HomePage>
                 ),
                 backgroundColor: Colors.white,
 
-                // bottomNavigationBar: BottomAppBar(
-                //   // shape: CircularNotchedRectangle(),
-                //   // notchMargin: 8.0,
-                //   height: 60,
-                //   padding: EdgeInsets.zero,
-                //   color: Colors.white,
-                //   child: Container(
-                //     decoration: BoxDecoration(
-                //       border: Border(
-                //         top: BorderSide(
-                //           color: Colors.grey.shade300,
-                //           width: 1.0,
-                //         ),
-                //       ),
-                //     ),
-                //     child: Row(
-                //       mainAxisAlignment: MainAxisAlignment.spaceAround,
-                //       children: <Widget>[
-                //         IconButton(
-                //           icon: Column(
-                //             mainAxisSize: MainAxisSize.min,
-                //             children: [
-                //               Icon(
-                //                   state.page == NavBarOption.home
-                //                       ? Iconsax.home_1_bold
-                //                       : Iconsax.home_1_outline,
-                //                   color: Colors.black),
-                //               Text(
-                //                 'Home',
-                //                 style: TextStyle(
-                //                     color: Colors.black,
-                //                     fontSize: 12,
-                //                     fontWeight:  state.page == NavBarOption.home
-                //                         ?FontWeight.bold:FontWeight.normal),
-                //               ),
-                //             ],
-                //           ),
-                //           onPressed: () {
-                //             context.read<HomeBloc>().add(
-                //                   HomeNavOptionSelect(NavBarOption.home),
-                //                 );
-                //             mixpanel.track("home_view");
-                //           },
-                //         ),
-                //         IconButton(
-                //           icon: Column(
-                //             mainAxisSize: MainAxisSize.min,
-                //             children: [
-                //               Icon(
-                //                   state.page == NavBarOption.search
-                //                       ? Iconsax.search_normal_bold
-                //                       : Iconsax.search_normal_outline,
-                //                   color: Colors.black),
-                //               Text(
-                //                 'Search',
-                //                 style: TextStyle(
-                //                     color:Colors.black,
-                //                     fontSize: 12,
-                //                     fontWeight:  state.page == NavBarOption.search
-                //                         ? FontWeight.bold:FontWeight.normal),
-                //               ),
-                //             ],
-                //           ),
-                //           onPressed: () {
-                //             context.read<HomeBloc>().add(
-                //                   HomeNavOptionSelect(NavBarOption.search),
-                //                 );
-                //             mixpanel.track("search_view");
-                //           },
-                //         ),
-                //         IconButton(
-                //           icon: Column(
-                //             mainAxisSize: MainAxisSize.min,
-                //             children: [
-                //               Container(
-                //                 decoration: BoxDecoration(
-                //                     color: Color(0xFF8A2BE2),
-                //                     borderRadius: BorderRadius.circular(4)),
-                //                 padding: EdgeInsets.fromLTRB(10, 5, 10, 5),
-                //                 child: Icon(
-                //                   Iconsax.archive_add_bold,
-                //                   size: 16,
-                //                   color: Color(0xFFDFFF00),
-                //                 ),
-                //               ),
-                //               Text(
-                //                 'Add Video',
-                //                 style: TextStyle(
-                //                     color:Colors.black,
-                //                     fontSize: 12,
-                //                     fontWeight:  FontWeight.normal),
-                //               ),
-                //             ],
-                //           ),
-                //           onPressed: () {
-                //             navService.goTo("/addVideo");
-                //             // Navigator.push(
-                //             //   context,
-                //             //   MaterialPageRoute<void>(
-                //             //     builder: (BuildContext context) => AddVideoPage(),
-                //             //   ),
-                //             // );
-                //           },
-                //         ),
-                //         IconButton(
-                //           icon: Column(
-                //             mainAxisSize: MainAxisSize.min,
-                //             children: [
-                //               Icon(
-                //                 state.page == NavBarOption.player
-                //                     ? Iconsax.video_play_bold
-                //                     : Iconsax.video_play_outline,
-                //                 color: Colors.black,
-                //               ),
-                //               Text(
-                //                 'Plsyer',
-                //                 style: TextStyle(
-                //                     color:  Colors.black,
-                //                     fontSize: 12,
-                //                     fontWeight: state.page == NavBarOption.player
-                //                         ?FontWeight.bold:FontWeight.normal),
-                //               ),
-                //             ],
-                //           ),
-                //           onPressed: () {
-                //             context.read<HomeBloc>().add(
-                //                   HomeNavOptionSelect(NavBarOption.player),
-                //                 );
-                //             mixpanel.track("player_view");
-                //           },
-                //         ),
-                //         IconButton(
-                //           icon: Column(
-                //             mainAxisSize: MainAxisSize.min,
-                //             children: [
-                //               Icon(
-                //                   state.page == NavBarOption.profile
-                //                       ? Iconsax.frame_bold
-                //                       : Iconsax.frame_1_outline,
-                //                   color: Colors.black),
-                //               Text(
-                //                 'Profile',
-                //                 style: TextStyle(
-                //                     color: Colors.black,
-                //                     fontSize: 12,
-                //                     fontWeight: state.page == NavBarOption.profile
-                //                         ? FontWeight.bold:FontWeight.normal),
-                //               ),
-                //             ],
-                //           ),
-                //           onPressed: () {
-                //             context.read<HomeBloc>().add(
-                //                   HomeNavOptionSelect(NavBarOption.profile),
-                //                 );
-                //             mixpanel.track("profile_view");
-                //           },
-                //         ),
-                //       ],
-                //     ),
-                //   ),
-                // ),
-                // floatingActionButton: FloatingActionButton(
-                //   shape: CircleBorder(),
-                //   onPressed: () {
-                //     // Add your onPressed code here!
-                //   },
-                //   child: Icon(Icons.bookmark_add, color: Color(0xFFDFFF00)),
-                //   backgroundColor: Color(0xFF8A2BE2),
-                // ),
-                // floatingActionButtonLocation:
-                //     FloatingActionButtonLocation.centerDocked,
                 appBar: AppBar(
                   titleSpacing: 0,
                   backgroundColor: Colors.white,
                   surfaceTintColor: Colors.white,
                   leadingWidth: 40,
-                  centerTitle:true,
-                      //state.status == HomePageStatus.idle ? true : false,
+                  elevation: state.status == HomePageStatus.idle ? 0 : 4,
+                  shadowColor:state.status == HomePageStatus.idle ? Colors.transparent: Colors.black.withOpacity(0.2),
+                  centerTitle: true,
+                  //state.status == HomePageStatus.idle ? true : false,
                   leading: Builder(
                       builder: (context) => Padding(
                             padding: const EdgeInsets.only(left: 0),
                             child: InkWell(
-                              onTap: () => Scaffold.of(context).openDrawer(),
+                              onTap: () async {
+                                // Unfocus any text field and close keyboard completely
+                                FocusManager.instance.primaryFocus?.unfocus();
+
+                                // Wait a short moment to ensure keyboard is dismissed
+                                await Future.delayed(
+                                    const Duration(milliseconds: 100));
+
+                                // Then open the drawer
+                                Scaffold.of(context).openDrawer();
+                              },
                               child: Container(
                                 width: 32,
                                 height: 32,
                                 decoration: BoxDecoration(
-                                    //color: Color(0xFFDFFF00),
-                                    shape: BoxShape.circle,
-                                    //border: Border.all()
-                                    ),
+                                  //color: Color(0xFFDFFF00),
+                                  shape: BoxShape.circle,
+                                  //border: Border.all()
+                                ),
                                 padding: EdgeInsets.fromLTRB(1, 0, 2, 0),
                                 child: Center(
                                   child: Icon(
-                                    Icons.menu,
+                                    Icons.history_outlined,
                                     color: Colors.black,
                                     size: 20,
                                   ),
@@ -431,7 +302,7 @@ class _HomePageState extends State<HomePage>
                               ),
                             ),
                           )),
-                  
+
                   title: Padding(
                     padding: EdgeInsets.only(
                         left: state.status == HomePageStatus.idle ? 0 : 5),
@@ -450,19 +321,33 @@ class _HomePageState extends State<HomePage>
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          Text(
-                            'Drissea',
-                            style: TextStyle(
-                              color: Colors.black,
-                              fontSize: 18,
-                              fontFamily: 'Jua',
-                              fontWeight: FontWeight.w500,
-                            ),
-                            textHeightBehavior: TextHeightBehavior(
-                              applyHeightToFirstAscent: false,
-                              applyHeightToLastDescent: false,
-                            ),
-                          ),
+                          state.status == HomePageStatus.idle
+                              ? Text(
+                                  'Drissea',
+                                  style: TextStyle(
+                                    color: Colors.black,
+                                    fontSize: 18,
+                                    fontFamily: 'Jua',
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  textHeightBehavior: TextHeightBehavior(
+                                    applyHeightToFirstAscent: false,
+                                    applyHeightToLastDescent: false,
+                                  ),
+                                )
+                              : Text(
+                                  'Thread',
+                                  style: TextStyle(
+                                    color: Colors.black,
+                                    fontSize: 16,
+                                    fontFamily: 'Poppins',
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  textHeightBehavior: TextHeightBehavior(
+                                    applyHeightToFirstAscent: false,
+                                    applyHeightToLastDescent: false,
+                                  ),
+                                ),
                           Visibility(
                             visible: state.isIncognito &&
                                 state.status != HomePageStatus.idle,
@@ -619,45 +504,11 @@ class _HomePageState extends State<HomePage>
                   //   ),
                   // ),
                   actions: [
+                    
                     Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: state.status == HomePageStatus.idle
-                          ? InkWell(
-                              onTap: () async {
-                                context.read<HomeBloc>().add(
-                                      HomeSwitchPrivacyType(
-                                          state.isIncognito == true
-                                              ? false
-                                              : true),
-                                    );
-                                mixpanel.track(state.isIncognito == true
-                                    ? "set_incognito_mode"
-                                    : "set_normal_mode");
-                              },
-                              child: Container(
-                                width: 32,
-                                height: 32,
-                                decoration: BoxDecoration(
-                                    // borderRadius: BorderRadius.circular(18),
-                                    // color: Color(0xFFDFFF00),
-                                    // border: Border.all()
-                                    ),
-                                child: Center(
-                                  child: state.isIncognito == false
-                                      ? Icon(
-                                          RemixIcons.eye_line,
-                                          color: Colors.black,
-                                          size: 20,
-                                        )
-                                      : Icon(
-                                          RemixIcons.eye_close_line,
-                                          color: Colors.black,
-                                          size: 20,
-                                        ),
-                                ),
-                              ),
-                            )
-                          : InkWell(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: 
+                        state.status!=HomePageStatus.idle? InkWell(
                               onTap: () async {
                                 context.read<HomeBloc>().add(
                                       HomeStartNewThread(),
@@ -684,530 +535,1134 @@ class _HomePageState extends State<HomePage>
                                   ),
                                 ),
                               ),
+                            ):
+                        InkWell(
+                          onTap: () async {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute<void>(
+                                builder: (BuildContext context) =>
+                                    TabsViewPage(),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                                // borderRadius: BorderRadius.circular(18),
+                                // color: Color(0xFFDFFF00),
+                                // border: Border.all()
+                                ),
+                            child: Center(
+                              child: Icon(
+                                Iconsax.note_2_outline,
+                                color: Colors.black,
+                                size: 20,
+                              ),
                             ),
-                    ),
+                          ),
+                        )),
                   ],
                 ),
-                bottomSheet: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.vertical(
-                      top: Radius.circular(16),
-                    ),
-                    border: Border.all(color: Color(0xFFB3B4B9)),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: taskTextController,
-                              focusNode: taskTextFieldFocusNode,
-                              decoration: InputDecoration(
-                                hintText: state.isSearchMode? "Search": 'Ask',
-                                hintStyle: TextStyle(color: Colors.grey),
-                                border: InputBorder.none,
-                              ),
-                              maxLines: 3, // allow multiline input
-                              autofocus: false,
-                              onTap: () {
-                                FocusScope.of(context).unfocus();
-                              },
-                              onChanged: (value) {
-                                if (value.length >= 3) {
-                                  setState(() {
-                                    isTaskValid = true;
-                                  });
-                                } else {
-                                  setState(() {
-                                    isTaskValid = false;
-                                  });
-                                }
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          AnimatedBuilder(
-                            animation: _animation,
-                            builder: (context, child) {
-                              return Row(
-                                children: [
-                                  GestureDetector(
-                                    onTap: () {
-                                      if (!state.isSearchMode) {
-                                        context.read<HomeBloc>().add(
-                                              HomeSwitchType(false),
-                                            );
-                                        _animationController.reset();
-                                        _animationController.forward();
-                                      }
-                                    },
-                                    child: AnimatedSize(
-                                      duration:
-                                          const Duration(milliseconds: 300),
-                                      curve: Curves.easeInOut,
-                                      child: ConstrainedBox(
-                                        constraints: const BoxConstraints(
-                                            minWidth:
-                                                35), // ensures a minimum width
-                                        child: Container(
-                                          height: 36,
-                                          padding: EdgeInsets.symmetric(
-                                            horizontal:
-                                                state.isSearchMode ? 10 : 0,
-                                            vertical: 8,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: state.isSearchMode
-                                                ? const Color(0xFFF4EBFF)
-                                                : Colors.white,
-                                            borderRadius:
-                                                BorderRadius.circular(40),
-                                            border: Border.all(
-                                                color: Colors.purple),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize
-                                                .min, // <-- shrink-wrap tightly around content
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            children: [
-                                              const Icon(
-                                                  Iconsax
-                                                      .search_normal_1_outline,
-                                                  color: Colors.purple,
-                                                  size: 16),
-                                              if (state.isSearchMode)
-                                                SizeTransition(
-                                                  sizeFactor: _animation,
-                                                  axis: Axis.horizontal,
-                                                  axisAlignment: -1,
-                                                  child: Padding(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                            left: 3),
-                                                    child: Text(
-                                                      'Search',
-                                                      overflow:
-                                                          TextOverflow.clip,
-                                                      style: const TextStyle(
-                                                        color: Colors.purple,
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  SizedBox(width: 12),
-                                  GestureDetector(
-                                    onTap: () {
-                                      if (state.isSearchMode) {
-                                        context.read<HomeBloc>().add(
-                                              HomeSwitchType(true),
-                                            );
-                                        _animationController.reset();
-                                        _animationController.forward();
-                                      }
-                                    },
-                                    child: AnimatedSize(
-                                      duration:
-                                          const Duration(milliseconds: 300),
-                                      curve: Curves.easeInOut,
-                                      child: ConstrainedBox(
-                                        constraints:
-                                            const BoxConstraints(minWidth: 35),
-                                        child: Container(
-                                          height: 36,
-                                          padding: EdgeInsets.symmetric(
-                                            horizontal:
-                                                !state.isSearchMode ? 10 : 0,
-                                            vertical: 8,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: !state.isSearchMode
-                                                ? const Color(0xFFF4EBFF)
-                                                : Colors.white,
-                                            borderRadius:
-                                                BorderRadius.circular(28),
-                                            border: Border.all(
-                                                color: Colors.purple),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            children: [
-                                              const Icon(
-                                                  Iconsax.magicpen_outline,
-                                                  color: Colors.purple,
-                                                  size: 16),
-                                              if (!state.isSearchMode)
-                                                SizeTransition(
-                                                  sizeFactor: _animation,
-                                                  axis: Axis.horizontal,
-                                                  axisAlignment: -1,
-                                                  child: Padding(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                            left: 3),
-                                                    child: Text(
-                                                      'Answer',
-                                                      overflow:
-                                                          TextOverflow.clip,
-                                                      style: const TextStyle(
-                                                        color: Colors.purple,
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              );
-                            },
-                          ),
-                          Row(
-                            children: [
-                              // state.status != HomePageStatus.success
-                              //     ? Padding(
-                              //         padding: const EdgeInsets.only(right: 12),
-                              //         child: InkWell(
-                              //           onTap: () async {
-                              //             final url = Uri.encodeComponent(Platform
-                              //                     .isIOS
-                              //                 ? "https://apps.apple.com/us/app/drissea/id6743215602"
-                              //                 : "https://play.google.com/store/apps/details?id=com.wooshir.bavi");
-                              //             final text = Uri.encodeComponent(
-                              //                 "Found this super helpful app called Drissea for learning what people online think about anything. Try it out!");
-                              //             final shareLink =
-                              //                 "https://wa.me/?text=$text%20$url";
+                // bottomSheet: Container(
+                //   padding:
+                //       const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                //   decoration: BoxDecoration(
+                //     color: Colors.white,
+                //     borderRadius: BorderRadius.vertical(
+                //       top: Radius.circular(16),
+                //     ),
+                //     border: Border.all(color: Color(0xFFB3B4B9)),
+                //   ),
+                //   child: Column(
+                //     mainAxisSize: MainAxisSize.min,
+                //     children: [
+                //       Row(
+                //         crossAxisAlignment: CrossAxisAlignment.start,
+                //         children: [
+                //           Expanded(
+                //             child: TextField(
+                //               controller: taskTextController,
+                //               focusNode: taskTextFieldFocusNode,
+                //               style: TextStyle(
+                //                 color: isUrl ? Colors.purple : Colors.black,
+                //               ),
+                //               decoration: InputDecoration(
+                //                 hintText: state.isSearchMode
+                //                     ? "Search or type url"
+                //                     : 'Ask or type url',
+                //                 hintStyle: TextStyle(color: Colors.grey),
+                //                 border: InputBorder.none,
+                //               ),
+                //               maxLines: 3, // allow multiline input
+                //               autofocus: false,
+                //               onTap: () {
+                //                 FocusScope.of(context).unfocus();
+                //               },
+                //               onChanged: (value) {
+                //                 bool valueIsUrl = false;
+                //                 //Check if text entered is url or not
+                //                 List<String> values = value.trim().split(" ");
+                //                 String formattedValue = values.first;
+                //                 if(
+                //                   (values.length==1 && formattedValue.contains(".") && formattedValue.length>=4)||
+                //                   (values.length==1 && formattedValue.contains("http") && formattedValue.contains("://"))
+                //                 ){
+                //                   if(formattedValue.contains("https")==false&&formattedValue.contains("http")==false){
+                //                     formattedValue = "https://${formattedValue}";
+                //                   }
+                //                   valueIsUrl = true;
+                //                 }
 
-                              //             await launchUrl(Uri.parse(shareLink),
-                              //                 mode: LaunchMode
-                              //                     .externalApplication);
-                              //             mixpanel.track("whatsapp_share_app");
-                              //           },
-                              //           child: Container(
-                              //             width: 36,
-                              //             height: 36,
-                              //             decoration: BoxDecoration(
-                              //               borderRadius:
-                              //                   BorderRadius.circular(18),
-                              //               color: Colors.green,
-                              //               //border: Border.all()
-                              //             ),
-                              //             child: Center(
-                              //               child: Icon(
-                              //                 Iconsax.whatsapp_outline,
-                              //                 color: Colors.white,
-                              //                 size: 20,
-                              //               ),
-                              //             ),
-                              //           ),
-                              //         ))
-                              //     : Padding(
-                              //         padding: const EdgeInsets.only(right: 12),
-                              //         child: InkWell(
-                              //           onTap: () async {
-                              //             context.read<HomeBloc>().add(
-                              //                   HomeGenScreenshot(
-                              //                       _screnshotGlobalKey),
-                              //                 );
-                              //           },
-                              //           child: Container(
-                              //             width: 36,
-                              //             height: 36,
-                              //             decoration: BoxDecoration(
-                              //                 borderRadius:
-                              //                     BorderRadius.circular(18),
-                              //                 color: Color(0xFFDFFF00),
-                              //                 border: Border.all()),
-                              //             child: Center(
-                              //               child: Icon(
-                              //                 Iconsax.send_2_bold,
-                              //                 color: Colors.black,
-                              //                 size: 20,
-                              //               ),
-                              //             ),
-                              //           ),
-                              //         ),
-                              //       ),
-                              state.status == HomePageStatus.idle ||
-                                      state.status == HomePageStatus.success
-                                  ? IconButton(
-                                      padding: EdgeInsets.zero,
-                                      visualDensity:
-                                          VisualDensity(horizontal: -4),
-                                      onPressed: () {
-                                        FocusScope.of(context).unfocus();
-                                        if (isTaskValid) {
-                                          String taskText =
-                                              taskTextController.text;
-                                          // .replaceAll(RegExp(r'[^\w\s]'), '')
-                                          // .toLowerCase();
-                                          if (state.isSearchMode == true) {
-                                            // if (state.status ==
-                                            //     HomePageStatus.success) {
-                                            //   taskTextController.text = "";
-                                            //   context.read<HomeBloc>().add(
-                                            //         HomeFollowUpRecallVideos(
-                                            //             taskText),
-                                            //       );
-                                            // } else {
-                                            taskTextController.text = "";
-                                            context.read<HomeBloc>().add(
-                                                  HomeGetSearch(
-                                                      taskText, "web"),
-                                                );
-                                            //}
-                                          } else {
-                                            // if (state.status ==
-                                            //     HomePageStatus.success) {
-                                            //   taskTextController.text = "";
-                                            //   context.read<HomeBloc>().add(
-                                            //         HomeFollowUpSearchVideos(
-                                            //             taskText),
-                                            //       );
-                                            // } else {
-                                            taskTextController.text = "";
-                                            context.read<HomeBloc>().add(
-                                                  HomeGetAnswer(taskText),
-                                                );
-                                            //}
-                                          }
-                                          _scrollController.animateTo(
-                                              _scrollController
-                                                  .position.maxScrollExtent,
-                                              duration:
-                                                  Duration(milliseconds: 300),
-                                              curve: Curves.easeOut);
+                //                 //Check if text valide or not
+                //                 if (value.length >= 3) {
+                //                   setState(() {
+                //                     isTaskValid = true;
+                //                     isUrl = valueIsUrl;
+                //                   });
+                //                 } else {
+                //                   setState(() {
+                //                     isTaskValid = false;
+                //                     isUrl = valueIsUrl;
+                //                   });
+                //                 }
+                //               },
+                //             ),
+                //           ),
+                //         ],
+                //       ),
+                //       Row(
+                //         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                //         children: [
+                //           AnimatedBuilder(
+                //             animation: _animation,
+                //             builder: (context, child) {
+                //               return Row(
+                //                 children: [
+                //                   GestureDetector(
+                //                     onTap: () {
+                //                       if (!state.isSearchMode) {
+                //                         context.read<HomeBloc>().add(
+                //                               HomeSwitchType(false),
+                //                             );
+                //                         _animationController.reset();
+                //                         _animationController.forward();
+                //                       }
+                //                     },
+                //                     child: AnimatedSize(
+                //                       duration:
+                //                           const Duration(milliseconds: 300),
+                //                       curve: Curves.easeInOut,
+                //                       child: ConstrainedBox(
+                //                         constraints: const BoxConstraints(
+                //                             minWidth:
+                //                                 35), // ensures a minimum width
+                //                         child: Container(
+                //                           height: 36,
+                //                           padding: EdgeInsets.symmetric(
+                //                             horizontal:
+                //                                 state.isSearchMode ? 10 : 0,
+                //                             vertical: 8,
+                //                           ),
+                //                           decoration: BoxDecoration(
+                //                             color: state.isSearchMode
+                //                                 ? const Color(0xFFF4EBFF)
+                //                                 : Colors.white,
+                //                             borderRadius:
+                //                                 BorderRadius.circular(40),
+                //                             border: Border.all(
+                //                                 color: Colors.purple),
+                //                           ),
+                //                           child: Row(
+                //                             mainAxisSize: MainAxisSize
+                //                                 .min, // <-- shrink-wrap tightly around content
+                //                             mainAxisAlignment:
+                //                                 MainAxisAlignment.center,
+                //                             children: [
+                //                               const Icon(
+                //                                   Iconsax
+                //                                       .search_normal_1_outline,
+                //                                   color: Colors.purple,
+                //                                   size: 16),
+                //                               if (state.isSearchMode)
+                //                                 SizeTransition(
+                //                                   sizeFactor: _animation,
+                //                                   axis: Axis.horizontal,
+                //                                   axisAlignment: -1,
+                //                                   child: Padding(
+                //                                     padding:
+                //                                         const EdgeInsets.only(
+                //                                             left: 3),
+                //                                     child: Text(
+                //                                       'Search',
+                //                                       overflow:
+                //                                           TextOverflow.clip,
+                //                                       style: const TextStyle(
+                //                                         color: Colors.purple,
+                //                                         fontWeight:
+                //                                             FontWeight.bold,
+                //                                       ),
+                //                                     ),
+                //                                   ),
+                //                                 ),
+                //                             ],
+                //                           ),
+                //                         ),
+                //                       ),
+                //                     ),
+                //                   ),
+                //                   SizedBox(width: 12),
+                //                   GestureDetector(
+                //                     onTap: () {
+                //                       if (state.isSearchMode) {
+                //                         context.read<HomeBloc>().add(
+                //                               HomeSwitchType(true),
+                //                             );
+                //                         _animationController.reset();
+                //                         _animationController.forward();
+                //                       }
+                //                     },
+                //                     child: AnimatedSize(
+                //                       duration:
+                //                           const Duration(milliseconds: 300),
+                //                       curve: Curves.easeInOut,
+                //                       child: ConstrainedBox(
+                //                         constraints:
+                //                             const BoxConstraints(minWidth: 35),
+                //                         child: Container(
+                //                           height: 36,
+                //                           padding: EdgeInsets.symmetric(
+                //                             horizontal:
+                //                                 !state.isSearchMode ? 10 : 0,
+                //                             vertical: 8,
+                //                           ),
+                //                           decoration: BoxDecoration(
+                //                             color: !state.isSearchMode
+                //                                 ? const Color(0xFFF4EBFF)
+                //                                 : Colors.white,
+                //                             borderRadius:
+                //                                 BorderRadius.circular(28),
+                //                             border: Border.all(
+                //                                 color: Colors.purple),
+                //                           ),
+                //                           child: Row(
+                //                             mainAxisSize: MainAxisSize.min,
+                //                             mainAxisAlignment:
+                //                                 MainAxisAlignment.center,
+                //                             children: [
+                //                               const Icon(
+                //                                   Iconsax.magicpen_outline,
+                //                                   color: Colors.purple,
+                //                                   size: 16),
+                //                               if (!state.isSearchMode)
+                //                                 SizeTransition(
+                //                                   sizeFactor: _animation,
+                //                                   axis: Axis.horizontal,
+                //                                   axisAlignment: -1,
+                //                                   child: Padding(
+                //                                     padding:
+                //                                         const EdgeInsets.only(
+                //                                             left: 3),
+                //                                     child: Text(
+                //                                       'Answer',
+                //                                       overflow:
+                //                                           TextOverflow.clip,
+                //                                       style: const TextStyle(
+                //                                         color: Colors.purple,
+                //                                         fontWeight:
+                //                                             FontWeight.bold,
+                //                                       ),
+                //                                     ),
+                //                                   ),
+                //                                 ),
+                //                             ],
+                //                           ),
+                //                         ),
+                //                       ),
+                //                     ),
+                //                   ),
+                //                 ],
+                //               );
+                //             },
+                //           ),
+                //           Row(
+                //             children: [
+                //               Padding(
+                //                   padding: const EdgeInsets.only(right: 12),
+                //                   child: InkWell(
+                //                     onTap: () async {
+                //                       Navigator.push(
+                //                         context,
+                //                         MaterialPageRoute<void>(
+                //                           builder: (BuildContext context) =>
+                //                               TabsViewPage(),
+                //                         ),
+                //                       );
+                //                       // final url = Uri.encodeComponent(Platform
+                //                       //         .isIOS
+                //                       //     ? "https://apps.apple.com/us/app/drissea/id6743215602"
+                //                       //     : "https://play.google.com/store/apps/details?id=com.wooshir.bavi");
+                //                       // final text = Uri.encodeComponent(
+                //                       //     "Found this super helpful app called Drissea for learning what people online think about anything. Try it out!");
+                //                       // final shareLink =
+                //                       //     "https://wa.me/?text=$text%20$url";
+
+                //                       // await launchUrl(Uri.parse(shareLink),
+                //                       //     mode: LaunchMode
+                //                       //         .externalApplication);
+                //                       // mixpanel.track("whatsapp_share_app");
+                //                     },
+                //                     child: Container(
+                //                       width: 36,
+                //                       height: 36,
+                //                       decoration: BoxDecoration(
+                //                         borderRadius: BorderRadius.circular(18),
+                //                         color: Color(
+                //                             0xFF8A2BE2), //Color(0xFFDFFF00),
+                //                         //border: Border.all()
+                //                       ),
+                //                       child: Center(
+                //                         child: Icon(
+                //                           Iconsax.note_2_bold,
+                //                           color: Color(0xFFDFFF00),
+                //                           size: 20,
+                //                         ),
+                //                       ),
+                //                     ),
+                //                   )),
+                //               // state.status != HomePageStatus.success
+                //               //     ? Padding(
+                //               //         padding: const EdgeInsets.only(right: 12),
+                //               //         child: InkWell(
+                //               //           onTap: () async {
+                //               //             final url = Uri.encodeComponent(Platform
+                //               //                     .isIOS
+                //               //                 ? "https://apps.apple.com/us/app/drissea/id6743215602"
+                //               //                 : "https://play.google.com/store/apps/details?id=com.wooshir.bavi");
+                //               //             final text = Uri.encodeComponent(
+                //               //                 "Found this super helpful app called Drissea for learning what people online think about anything. Try it out!");
+                //               //             final shareLink =
+                //               //                 "https://wa.me/?text=$text%20$url";
+
+                //               //             await launchUrl(Uri.parse(shareLink),
+                //               //                 mode: LaunchMode
+                //               //                     .externalApplication);
+                //               //             mixpanel.track("whatsapp_share_app");
+                //               //           },
+                //               //           child: Container(
+                //               //             width: 36,
+                //               //             height: 36,
+                //               //             decoration: BoxDecoration(
+                //               //               borderRadius:
+                //               //                   BorderRadius.circular(18),
+                //               //               color: Colors.green,
+                //               //               //border: Border.all()
+                //               //             ),
+                //               //             child: Center(
+                //               //               child: Icon(
+                //               //                 Iconsax.whatsapp_outline,
+                //               //                 color: Colors.white,
+                //               //                 size: 20,
+                //               //               ),
+                //               //             ),
+                //               //           ),
+                //               //         ))
+                //               //     : Padding(
+                //               //         padding: const EdgeInsets.only(right: 12),
+                //               //         child: InkWell(
+                //               //           onTap: () async {
+                //               //             context.read<HomeBloc>().add(
+                //               //                   HomeGenScreenshot(
+                //               //                       _screnshotGlobalKey),
+                //               //                 );
+                //               //           },
+                //               //           child: Container(
+                //               //             width: 36,
+                //               //             height: 36,
+                //               //             decoration: BoxDecoration(
+                //               //                 borderRadius:
+                //               //                     BorderRadius.circular(18),
+                //               //                 color: Color(0xFFDFFF00),
+                //               //                 border: Border.all()),
+                //               //             child: Center(
+                //               //               child: Icon(
+                //               //                 Iconsax.send_2_bold,
+                //               //                 color: Colors.black,
+                //               //                 size: 20,
+                //               //               ),
+                //               //             ),
+                //               //           ),
+                //               //         ),
+                //               //       ),
+                //               state.status == HomePageStatus.idle ||
+                //                       state.status == HomePageStatus.success
+                //                   ? IconButton(
+                //                       padding: EdgeInsets.zero,
+                //                       visualDensity:
+                //                           VisualDensity(horizontal: -4),
+                //                       onPressed: () {
+                //                         FocusScope.of(context).unfocus();
+
+                //                         String taskText =
+                //                             taskTextController.text;
+
+                //                         if (isTaskValid) {
+                //                           if (isUrl == true) {
+
+                //                             if(!taskText.startsWith("http")){
+                //                               taskText = "https://${taskText}";
+                //                             }
+                //                             Navigator.push(
+                //                               context,
+                //                               MaterialPageRoute<void>(
+                //                                 builder: (BuildContext
+                //                                         context) =>
+                //                                     WebViewPage(url: taskText),
+                //                               ),
+                //                             );
+                //                             taskTextController.text = "";
+                //                           } else {
+                //                             // .replaceAll(RegExp(r'[^\w\s]'), '')
+                //                             // .toLowerCase();
+                //                             if (state.isSearchMode == true) {
+                //                               // if (state.status ==
+                //                               //     HomePageStatus.success) {
+                //                               //   taskTextController.text = "";
+                //                               //   context.read<HomeBloc>().add(
+                //                               //         HomeFollowUpRecallVideos(
+                //                               //             taskText),
+                //                               //       );
+                //                               // } else {
+                //                               taskTextController.text = "";
+                //                               context.read<HomeBloc>().add(
+                //                                     HomeGetSearch(
+                //                                         taskText, "web"),
+                //                                   );
+                //                               //}
+                //                             } else {
+                //                               // if (state.status ==
+                //                               //     HomePageStatus.success) {
+                //                               //   taskTextController.text = "";
+                //                               //   context.read<HomeBloc>().add(
+                //                               //         HomeFollowUpSearchVideos(
+                //                               //             taskText),
+                //                               //       );
+                //                               // } else {
+                //                               taskTextController.text = "";
+                //                               context.read<HomeBloc>().add(
+                //                                     HomeGetAnswer(taskText),
+                //                                   );
+                //                               //}
+                //                             }
+                //                             setState(() {
+                //                     isTaskValid = false;
+                //                   });
+                //                             Future.delayed(Duration(milliseconds: 500)).then((onValue){
+                //                               _scrollController.animateTo(
+                //                                 _scrollController
+                //                                     .position.maxScrollExtent,
+                //                                 duration:
+                //                                     Duration(milliseconds: 300),
+                //                                 curve: Curves.easeOut);
+                //                             });
+                //                           }
+                //                         }
+                //                       },
+                //                       icon: Container(
+                //                         margin:
+                //                             EdgeInsets.only(left: 0, bottom: 0),
+                //                         decoration: BoxDecoration(
+                //                           color: isTaskValid == true
+                //                               ? Color(0xFF8A2BE2)
+                //                               : Color(0xFFC99DF2),
+                //                           shape: BoxShape.circle,
+                //                         ),
+                //                         padding: EdgeInsets.all(10),
+                //                         child: Icon(
+                //                           Icons.send,
+                //                           color: Color(0xFFDFFF00),
+                //                           size: 16,
+                //                         ),
+                //                       ),
+                //                     )
+                //                   : IconButton(
+                //                       padding: EdgeInsets.zero,
+                //                       visualDensity:
+                //                           VisualDensity(horizontal: -4),
+                //                       onPressed: () {
+                //                         FocusScope.of(context).unfocus();
+                //                         context.read<HomeBloc>().add(
+                //                               HomeCancelTaskGen(),
+                //                             );
+                //                         mixpanel.track("cancel_search");
+                //                       },
+                //                       icon: Container(
+                //                         margin:
+                //                             EdgeInsets.only(left: 0, bottom: 0),
+                //                         decoration: BoxDecoration(
+                //                           color: Color(0xFF8A2BE2),
+                //                           shape: BoxShape.circle,
+                //                         ),
+                //                         padding: EdgeInsets.all(10),
+                //                         child: Icon(
+                //                           Icons.stop,
+                //                           color: Color(0xFFDFFF00),
+                //                           size: 16,
+                //                         ),
+                //                       ),
+                //                     ),
+                //             ],
+                //           ),
+                //         ],
+                //       ),
+                //     ],
+                //   ),
+                // ),
+                bottomSheet: Container(
+                  color: Colors.white,
+                  padding: EdgeInsets.fromLTRB(12,0,12,12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(
+                        16,
+                      ),
+                      //border: Border.all(color: Color(0xFFB3B4B9)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.withOpacity(0.2),
+                          spreadRadius: 2,
+                          blurRadius: 5,
+                          offset:
+                              Offset(0, 3), // changes position of shadow
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Visibility(
+                          visible: state.editStatus == HomeEditStatus.selected,
+                          child: InkWell(
+                            onTap: (){
+                              context.read<HomeBloc>().add(
+                                    SelectEditInputOption("",false, -1,state.isSearchMode),
+                                  );
+                              taskTextController.text = "";
+                              isTaskValid = false;
+                            },
+                            child: ConstrainedBox(
+                                              constraints: const BoxConstraints(
+                                                  minWidth: 35),
+                                              child: Container(
+                                                height: 36,
+                                                padding: EdgeInsets.symmetric(
+                                                  horizontal: 10,
+                                                  vertical: 8,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: Color(0xFF8A2BE2),
+                                                  borderRadius:
+                                                      BorderRadius.circular(28),
+                                                  // border: Border.all(
+                                                  //     color: Colors.purple),
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment.center,
+                                                  children: [
+                                                     Icon(
+                                                        Iconsax.edit_2_outline,
+                                                        color:Color(0xFFDFFF00),
+                                                        size: 16),
+                                                      SizedBox(width: 3),
+                                                      Text(
+                                                            'Edit',
+                                                            overflow:
+                                                                TextOverflow.clip,
+                                                            style: const TextStyle(
+                                                              color: Color(0xFFDFFF00),
+                                                              fontWeight:
+                                                                  FontWeight.bold,
+                                                            ),
+                                                          ),
+                            
+                                                      SizedBox(width: 8),
+                                                     Icon(
+                                                        Iconsax.close_circle_bold,
+                                                        color: Color(0xFFDFFF00),
+                                                        size: 16),
+                                                        
+                                                      
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                          ),
+                        ),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: taskTextController,
+                                focusNode: taskTextFieldFocusNode,
+                                style: TextStyle(
+                                  color: isUrl ? Colors.purple : Colors.black,
+                                ),
+                                decoration: InputDecoration(
+                                  hintText: state.isSearchMode
+                                      ? "Search or type url"
+                                      : 'Ask or type url',
+                                  hintStyle: TextStyle(color: Colors.grey),
+                                  border: InputBorder.none,
+                                ),
+                                //maxLines: 1, // allow multiline input
+                                autofocus: false,
+                                minLines: 1,
+                                maxLines: 6,
+                                onTap: () {
+                                  //FocusScope.of(context).unfocus();
+                                },
+                                onChanged: (value) {
+                                  bool valueIsUrl = false;
+                                  //Check if text entered is url or not
+                                  List<String> values = value.trim().split(" ");
+                                  String formattedValue = values.first;
+                                  if ((values.length == 1 &&
+                                          formattedValue.contains(".") &&
+                                          formattedValue.length >= 4) ||
+                                      (values.length == 1 &&
+                                          formattedValue.contains("http") &&
+                                          formattedValue.contains("://"))) {
+                                    if (formattedValue.contains("https") ==
+                                            false &&
+                                        formattedValue.contains("http") ==
+                                            false) {
+                                      formattedValue =
+                                          "https://${formattedValue}";
+                                    }
+                                    valueIsUrl = true;
+                                  }
+
+                                  //Check if text valide or not
+                                  if (value.length >= 3) {
+                                    setState(() {
+                                      isTaskValid = true;
+                                      isUrl = valueIsUrl;
+                                    });
+                                  } else {
+                                    setState(() {
+                                      isTaskValid = false;
+                                      isUrl = valueIsUrl;
+                                    });
+                                  }
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            AnimatedBuilder(
+                              animation: _animation,
+                              builder: (context, child) {
+                                return Row(
+                                  children: [
+                                    GestureDetector(
+                                      onTap: () {
+                                        if (!state.isSearchMode) {
+                                          context.read<HomeBloc>().add(
+                                                HomeSwitchType(false),
+                                              );
+                                          _animationController.reset();
+                                          _animationController.forward();
                                         }
                                       },
-                                      icon: Container(
-                                        margin:
-                                            EdgeInsets.only(left: 0, bottom: 0),
-                                        decoration: BoxDecoration(
-                                          color: isTaskValid == true
-                                              ? Color(0xFF8A2BE2)
-                                              : Color(0xFFC99DF2),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        padding: EdgeInsets.all(10),
-                                        child: Icon(
-                                          Icons.send,
-                                          color: Color(0xFFDFFF00),
-                                          size: 16,
-                                        ),
-                                      ),
-                                    )
-                                  : IconButton(
-                                      padding: EdgeInsets.zero,
-                                      visualDensity:
-                                          VisualDensity(horizontal: -4),
-                                      onPressed: () {
-                                        FocusScope.of(context).unfocus();
-                                        context.read<HomeBloc>().add(
-                                              HomeCancelTaskGen(),
-                                            );
-                                        mixpanel.track("cancel_search");
-                                      },
-                                      icon: Container(
-                                        margin:
-                                            EdgeInsets.only(left: 0, bottom: 0),
-                                        decoration: BoxDecoration(
-                                          color: Color(0xFF8A2BE2),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        padding: EdgeInsets.all(10),
-                                        child: Icon(
-                                          Icons.stop,
-                                          color: Color(0xFFDFFF00),
-                                          size: 16,
+                                      child: AnimatedSize(
+                                        duration:
+                                            const Duration(milliseconds: 300),
+                                        curve: Curves.easeInOut,
+                                        child: ConstrainedBox(
+                                          constraints: const BoxConstraints(
+                                              minWidth:
+                                                  35), // ensures a minimum width
+                                          child: Container(
+                                            height: 36,
+                                            padding: EdgeInsets.symmetric(
+                                              horizontal:
+                                                  state.isSearchMode ? 10 : 0,
+                                              vertical: 8,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: state.isSearchMode
+                                                  ? const Color(0xFFF4EBFF)
+                                                  : Color(0xFfF1F1F1),
+                                              borderRadius:
+                                                  BorderRadius.circular(40),
+                                              // border: Border.all(
+                                              //     color: Colors.purple),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize
+                                                  .min, // <-- shrink-wrap tightly around content
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: [
+                                                Icon(
+                                                    Iconsax
+                                                        .search_normal_1_outline,
+                                                    color: state.isSearchMode
+                                                        ? Color(0xFF8A2BE2)
+                                                        : Colors
+                                                            .black, // Colors.purple,
+                                                    size: 16),
+                                                if (state.isSearchMode)
+                                                  SizeTransition(
+                                                    sizeFactor: _animation,
+                                                    axis: Axis.horizontal,
+                                                    axisAlignment: -1,
+                                                    child: Padding(
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                              left: 3),
+                                                      child: Text(
+                                                        'Search',
+                                                        overflow:
+                                                            TextOverflow.clip,
+                                                        style: const TextStyle(
+                                                          color: Color(0xFF8A2BE2),
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                          ),
                                         ),
                                       ),
                                     ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ],
+                                    SizedBox(width: 12),
+                                    GestureDetector(
+                                      onTap: () {
+                                        if (state.isSearchMode) {
+                                          context.read<HomeBloc>().add(
+                                                HomeSwitchType(true),
+                                              );
+                                          _animationController.reset();
+                                          _animationController.forward();
+                                        }
+                                      },
+                                      child: AnimatedSize(
+                                        duration:
+                                            const Duration(milliseconds: 300),
+                                        curve: Curves.easeInOut,
+                                        child: ConstrainedBox(
+                                          constraints: const BoxConstraints(
+                                              minWidth: 35),
+                                          child: Container(
+                                            height: 36,
+                                            padding: EdgeInsets.symmetric(
+                                              horizontal:
+                                                  !state.isSearchMode ? 10 : 0,
+                                              vertical: 8,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: !state.isSearchMode
+                                                  ? const Color(0xFFF4EBFF)
+                                                  : Color(0xFfF1F1F1),
+                                              borderRadius:
+                                                  BorderRadius.circular(28),
+                                              // border: Border.all(
+                                              //     color: Colors.purple),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: [
+                                                 Icon(
+                                                    Iconsax.magicpen_outline,
+                                                    color: state.isSearchMode==false? Color(0xFF8A2BE2):Colors.black,
+                                                    size: 16),
+                                                if (!state.isSearchMode)
+                                                  SizeTransition(
+                                                    sizeFactor: _animation,
+                                                    axis: Axis.horizontal,
+                                                    axisAlignment: -1,
+                                                    child: Padding(
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                              left: 3),
+                                                      child: Text(
+                                                        'Ask',
+                                                        overflow:
+                                                            TextOverflow.clip,
+                                                        style: const TextStyle(
+                                                          color: Color(0xFF8A2BE2),
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
+                            Row(
+                              children: [
+                                // Padding(
+                                //     padding: const EdgeInsets.only(right: 12),
+                                //     child: InkWell(
+                                //       onTap: () async {
+                                //         Navigator.push(
+                                //           context,
+                                //           MaterialPageRoute<void>(
+                                //             builder: (BuildContext context) =>
+                                //                 TabsViewPage(),
+                                //           ),
+                                //         );
+                                //       },
+                                //       child: Container(
+                                //         width: 36,
+                                //         height: 36,
+                                //         decoration: BoxDecoration(
+                                //           borderRadius:
+                                //               BorderRadius.circular(18),
+                                //           color: Color(
+                                //               0xFF8A2BE2), //Color(0xFFDFFF00),
+                                //         ),
+                                //         child: Center(
+                                //           child: Icon(
+                                //             Iconsax.note_2_bold,
+                                //             color: Color(0xFFDFFF00),
+                                //             size: 20,
+                                //           ),
+                                //         ),
+                                //       ),
+                                //     )),
+                                state.status == HomePageStatus.idle ||
+                                       ( state.status == HomePageStatus.success && state.replyStatus != HomeReplyStatus.loading)
+                                    ? IconButton(
+                                        padding: EdgeInsets.zero,
+                                        visualDensity:
+                                            VisualDensity(horizontal: -4),
+                                        onPressed: () {
+                                          FocusScope.of(context).unfocus();
+
+                                          String taskText =
+                                              taskTextController.text;
+
+                                          if (isTaskValid) {
+                                            if (isUrl == true) {
+                                              if (!taskText
+                                                  .startsWith("http")) {
+                                                taskText =
+                                                    "https://${taskText}";
+                                              }
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute<void>(
+                                                  builder:
+                                                      (BuildContext context) =>
+                                                          WebViewPage(
+                                                              url: taskText),
+                                                ),
+                                              );
+                                              taskTextController.text = "";
+                                            } else {
+                                              if (state.isSearchMode == true) {
+                                                taskTextController.text = "";
+                                                context.read<HomeBloc>().add(
+                                                      HomeGetSearch(
+                                                          taskText, "web"),
+                                                    );
+                                              } else if(state.editStatus == HomeEditStatus.selected){
+                                                print("Updating edited answer");
+                                                taskTextController.text = "";
+                                                context.read<HomeBloc>().add(
+                                                      HomeUpdateAnswer(taskText, state.loadingIndex, streamedText),
+                                                    );
+                                              } else {
+                                                taskTextController.text = "";
+                                                context.read<HomeBloc>().add(
+                                                      HomeGetAnswer(taskText, streamedText),
+                                                    );
+                                              }
+                                              setState(() {
+                                                isTaskValid = false;
+                                              });
+                                              Future.delayed(Duration(
+                                                      milliseconds: 500))
+                                                  .then((onValue) {
+                                                _scrollController.animateTo(
+                                                    _scrollController.position
+                                                        .maxScrollExtent,
+                                                    duration: Duration(
+                                                        milliseconds: 300),
+                                                    curve: Curves.easeOut);
+                                              });
+                                            }
+                                          }
+                                        },
+                                        icon: Container(
+                                          margin: EdgeInsets.only(
+                                              left: 0, bottom: 0),
+                                          decoration: BoxDecoration(
+                                            color: isTaskValid == true
+                                                ? Color(0xFF8A2BE2)
+                                                : Color(0xFFC99DF2),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          padding: EdgeInsets.all(10),
+                                          child: Icon(
+                                            Icons.send,
+                                            color: Color(0xFFDFFF00),
+                                            size: 16,
+                                          ),
+                                        ),
+                                      )
+                                    : IconButton(
+                                        padding: EdgeInsets.zero,
+                                        visualDensity:
+                                            VisualDensity(horizontal: -4),
+                                        onPressed: () {
+                                          FocusScope.of(context).unfocus();
+                                          context.read<HomeBloc>().add(
+                                                HomeCancelTaskGen(),
+                                              );
+                                          mixpanel.track("cancel_search");
+                                          isTaskValid = false;
+                                        },
+                                        icon: Container(
+                                          margin: EdgeInsets.only(
+                                              left: 0, bottom: 0),
+                                          decoration: BoxDecoration(
+                                            color: Color(0xFF8A2BE2),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          padding: EdgeInsets.all(10),
+                                          child: Icon(
+                                            Icons.stop,
+                                            color: Color(0xFFDFFF00),
+                                            size: 16,
+                                          ),
+                                        ),
+                                      ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 extendBodyBehindAppBar:
                     state.status == HomePageStatus.idle ? true : false,
                 body: GestureDetector(
                   onTap: () {
-                    FocusScope.of(context).unfocus();
+                     FocusScope.of(context).unfocus();
                   },
                   child: state.status == HomePageStatus.idle
                       ? Container(
-
                           color: Colors.white,
-                        height: MediaQuery.of(context).size.height- 170,
-                        child: Column(
+                          height: MediaQuery.of(context).size.height -
+                              MediaQuery.of(context).padding.bottom -
+                              MediaQuery.of(context).padding.top,
+                          child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Center(
-                                child: Stack(
-                                  alignment: Alignment.center,
-                                  children: [
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(40),
-                                      child: Container(
-                                        width: 80,
-                                        height: 80,
-                                        decoration: BoxDecoration(
-                                            borderRadius:
-                                                BorderRadius.circular(40),
-                                            color: Color(0xFF8A2BE2)),
-                                        child: state.isIncognito
-                                            ? Icon(
-                                                RemixIcons.spy_line,
-                                                color: Color(0xFFDFFF00),
-                                                size: 40,
-                                              )
-                                            : Image.asset(
-                                                "assets/images/logo/icon.png",
-                                                fit: BoxFit.cover,
-                                              ),
-                                      ),
+                              GestureDetector(
+                                onTap: () {
+                                  context.read<HomeBloc>().add(
+                                        HomeSwitchPrivacyType(
+                                            state.isIncognito == true
+                                                ? false
+                                                : true),
+                                      );
+                                  mixpanel.track(state.isIncognito == true
+                                      ? "set_incognito_mode"
+                                      : "set_normal_mode");
+                                },
+                                child: Center(
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(40),
+                                    child: Container(
+                                      width: 80,
+                                      height: 80,
+                                      decoration: BoxDecoration(
+                                          borderRadius:
+                                              BorderRadius.circular(40),
+                                          color: Color(0xFF8A2BE2)),
+                                      child: state.isIncognito
+                                          ? Icon(
+                                              RemixIcons.spy_line,
+                                              color: Color(0xFFDFFF00),
+                                              size: 40,
+                                            )
+                                          : Image.asset(
+                                              "assets/images/logo/icon.png",
+                                              fit: BoxFit.cover,
+                                            ),
                                     ),
-                                  ],
+                                  ),
                                 ),
                               ),
                               SizedBox(height: 5),
                               Container(
                                 width: MediaQuery.of(context).size.width - 40,
-                                child:  Row(
+                                child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
                                     state.isIncognito
-                                          ? Text(
-                                              textAlign: TextAlign.center,
-                                              "Incognito Mode",
-                                              style: TextStyle(
-                                                color: Colors.black,
-                                                fontSize: 20,
-                                                fontFamily: 'Poppins',
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            )
-                                          : Text(
-                                              "How may I help you?",
-                                              style: TextStyle(
-                                                color: Colors.black,
-                                                fontSize: 20,
-                                                fontFamily: 'Poppins',
-                                                fontWeight: FontWeight.w600,
-                                              ),
+                                        ? Text(
+                                            textAlign: TextAlign.center,
+                                            "Incognito Mode",
+                                            style: TextStyle(
+                                              color: Colors.black,
+                                              fontSize: 20,
+                                              fontFamily: 'Poppins',
+                                              fontWeight: FontWeight.w600,
                                             ),
+                                          )
+                                        : Text(
+                                            "How may I help you?",
+                                            style: TextStyle(
+                                              color: Colors.black,
+                                              fontSize: 20,
+                                              fontFamily: 'Poppins',
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
                                   ],
                                 ),
-                                
                               )
                             ],
                           ),
-                      )
+                        )
                       : Container(
                           color: Colors.white,
                           height: MediaQuery.of(context).size.height -
                               MediaQuery.of(context).padding.top -
-                              MediaQuery.of(context).padding.bottom,
-                          padding: EdgeInsets.fromLTRB(10, 10, 10, 170),
+                              MediaQuery.of(context).padding.bottom ,
+                          padding: EdgeInsets.fromLTRB(10, 10, 10, 10),
                           child: SingleChildScrollView(
                             controller: _scrollController,
-                            child: Column(
-                              children: List.generate(
-                                state.threadData.results.length,
-                                (index) {
-                                  final result =
-                                      state.threadData.results[index];
-                                  return Column(
-                                    children: [
-                                      result.isSearchMode == true
-                                          ? ThreadSearchView(
-                                              onTabChanged: (String type) {
-                                                if (type == "news") {
+                            child: Padding(
+                              padding: const EdgeInsets.only(bottom: 160),
+                              child: Column(
+                                children: List.generate(
+                                  state.threadData.results.length,
+                                  (index) {
+                                    final result =
+                                        state.threadData.results[index];
+                                    return Column(
+                                      children: [
+                                        result.isSearchMode == true
+                                            ? ThreadSearchView(
+                                                isIncognito:
+                                                    state.threadData.isIncognito,
+                                                onGraphImageTap: (String query) {
                                                   context.read<HomeBloc>().add(
-                                                        HomeGetNewsSearch(
-                                                            index),
+                                                        HomeGetSearch(
+                                                            query, "web"),
                                                       );
-                                                } else if (type == "videos") {
-                                                  context.read<HomeBloc>().add(
-                                                        HomeGetVideosSearch(
-                                                            index),
-                                                      );
-                                                } else if (type ==
-                                                    "shortVideos") {
-                                                  context.read<HomeBloc>().add(
-                                                        HomeGetReelsSearch(
-                                                            index),
-                                                      );
-                                                } else if (type == "images") {
-                                                  context.read<HomeBloc>().add(
-                                                        HomeGetImagesSearch(
-                                                            index),
-                                                      );
-                                                }
-                                              },
-                                              web: result.web,
-                                              query: result.userQuery,
-                                              shortVideos: result.shortVideos,
-                                              videos: result.videos,
-                                              news: result.news,
-                                              images: result.images,
-                                              status:
-                                                  state.loadingIndex == index
-                                                      ? state.status
-                                                      : HomePageStatus.success)
-                                          : ThreadAnswerView(
-                                              answerResults: result.influence,
-                                              query: result.userQuery,
-                                              answer: result.answer,
-                                              onRefresh: () {
-                                                context.read<HomeBloc>().add(
-                                                      HomeRefreshReply(index),
-                                                    );
-                                              },
-                                              status: state.loadingIndex == index
-                                                      ? state.status
-                                                  : HomePageStatus.success,
-                                              replyStatus:
-                                                  state.loadingIndex == index
-                                                      ? state.replyStatus
-                                                      : HomeReplyStatus.success,
+                                                },
+                                                onTabChanged: (String type) {
+                                                  if (type == "news") {
+                                                    context.read<HomeBloc>().add(
+                                                          HomeGetNewsSearch(
+                                                              index),
+                                                        );
+                                                  } else if (type == "videos") {
+                                                    context.read<HomeBloc>().add(
+                                                          HomeGetVideosSearch(
+                                                              index),
+                                                        );
+                                                  } else if (type ==
+                                                      "shortVideos") {
+                                                    context.read<HomeBloc>().add(
+                                                          HomeGetReelsSearch(
+                                                              index),
+                                                        );
+                                                  } else if (type == "images") {
+                                                    context.read<HomeBloc>().add(
+                                                          HomeGetImagesSearch(
+                                                              index),
+                                                        );
+                                                  }
+                                                },
+                                                knowledgeGraph:
+                                                    result.knowledgeGraph,
+                                                answerBox: result.answerBox,
+                                                web: result.web,
+                                                query: result.userQuery,
+                                                shortVideos: result.shortVideos,
+                                                videos: result.videos,
+                                                news: result.news,
+                                                images: result.images,
+                                                status:
+                                                    state.loadingIndex == index
+                                                        ? state.status
+                                                        : HomePageStatus.success)
+                                            : ValueListenableBuilder(
+                                              valueListenable: streamedText,
+                                              builder: (context,value,_) {
+                                                return ThreadAnswerView(
+                                                    answerResults: result.influence,
+                                                    query: result.userQuery,
+                                                    answer:state.loadingIndex == index?value:result.answer,
+                                                    hideRefresh: index != state.threadData.results.length -1? true:false,
+                                                    onEditSelected:(){
+                                                      context.read<HomeBloc>().add(
+                                                            SelectEditInputOption(result.userQuery, true, state.threadData.results.indexOf(result),result.isSearchMode
+                                                          ),);
+                                                      taskTextController.text = result.userQuery;
+                                                      isTaskValid = true;
+                                                      //FocusManager.instance.primaryFocus?.unfocus();
+                                                    },
+                                                    onRefresh: () {
+                                                      context.read<HomeBloc>().add(
+                                                            HomeRefreshReply(index, streamedText),
+                                                          );
+                                                    },
+                                                    status:
+                                                        state.loadingIndex == index
+                                                            ? state.status
+                                                            : HomePageStatus.success,
+                                                    replyStatus:
+                                                        state.loadingIndex == index
+                                                            ? state.replyStatus
+                                                            : HomeReplyStatus.success,
+                                                  );
+                                              }
                                             ),
-                                      if (index <
-                                          state.threadData.results.length - 1)
-                                        Divider(
-                                          color: Colors.grey.shade300,
-                                          thickness: 0.5,
-                                          height: 40,
-                                        ),
-                                    ],
-                                  );
-                                },
+                                        if (index <
+                                            state.threadData.results.length - 1)
+                                          Divider(
+                                            color: Colors.grey.shade300,
+                                            thickness: 0.5,
+                                            height: 40,
+                                          ),
+                                      ],
+                                    );
+                                  },
+                                ),
                               ),
                             ),
                           )),

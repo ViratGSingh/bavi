@@ -39,7 +39,7 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
   /// The scopes required by this application.
   // #docregion Initialize
 
-  GoogleSignIn _googleSignIn = GoogleSignIn();
+  //GoogleSignIn _googleSignIn = GoogleSignIn();
 
   Future<void> _handleLogout(
       SettingsLogout event, Emitter<SettingsState> emit) async {
@@ -47,8 +47,8 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     emit(state.copyWith(status: SettingsStatus.logout));
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     try {
-      await _googleSignIn.disconnect();
-      await _googleSignIn.signOut();
+      // await _googleSignIn.disconnect();
+      // await _googleSignIn.signOut();
       await FirebaseAuth.instance.signOut();
       await prefs.setString('displayName', "");
       await prefs.setString('email', "");
@@ -88,8 +88,8 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     }
 
     try {
-      await _googleSignIn.disconnect();
-      await _googleSignIn.signOut();
+      // await _googleSignIn.disconnect();
+      // await _googleSignIn.signOut();
       await FirebaseAuth.instance.signOut();
       await prefs.setString('displayName', "");
       await prefs.setString('email', "");

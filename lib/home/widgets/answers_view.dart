@@ -2,10 +2,12 @@ import 'dart:convert';
 
 import 'package:bavi/home/bloc/home_bloc.dart';
 import 'package:bavi/home/view/home_page.dart';
+import 'package:bavi/home/widgets/web_view.dart';
 import 'package:bavi/models/short_video.dart';
 import 'package:bavi/models/thread.dart';
 import 'package:bavi/widgets/profile_icon.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:icons_plus/icons_plus.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
@@ -16,9 +18,11 @@ class ThreadAnswerView extends StatefulWidget {
   final List<InfluenceData> answerResults;
   final String query;
   final String answer;
+  final bool hideRefresh;
   final HomePageStatus status;
   final HomeReplyStatus replyStatus;
   final Function() onRefresh;
+  final Function() onEditSelected;
   const ThreadAnswerView(
       {super.key,
       required this.answerResults,
@@ -26,19 +30,24 @@ class ThreadAnswerView extends StatefulWidget {
       required this.answer,
       required this.status,
       required this.replyStatus,
-      required this.onRefresh});
+      required this.onRefresh,
+      required this.onEditSelected,
+      required this.hideRefresh
+      });
 
   @override
   State<ThreadAnswerView> createState() => _ThreadAnswerViewState();
 }
 
 class _ThreadAnswerViewState extends State<ThreadAnswerView> {
+  bool _menuOpen = false;
   @override
   Widget build(BuildContext context) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          constraints: BoxConstraints(maxHeight: 150),
+          //constraints: BoxConstraints(maxHeight: 150),
           width: MediaQuery.of(context).size.width,
           decoration: BoxDecoration(
               border: Border.all(),
@@ -52,16 +61,16 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Icon(
-                Iconsax.magicpen_outline,
-                color: Colors.black,
-                size: 20,
-              ),
+                    Iconsax.magicpen_outline,
+                    color: Colors.black,
+                    size: 20,
+                  ),
               SizedBox(width: 5),
               Expanded(
                 child: Text(
                   widget.query,
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 2,
+                  // overflow: TextOverflow.ellipsis,
+                  // maxLines: 2,
                   style: TextStyle(
                     color: Colors.black,
                     fontSize: 16,
@@ -70,9 +79,100 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
                   ),
                 ),
               ),
+
+              SizedBox(width: 5),
+
+            Builder(
+              builder: (iconContext) {
+                return InkWell(
+                  onTap: () async {
+                    setState(() {
+                      _menuOpen = true;
+                    });
+                    final renderBox = iconContext.findRenderObject() as RenderBox;
+                    final position = renderBox.localToGlobal(Offset(-50, 10));
+                    final size = renderBox.size;
+
+                    await showMenu(
+                      context: iconContext,
+                      color: Colors.white,
+                      elevation: 6,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      position: RelativeRect.fromLTRB(
+                        position.dx,
+                        position.dy + size.height,
+                        position.dx + size.width,
+                        position.dy,
+                      ),
+                      items: [
+                        PopupMenuItem(
+                          value: "copy",
+                          child: SizedBox(
+                            //width: 100,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                
+                                Text("Copy"),
+                                Icon(Icons.copy, size: 18, color: Colors.black),
+                              ],
+                            ),
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: "edit",
+                          child: SizedBox(
+                            //width: ,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text("Edit"),
+                                Icon(Icons.edit, size: 18, color: Colors.black),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ).then((value) {
+                      setState(() {
+                        _menuOpen = false;
+                      });
+                      if (value == "copy") {
+                        Clipboard.setData(ClipboardData(text: widget.query));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            backgroundColor:
+                                Color(0xFF8A2BE2), // Purple background
+                            content: Text(
+                              'Copied to clipboard',
+                              style: TextStyle(
+                                color: Color(0xFFDFFF00), // Neon green text
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      } else if (value == "edit") {
+                        // Add edit logic here
+                        widget.onEditSelected();
+                      }
+                    });
+                  },
+                  child: Icon(
+                    Icons.more_vert_outlined,
+                    color: _menuOpen ? Colors.grey.shade300 : Colors.black,
+                    size: 20,
+                  ),
+                );
+              },
+            ),
             ],
           ),
         ),
+        
         SizedBox(height: 10),
         widget.status != HomePageStatus.success ||
                 widget.replyStatus != HomeReplyStatus.success
@@ -94,11 +194,13 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
                 data: widget.answer,
                 onTapLink: (text, href, title) async {
                   if (href != null) {
-                    final uri = Uri.parse(href);
-                    if (await canLaunchUrl(uri)) {
-                      await launchUrl(uri,
-                          mode: LaunchMode.externalApplication);
-                    }
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (BuildContext context) =>
+                            WebViewPage(url: href),
+                      ),
+                    );
                   }
                 },
                 styleSheet:
@@ -142,12 +244,8 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
                 children: [
                   InkWell(
                     onTap: () {
-                      // final textToCopy =
-                      //     isThoughtProcess == true
-                      //         ? state.thinking.trim()
-                      //         : state.searchAnswer.trim();
-                      // Clipboard.setData(
-                      //     ClipboardData(text: textToCopy));
+                      final textToCopy = widget.answer.trim();
+                      Clipboard.setData(ClipboardData(text: textToCopy));
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           backgroundColor:
@@ -168,13 +266,16 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
                       child: Icon(Iconsax.copy_outline, size: 18),
                     ),
                   ),
-                  InkWell(
-                    onTap: () async {
-                      widget.onRefresh();
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(10, 5, 5, 5),
-                      child: Icon(Iconsax.refresh_outline, size: 18),
+                  Visibility(
+                    visible: !widget.hideRefresh,
+                    child: InkWell(
+                      onTap: () async {
+                        widget.onRefresh();
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(10, 5, 5, 5),
+                        child: Icon(Iconsax.refresh_outline, size: 18),
+                      ),
                     ),
                   ),
                 ],
@@ -240,12 +341,17 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
                                       final item = widget.answerResults?[index];
                                       return GestureDetector(
                                         onTap: () async {
-                                          final uri =
-                                              Uri.parse(item?.url ?? "");
-                                          if (await canLaunchUrl(uri)) {
-                                            await launchUrl(uri,
-                                                mode: LaunchMode
-                                                    .externalApplication);
+                                          if (item?.url != null) {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute<void>(
+                                                builder:
+                                                    (BuildContext context) =>
+                                                        WebViewPage(
+                                                            url: item?.url ??
+                                                                ""),
+                                              ),
+                                            );
                                           }
                                         },
                                         child: Column(

@@ -80,8 +80,18 @@ final class HomeGenScreenshot extends HomeEvent {
 //Watch Google Search
 final class HomeGetAnswer extends HomeEvent {
   final String query;
+  ValueNotifier<String> streamedText;
 
-  HomeGetAnswer(this.query);
+  HomeGetAnswer(this.query, this.streamedText);
+}
+
+//Watch Google Search
+final class HomeUpdateAnswer extends HomeEvent {
+  final String query;
+  final int index;
+  ValueNotifier<String> streamedText;
+
+  HomeUpdateAnswer(this.query, this.index, this.streamedText);
 }
 
 //Watch Google Search
@@ -139,7 +149,8 @@ final class HomeStartNewThread extends HomeEvent {
 
 final class HomeRefreshReply extends HomeEvent {
   final int index;
-  HomeRefreshReply(this.index);
+  final ValueNotifier<String> streamedText;
+  HomeRefreshReply(this.index, this.streamedText);
 }
 
 //Ask Recall Search
@@ -147,6 +158,15 @@ final class HomeRecallSearchVideos extends HomeEvent {
   final String query;
 
   HomeRecallSearchVideos(this.query);
+}
+
+//Select Edit Option
+final class SelectEditInputOption extends HomeEvent {
+  final String query;
+  final bool isEditMode;
+  final int index;
+  final bool isSearchMode;
+  SelectEditInputOption(this.query, this.isEditMode, this.index, this.isSearchMode);
 }
 
 //Retrieve Search Data

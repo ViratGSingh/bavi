@@ -11,6 +11,8 @@ class ThreadResultData extends Equatable {
   final List<VideoResultData> videos;
   final List<NewsResultData> news;
   final List<ImageResultData> images;
+  final KnowledgeGraphData? knowledgeGraph;
+  final AnswerBoxData? answerBox;
   final Timestamp createdAt;
   Timestamp updatedAt;
   final String userQuery;
@@ -32,10 +34,18 @@ class ThreadResultData extends Equatable {
     required this.answer,
     required this.influence,
     required this.isSearchMode,
+  this.knowledgeGraph,
+  this.answerBox,
   });
 
   factory ThreadResultData.fromJson(Map<String, dynamic> json) {
     return ThreadResultData(
+      knowledgeGraph: json['knowledgeGraph'] != null
+          ? KnowledgeGraphData.fromJson(json['knowledgeGraph'])
+          : null,
+      answerBox: json['answerBox'] != null
+          ? AnswerBoxData.fromJson(json['answerBox'])
+          : null,
       web: (json['web'] as List<dynamic>?)
               ?.map((e) => WebResultData.fromJson(e))
               .toList() ??
@@ -78,13 +88,16 @@ class ThreadResultData extends Equatable {
   }
 
   Map<String, dynamic> toJson() => {
+        if (knowledgeGraph != null)
+          'knowledgeGraph': knowledgeGraph!.toJson(),
+        if (answerBox != null) 'answerBox': answerBox!.toJson(),
         'web': web.map((e) => e.toJson()).toList(),
         'short_videos': shortVideos.map((e) => e.toJson()).toList(),
         'videos': videos.map((e) => e.toJson()).toList(),
         'news': news.map((e) => e.toJson()).toList(),
         'images': images.map((e) => e.toJson()).toList(),
-        'createdAt': createdAt.toDate().toIso8601String(),
-        'updatedAt': updatedAt.toDate().toIso8601String(),
+        'createdAt': createdAt,
+        'updatedAt': updatedAt,
         'userQuery': userQuery,
         'searchQuery': searchQuery,
         'answer': answer,
@@ -93,7 +106,22 @@ class ThreadResultData extends Equatable {
       };
 
   @override
-  List<Object> get props => [web, shortVideos, videos, news, images, createdAt, updatedAt, userQuery, searchQuery, answer, influence, isSearchMode];
+  List<Object?> get props => [
+    web,
+    knowledgeGraph,
+    answerBox,
+    shortVideos,
+    videos,
+    news,
+    images,
+    createdAt,
+    updatedAt,
+    userQuery,
+    searchQuery,
+    answer,
+    influence,
+    isSearchMode,
+  ];
 }
 
 class WebResultData extends Equatable {
@@ -129,6 +157,141 @@ class WebResultData extends Equatable {
 
   @override
   List<Object> get props => [position, title, link, displayedLink, snippet];
+}
+
+class KnowledgeGraphData extends Equatable {
+  final String title;
+  final String type;
+  final String description;
+  final List<HeaderImageData> headerImages;
+  final List<MediaItemData> movies;
+  final List<MediaItemData> moviesAndShows;
+  final List<MediaItemData> tvShows;
+  final List<MediaItemData> videoGames;
+  final List<MediaItemData> books;
+
+  const KnowledgeGraphData({
+    required this.title,
+    required this.type,
+    required this.description,
+    required this.headerImages,
+    required this.movies,
+    required this.moviesAndShows,
+    required this.tvShows,
+    required this.videoGames,
+    required this.books,
+  });
+
+  factory KnowledgeGraphData.fromJson(Map<String, dynamic> json) {
+    List<HeaderImageData> parseHeaderImages(List<dynamic>? data) {
+      if (data == null) return [];
+      return data.map((e) => HeaderImageData.fromJson(e)).toList();
+    }
+
+    List<MediaItemData> parseMediaList(List<dynamic>? data) {
+      if (data == null) return [];
+      return data.map((e) => MediaItemData.fromJson(e)).toList();
+    }
+
+    return KnowledgeGraphData(
+      title: json['title'] ?? '',
+      type: json['type'] ?? '',
+      description: json['description'] ?? '',
+      headerImages: parseHeaderImages(json['header_images']),
+      movies: parseMediaList(json['movies']),
+      moviesAndShows: parseMediaList(json['movies_and_shows']),
+      tvShows: parseMediaList(json['tv_shows']),
+      videoGames: parseMediaList(json['video_games']),
+      books: parseMediaList(json['books']),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'title': title,
+        'type': type,
+        'description': description,
+        'header_images': headerImages.map((e) => e.toJson()).toList(),
+        'movies': movies.map((e) => e.toJson()).toList(),
+        'movies_and_shows': moviesAndShows.map((e) => e.toJson()).toList(),
+        'tv_shows': tvShows.map((e) => e.toJson()).toList(),
+        'video_games': videoGames.map((e) => e.toJson()).toList(),
+        'books': books.map((e) => e.toJson()).toList(),
+      };
+
+  @override
+  List<Object> get props =>
+      [title, type, description, headerImages, movies, moviesAndShows, tvShows, videoGames, books];
+}
+
+class HeaderImageData extends Equatable {
+  final String image;
+  final String source;
+
+  const HeaderImageData({required this.image, required this.source});
+
+  factory HeaderImageData.fromJson(Map<String, dynamic> json) =>
+      HeaderImageData(
+        image: json['image'] ?? '',
+        source: json['source'] ?? '',
+      );
+
+  Map<String, dynamic> toJson() => {'image': image, 'source': source};
+
+  @override
+  List<Object> get props => [image, source];
+}
+
+class MediaItemData extends Equatable {
+  final List<String>? extensions;
+  final String image;
+
+  const MediaItemData({this.extensions, required this.image});
+
+  factory MediaItemData.fromJson(Map<String, dynamic> json) => MediaItemData(
+        extensions: json['extensions'] != null
+            ? List<String>.from(json['extensions'])
+            : [],
+        image: json['image'] ?? '',
+      );
+
+  Map<String, dynamic> toJson() => {
+        'extensions': extensions,
+        'image': image,
+      };
+
+  @override
+  List<Object?> get props => [extensions, image];
+}
+
+class AnswerBoxData extends Equatable {
+  final String type;
+  final String title;
+  final String answer;
+  final String thumbnail;
+
+  const AnswerBoxData({
+    required this.type,
+    required this.title,
+    required this.answer,
+    required this.thumbnail,
+  });
+
+  factory AnswerBoxData.fromJson(Map<String, dynamic> json) => AnswerBoxData(
+        type: json['type'] ?? '',
+        title: json['title'] ?? '',
+        answer: json['answer'] ?? '',
+        thumbnail: json['thumbnail'] ?? '',
+      );
+
+  Map<String, dynamic> toJson() => {
+        'type': type,
+        'title': title,
+        'answer': answer,
+        'thumbnail': thumbnail,
+      };
+
+  @override
+  List<Object> get props => [type, title, answer, thumbnail];
 }
 
 class ShortVideoResultData extends Equatable {
@@ -378,9 +541,11 @@ class ThreadSessionData extends Equatable {
   final Timestamp createdAt;
   final Timestamp updatedAt;
   final String email;
+  final bool isIncognito;
 
   const ThreadSessionData({
     required this.id,
+    required this.isIncognito,
     required this.email,
     required this.results,
     required this.createdAt,
@@ -390,6 +555,7 @@ class ThreadSessionData extends Equatable {
   factory ThreadSessionData.fromJson(Map<String, dynamic> json) {
     return ThreadSessionData(
       id: json['id'] ?? '',
+      isIncognito: json['isIncognito'] ?? false,
       email:json['email'] ?? '',
       results: (json['results'] as List<dynamic>?)
               ?.map((e) => ThreadResultData.fromJson(e))
@@ -411,11 +577,12 @@ class ThreadSessionData extends Equatable {
   Map<String, dynamic> toJson() => {
         'id': id,
         'email': email,
+        'isIncognito':isIncognito,
         'results': results.map((e) => e.toJson()).toList(),
-        'createdAt': createdAt.toDate().toIso8601String(),
-        'updatedAt': updatedAt.toDate().toIso8601String(),
+        'createdAt': createdAt,
+        'updatedAt': updatedAt,
       };
 
   @override
-  List<Object> get props => [id, email ,results, createdAt, updatedAt];
+  List<Object> get props => [id, email ,isIncognito, results, createdAt, updatedAt];
 }

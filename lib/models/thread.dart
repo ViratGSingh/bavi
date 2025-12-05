@@ -1,9 +1,6 @@
+import 'package:bavi/home/bloc/home_bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; // Import for Timestamp
-
-
-
-
 
 class ThreadResultData extends Equatable {
   final List<WebResultData> web;
@@ -18,10 +15,16 @@ class ThreadResultData extends Equatable {
   final String userQuery;
   final String searchQuery;
   final String answer;
+  final String sourceImageDescription;
+  final String sourceImageLink;
   final List<InfluenceData> influence;
   final bool isSearchMode;
+  final List<LocalResultData> local;
+  final HomeSearchType searchType;
+  final ExtractedUrlResultData? extractedUrlData;
 
-   ThreadResultData({
+  ThreadResultData({
+    required this.searchType,
     required this.web,
     required this.shortVideos,
     required this.videos,
@@ -34,12 +37,25 @@ class ThreadResultData extends Equatable {
     required this.answer,
     required this.influence,
     required this.isSearchMode,
-  this.knowledgeGraph,
-  this.answerBox,
+    required this.sourceImageDescription,
+    required this.sourceImageLink,
+    required this.local,
+    this.knowledgeGraph,
+    this.answerBox,
+    this.extractedUrlData,
   });
 
   factory ThreadResultData.fromJson(Map<String, dynamic> json) {
     return ThreadResultData(
+      extractedUrlData: json['extractedUrlData'] != null
+          ? ExtractedUrlResultData.fromJson(json['extractedUrlData'])
+          : null,
+      searchType: HomeSearchType.values.firstWhere(
+        (e) => e.name == (json['searchType'] ?? 'general'),
+        orElse: () => HomeSearchType.general,
+      ),
+      sourceImageDescription: json['sourceImageDescription'] ?? '',
+      sourceImageLink: json['sourceImageLink'] ?? '',
       knowledgeGraph: json['knowledgeGraph'] != null
           ? KnowledgeGraphData.fromJson(json['knowledgeGraph'])
           : null,
@@ -66,6 +82,10 @@ class ThreadResultData extends Equatable {
               ?.map((e) => ImageResultData.fromJson(e))
               .toList() ??
           [],
+      local: (json['local'] as List<dynamic>?)
+              ?.map((e) => LocalResultData.fromJson(e))
+              .toList() ??
+          [],
       createdAt: json['createdAt'] is Timestamp
           ? json['createdAt']
           : (json['createdAt'] != null
@@ -88,14 +108,17 @@ class ThreadResultData extends Equatable {
   }
 
   Map<String, dynamic> toJson() => {
-        if (knowledgeGraph != null)
-          'knowledgeGraph': knowledgeGraph!.toJson(),
+        if (knowledgeGraph != null) 'knowledgeGraph': knowledgeGraph!.toJson(),
         if (answerBox != null) 'answerBox': answerBox!.toJson(),
+        if (extractedUrlData != null)
+          'extractedUrlData': extractedUrlData!.toJson(),
         'web': web.map((e) => e.toJson()).toList(),
+        'searchType': searchType.name,
         'short_videos': shortVideos.map((e) => e.toJson()).toList(),
         'videos': videos.map((e) => e.toJson()).toList(),
         'news': news.map((e) => e.toJson()).toList(),
         'images': images.map((e) => e.toJson()).toList(),
+        'local': local.map((e) => e.toJson()).toList(),
         'createdAt': createdAt,
         'updatedAt': updatedAt,
         'userQuery': userQuery,
@@ -103,25 +126,32 @@ class ThreadResultData extends Equatable {
         'answer': answer,
         'influence': influence.map((e) => e.toJson()).toList(),
         'isSearchMode': isSearchMode,
+        'sourceImageDescription': sourceImageDescription,
+        'sourceImageLink': sourceImageLink,
       };
 
   @override
   List<Object?> get props => [
-    web,
-    knowledgeGraph,
-    answerBox,
-    shortVideos,
-    videos,
-    news,
-    images,
-    createdAt,
-    updatedAt,
-    userQuery,
-    searchQuery,
-    answer,
-    influence,
-    isSearchMode,
-  ];
+        web,
+        extractedUrlData,
+        knowledgeGraph,
+        answerBox,
+        shortVideos,
+        searchType,
+        videos,
+        news,
+        images,
+        local,
+        createdAt,
+        updatedAt,
+        userQuery,
+        searchQuery,
+        answer,
+        influence,
+        isSearchMode,
+        sourceImageDescription,
+        sourceImageLink,
+      ];
 }
 
 class WebResultData extends Equatable {
@@ -219,8 +249,17 @@ class KnowledgeGraphData extends Equatable {
       };
 
   @override
-  List<Object> get props =>
-      [title, type, description, headerImages, movies, moviesAndShows, tvShows, videoGames, books];
+  List<Object> get props => [
+        title,
+        type,
+        description,
+        headerImages,
+        movies,
+        moviesAndShows,
+        tvShows,
+        videoGames,
+        books
+      ];
 }
 
 class HeaderImageData extends Equatable {
@@ -362,7 +401,8 @@ class VideoResultData extends Equatable {
     required this.date,
   });
 
-  factory VideoResultData.fromJson(Map<String, dynamic> json) => VideoResultData(
+  factory VideoResultData.fromJson(Map<String, dynamic> json) =>
+      VideoResultData(
         title: json['title'] ?? '',
         link: json['link'] ?? '',
         displayedLink: json['displayed_link'] ?? '',
@@ -426,6 +466,38 @@ class NewsResultData extends Equatable {
   List<Object> get props => [title, link, source, thumbnail, snippet, date];
 }
 
+class ExtractedUrlResultData extends Equatable {
+  final String title;
+  final String link;
+  final String thumbnail;
+  final String snippet;
+
+  const ExtractedUrlResultData({
+    required this.title,
+    required this.link,
+    required this.thumbnail,
+    required this.snippet,
+  });
+
+  factory ExtractedUrlResultData.fromJson(Map<String, dynamic> json) =>
+      ExtractedUrlResultData(
+        title: json['title'] ?? '',
+        link: json['link'] ?? '',
+        thumbnail: json['thumbnail'] ?? '',
+        snippet: json['snippet'] ?? '',
+      );
+
+  Map<String, dynamic> toJson() => {
+        'title': title,
+        'link': link,
+        'thumbnail': thumbnail,
+        'snippet': snippet,
+      };
+
+  @override
+  List<Object> get props => [title, link, thumbnail, snippet];
+}
+
 class ImageResultData extends Equatable {
   final int position;
   final String title;
@@ -455,7 +527,8 @@ class ImageResultData extends Equatable {
     required this.serpapiRelatedContentLink,
   });
 
-  factory ImageResultData.fromJson(Map<String, dynamic> json) => ImageResultData(
+  factory ImageResultData.fromJson(Map<String, dynamic> json) =>
+      ImageResultData(
         position: json['position'] ?? 0,
         title: json['title'] ?? '',
         source: json['source'] ?? '',
@@ -532,7 +605,7 @@ class InfluenceData extends Equatable {
       };
 
   @override
-  List<Object> get props => [url, snippet,title, similarity];
+  List<Object> get props => [url, snippet, title, similarity];
 }
 
 class ThreadSessionData extends Equatable {
@@ -556,7 +629,7 @@ class ThreadSessionData extends Equatable {
     return ThreadSessionData(
       id: json['id'] ?? '',
       isIncognito: json['isIncognito'] ?? false,
-      email:json['email'] ?? '',
+      email: json['email'] ?? '',
       results: (json['results'] as List<dynamic>?)
               ?.map((e) => ThreadResultData.fromJson(e))
               .toList() ??
@@ -577,12 +650,148 @@ class ThreadSessionData extends Equatable {
   Map<String, dynamic> toJson() => {
         'id': id,
         'email': email,
-        'isIncognito':isIncognito,
+        'isIncognito': isIncognito,
         'results': results.map((e) => e.toJson()).toList(),
         'createdAt': createdAt,
         'updatedAt': updatedAt,
       };
 
   @override
-  List<Object> get props => [id, email ,isIncognito, results, createdAt, updatedAt];
+  List<Object> get props =>
+      [id, email, isIncognito, results, createdAt, updatedAt];
+}
+
+class LocalResultData extends Equatable {
+  final int position;
+  final String title;
+  final String placeId;
+  final String dataId;
+  final String dataCid;
+  final Map<String, dynamic> gpsCoordinates;
+  final String placeIdSearch;
+  final String providerId;
+  final double rating;
+  final int reviews;
+  final String price;
+  final String type;
+  final List<String> types;
+  final List<String> images;
+  final String typeId;
+  final List<String> typeIds;
+  final String address;
+  final String openState;
+  final String hours;
+  final Map<String, dynamic> operatingHours;
+  final String phone;
+  final String website;
+  final String snippet;
+
+  const LocalResultData({
+    required this.position,
+    required this.title,
+    required this.placeId,
+    required this.dataId,
+    required this.dataCid,
+    required this.gpsCoordinates,
+    required this.placeIdSearch,
+    required this.providerId,
+    required this.rating,
+    required this.reviews,
+    required this.price,
+    required this.type,
+    required this.types,
+    required this.typeId,
+    required this.typeIds,
+    required this.address,
+    required this.openState,
+    required this.hours,
+    required this.operatingHours,
+    required this.phone,
+    required this.website,
+    required this.snippet,
+    required this.images,
+  });
+
+  factory LocalResultData.fromJson(Map<String, dynamic> json) =>
+      LocalResultData(
+        position: json['position'] ?? 0,
+        title: json['title'] ?? '',
+        placeId: json['place_id'] ?? '',
+        dataId: json['data_id'] ?? '',
+        dataCid: json['data_cid'] ?? '',
+        gpsCoordinates: json['gps_coordinates'] ?? {},
+        placeIdSearch: json['place_id_search'] ?? '',
+        providerId: json['provider_id'] ?? '',
+        rating: (json['rating'] is int)
+            ? (json['rating'] as int).toDouble()
+            : (json['rating'] ?? 0.0),
+        reviews: json['reviews'] ?? 0,
+        price: json['price'] ?? '',
+        type: json['type'] ?? '',
+        types: json['types'] != null ? List<String>.from(json['types']) : [],
+        images: json['images'] != null ? List<String>.from(json['images']) : [],
+        typeId: json['type_id'] ?? '',
+        typeIds:
+            json['type_ids'] != null ? List<String>.from(json['type_ids']) : [],
+        address: json['address'] ?? '',
+        openState: json['open_state'] ?? '',
+        hours: json['hours'] ?? '',
+        operatingHours: json['operating_hours'] ?? {},
+        phone: json['phone'] ?? '',
+        website: json['website'] ?? '',
+        snippet: json['snippet'] ?? '',
+      );
+
+  Map<String, dynamic> toJson() => {
+        'position': position,
+        'title': title,
+        'place_id': placeId,
+        'data_id': dataId,
+        'data_cid': dataCid,
+        'gps_coordinates': gpsCoordinates,
+        'place_id_search': placeIdSearch,
+        'provider_id': providerId,
+        'rating': rating,
+        'reviews': reviews,
+        'price': price,
+        'type': type,
+        'types': types,
+        'images': images,
+        'type_id': typeId,
+        'type_ids': typeIds,
+        'address': address,
+        'open_state': openState,
+        'hours': hours,
+        'operating_hours': operatingHours,
+        'phone': phone,
+        'website': website,
+        'snippet': snippet,
+      };
+
+  @override
+  List<Object> get props => [
+        position,
+        title,
+        placeId,
+        dataId,
+        dataCid,
+        gpsCoordinates,
+        placeIdSearch,
+        providerId,
+        rating,
+        reviews,
+        price,
+        type,
+        types,
+        images,
+        typeId,
+        typeIds,
+        address,
+        openState,
+        hours,
+        operatingHours,
+        phone,
+        website,
+        snippet,
+      ];
 }

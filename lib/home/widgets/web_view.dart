@@ -1,15 +1,14 @@
-import 'dart:convert';
-
 import 'package:bavi/home/view/home_page.dart';
 import 'package:bavi/models/ad_blockers/yt_ad_blocker.dart';
 import 'package:bavi/models/ad_blockers/gen_ad_blocker.dart';
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:icons_plus/icons_plus.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:flutter/services.dart';
 
 import 'dart:typed_data';
 import 'dart:io';
@@ -24,6 +23,7 @@ class WebViewPage extends StatefulWidget {
   final String? tabId;
   final bool? isInitial;
   final bool? isIncognito;
+  final bool showAppBar;
 
   const WebViewPage(
       {required this.url,
@@ -31,6 +31,7 @@ class WebViewPage extends StatefulWidget {
       this.tabId,
       this.isInitial,
       this.isIncognito,
+      this.showAppBar = true,
       super.key});
 
   @override
@@ -47,9 +48,8 @@ class _WebViewPageState extends State<WebViewPage> {
   String? _currentTabId;
 
   // Add these to your State class
-  String? _currentUrl;
-  bool _isUserInitiated = false;
   DateTime? _lastUserInteraction;
+  bool _canGoForward = false;
 
   @override
   void initState() {
@@ -62,10 +62,10 @@ class _WebViewPageState extends State<WebViewPage> {
           color: const Color(0xFFDFFF00)),
       onRefresh: () async {
         await _controller.reload();
-        final url = await _controller.getUrl();
-        if (widget.isIncognito != true) {
-          await _saveTabWithScreenshot(url?.toString() ?? widget.url);
-        }
+        //final url = await _controller.getUrl();
+        // if (widget.isIncognito != true) {
+        //   await _saveTabWithScreenshot(url?.toString() ?? widget.url);
+        // }
         _pullToRefreshController.endRefreshing();
       },
     );
@@ -97,134 +97,275 @@ class _WebViewPageState extends State<WebViewPage> {
   Widget build(BuildContext context) {
     return SafeArea(
       child: Scaffold(
-        appBar: AppBar(
-          titleSpacing: 0,
-          backgroundColor: Colors.white,
-          surfaceTintColor: Colors.white,
-          elevation: 4,
-          shadowColor: Colors.black.withOpacity(0.2),
-          leadingWidth: 40,
-          centerTitle: true,
-          //state.status == HomePageStatus.idle ? true : false,
-          leading: Padding(
-            padding: const EdgeInsets.only(left: 0),
-            child: InkWell(
-              onTap: () {
-                if (widget.isInitial == null || widget.isInitial == false) {
-                  Navigator.pop(context);
-                } else {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (BuildContext context) => const HomePage(),
-                    ),
-                    //ModalRoute.withName('/home'),
-                  );
-                }
-              },
-              child: Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  //color: Color(0xFFDFFF00),
-                  shape: BoxShape.circle,
-                  //border: Border.all()
-                ),
-                padding: EdgeInsets.fromLTRB(1, 0, 2, 0),
-                child: Center(
-                  child: Icon(
-                    Icons.arrow_back_ios,
-                    color: Colors.black,
-                    size: 20,
-                  ),
-                ),
-              ),
-            ),
-          ),
+        bottomSheet: Container(
+          //height: 240,
+          //constraints: BoxConstraints(maxHeight: 100, minHeight: 100),
 
-          title: Text(
-            getDomainFromUrl(widget.url) ?? 'Web View',
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.black,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF2F2F2),
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(24),
+              topRight: Radius.circular(24),
             ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 10,
+                offset: const Offset(0, -2),
+              ),
+            ],
           ),
-          actions: [
-            Padding(
-              padding: const EdgeInsets.only(right: 6),
-              child: InkWell(
-                onTap: () {
-                  String? currentUrl = widget.url;
-                  if (currentUrl != "") {
-                    Share.share(currentUrl);
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Unable to share link'),
-                        duration: Duration(seconds: 2),
+          width: MediaQuery.of(context).size.width,
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              // Top Navigation Bar
+              Container(
+                height: 52,
+                decoration: BoxDecoration(
+                  color: Colors.grey.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(
+                        Icons.arrow_back_ios_new,
+                        size: 18,
+                        color: Colors.black87,
                       ),
-                    );
-                  }
-                },
-                child: Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                      // borderRadius: BorderRadius.circular(18),
-                      // color: Color(0xFFDFFF00),
-                      // border: Border.all()
-                      ),
-                  child: Center(
-                    child: Icon(
-                      Iconsax.send_2_outline,
-                      color: Colors.black,
-                      size: 20,
+                      onPressed: () async {
+                        _lastUserInteraction = DateTime.now();
+                        if (await _controller.canGoBack()) {
+                          await _controller.goBack();
+                          await _updateNavigationState();
+                        } else {
+                          // No history - close the WebView page
+                          Navigator.pop(context);
+                        }
+                      },
                     ),
-                  ),
+                    IconButton(
+                      icon: Icon(
+                        Icons.arrow_forward_ios,
+                        size: 18,
+                        color: _canGoForward
+                            ? Colors.black87
+                            : Colors.grey.withOpacity(0.3),
+                      ),
+                      onPressed: _canGoForward
+                          ? () async {
+                              _lastUserInteraction = DateTime.now();
+                              await _controller.goForward();
+                              await _updateNavigationState();
+                            }
+                          : null,
+                    ),
+                    Expanded(
+                      child: Center(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                getDomainFromUrl(widget.url) ?? 'website.com',
+                                style: const TextStyle(
+                                  color: Colors.black87,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Iconsax.link_2_outline,
+                          size: 20, color: Colors.black87),
+                      onPressed: () async {
+                        final currentUrl = await _controller.getUrl();
+                        final urlToCopy = currentUrl?.toString() ?? widget.url;
+                        Clipboard.setData(ClipboardData(text: urlToCopy));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text('Link copied'),
+                              duration: Duration(seconds: 1)),
+                        );
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Iconsax.refresh_outline,
+                          size: 20, color: Colors.black87),
+                      onPressed: () async {
+                        await _controller.reload();
+                        await _updateNavigationState();
+                      },
+                    ),
+                  ],
                 ),
               ),
-            ),
-            // Padding(
-            //   padding: const EdgeInsets.only(right: 6),
-            //   child: InkWell(
-            //     onTap: () async {
-            //       setState(() {
-            //         isLoading = true;
-            //         progress = 0.0;
-            //       });
-            //       try {
-            //         await _controller.reload();
-            //         final url = await _controller.getUrl();
-            //         await _saveTabWithScreenshot(url?.toString() ?? widget.url);
-            //       } catch (e) {
-            //         debugPrint('❌ Error refreshing: $e');
-            //       } finally {
-            //         setState(() {
-            //           isLoading = false;
-            //         });
-            //       }
-            //     },
-            //     child: Container(
-            //       width: 32,
-            //       height: 32,
-            //       decoration: BoxDecoration(
-            //           // borderRadius: BorderRadius.circular(18),
-            //           // color: Color(0xFFDFFF00),
-            //           // border: Border.all()
-            //           ),
-            //       child: Center(
-            //         child: Icon(
-            //           Iconsax.refresh_outline,
-            //           color: Colors.black,
-            //           size: 20,
-            //         ),
-            //       ),
-            //     ),
-            //   ),
-            // ),
-          ],
+              // const Spacer(),
+              // // Action Buttons Grid
+              // Row(
+              //   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              //   crossAxisAlignment: CrossAxisAlignment.start,
+              //   children: [
+              //     _buildActionButton(
+              //         Iconsax.search_normal_1_outline, "Find on Page", () {
+              //       // TODO: Implement find on page
+              //     }),
+              //     _buildActionButton(Iconsax.note_text_outline, "Summarize",
+              //         () {
+              //       // TODO: Implement summarize
+              //     }),
+              //     _buildActionButton(Iconsax.paintbucket_outline, "Pin", () {
+              //       // TODO: Implement pin
+              //     }),
+              //     _buildActionButton(Iconsax.export_outline, "Share", () {
+              //       Share.share(widget.url);
+              //     }),
+              //   ],
+              // ),
+              //const SizedBox(height: 8),
+            ],
+          ),
         ),
+        // appBar: widget.showAppBar
+        //     ? AppBar(
+        //         titleSpacing: 0,
+        //         backgroundColor: Colors.white,
+        //         surfaceTintColor: Colors.white,
+        //         elevation: 4,
+        //         shadowColor: Colors.black.withOpacity(0.2),
+        //         leadingWidth: 40,
+        //         centerTitle: true,
+        //         //state.status == HomePageStatus.idle ? true : false,
+        //         leading: Padding(
+        //           padding: const EdgeInsets.only(left: 0),
+        //           child: InkWell(
+        //             onTap: () {
+        //               if (widget.isInitial == null ||
+        //                   widget.isInitial == false) {
+        //                 Navigator.pop(context);
+        //               } else {
+        //                 Navigator.push(
+        //                   context,
+        //                   MaterialPageRoute<void>(
+        //                     builder: (BuildContext context) => const HomePage(),
+        //                   ),
+        //                   //ModalRoute.withName('/home'),
+        //                 );
+        //               }
+        //             },
+        //             child: Container(
+        //               width: 32,
+        //               height: 32,
+        //               decoration: BoxDecoration(
+        //                 //color: Color(0xFFDFFF00),
+        //                 shape: BoxShape.circle,
+        //                 //border: Border.all()
+        //               ),
+        //               padding: EdgeInsets.fromLTRB(1, 0, 2, 0),
+        //               child: Center(
+        //                 child: Icon(
+        //                   Icons.arrow_back_ios,
+        //                   color: Colors.black,
+        //                   size: 20,
+        //                 ),
+        //               ),
+        //             ),
+        //           ),
+        //         ),
+
+        //         title: Text(
+        //           getDomainFromUrl(widget.url) ?? 'Web View',
+        //           style: const TextStyle(
+        //             fontSize: 16,
+        //             fontWeight: FontWeight.bold,
+        //             color: Colors.black,
+        //           ),
+        //         ),
+        //         actions: [
+        //           Padding(
+        //             padding: const EdgeInsets.only(right: 6),
+        //             child: InkWell(
+        //               onTap: () {
+        //                 String? currentUrl = widget.url;
+        //                 if (currentUrl != "") {
+        //                   Share.share(currentUrl);
+        //                 } else {
+        //                   ScaffoldMessenger.of(context).showSnackBar(
+        //                     const SnackBar(
+        //                       content: Text('Unable to share link'),
+        //                       duration: Duration(seconds: 2),
+        //                     ),
+        //                   );
+        //                 }
+        //               },
+        //               child: Container(
+        //                 width: 32,
+        //                 height: 32,
+        //                 decoration: BoxDecoration(
+        //                     // borderRadius: BorderRadius.circular(18),
+        //                     // color: Color(0xFFDFFF00),
+        //                     // border: Border.all()
+        //                     ),
+        //                 child: Center(
+        //                   child: Icon(
+        //                     Iconsax.send_2_outline,
+        //                     color: Colors.black,
+        //                     size: 20,
+        //                   ),
+        //                 ),
+        //               ),
+        //             ),
+        //           ),
+        //           // Padding(
+        //           //   padding: const EdgeInsets.only(right: 6),
+        //           //   child: InkWell(
+        //           //     onTap: () async {
+        //           //       setState(() {
+        //           //         isLoading = true;
+        //           //         progress = 0.0;
+        //           //       });
+        //           //       try {
+        //           //         await _controller.reload();
+        //           //         final url = await _controller.getUrl();
+        //           //         await _saveTabWithScreenshot(url?.toString() ?? widget.url);
+        //           //       } catch (e) {
+        //           //         debugPrint('❌ Error refreshing: $e');
+        //           //       } finally {
+        //           //         setState(() {
+        //           //           isLoading = false;
+        //           //         });
+        //           //       }
+        //           //     },
+        //           //     child: Container(
+        //           //       width: 32,
+        //           //       height: 32,
+        //           //       decoration: BoxDecoration(
+        //           //           // borderRadius: BorderRadius.circular(18),
+        //           //           // color: Color(0xFFDFFF00),
+        //           //           // border: Border.all()
+        //           //           ),
+        //           //       child: Center(
+        //           //         child: Icon(
+        //           //           Iconsax.refresh_outline,
+        //           //           color: Colors.black,
+        //           //           size: 20,
+        //           //         ),
+        //           //       ),
+        //           //     ),
+        //           //   ),
+        //           // ),
+        //         ],
+        //       )
+        //     : null,
         body: Stack(
           children: [
             //BasicBrowserView(url: widget.url),
@@ -275,35 +416,6 @@ class _WebViewPageState extends State<WebViewPage> {
                 setState(() {
                   isLoading = true;
                 });
-
-                // Only block if it's NOT user initiated and URL changed
-                if (_currentUrl != null &&
-                    url.toString() != _currentUrl &&
-                    !_isUserInitiated &&
-                    _lastUserInteraction != null) {
-                  var timeSinceInteraction =
-                      DateTime.now().difference(_lastUserInteraction!);
-                  // If more than 2 seconds since last tap, it's likely automatic
-                  if (timeSinceInteraction.inSeconds > 2) {
-                    print(
-                        '⚠️ Detected automatic redirect from $_currentUrl to ${url.toString()}');
-                    controller.goBack();
-                    setState(() {
-                      isLoading = false;
-                    });
-
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Blocked automatic redirect'),
-                        duration: Duration(seconds: 1),
-                      ),
-                    );
-                    return;
-                  }
-                }
-
-                _currentUrl = url.toString();
-                _isUserInitiated = false; // Reset after navigation starts
               },
               onLoadStop: (controller, url) async {
                 setState(() {
@@ -311,7 +423,6 @@ class _WebViewPageState extends State<WebViewPage> {
                 });
                 _pullToRefreshController.endRefreshing();
 
-                _currentUrl = url.toString();
                 final urlString = url.toString();
 
                 try {
@@ -405,13 +516,16 @@ class _WebViewPageState extends State<WebViewPage> {
                   print('Error applying filters: $e');
                 }
 
-                // Screenshot logic
-                _saveTimer?.cancel();
-                _saveTimer = Timer(const Duration(seconds: 1), () async {
-                  if (widget.isIncognito != true) {
-                    await _saveTabWithScreenshot(url.toString());
-                  }
-                });
+                // // Screenshot logic
+                // _saveTimer?.cancel();
+                // _saveTimer = Timer(const Duration(seconds: 1), () async {
+                //   if (widget.isIncognito != true) {
+                //     await _saveTabWithScreenshot(url.toString());
+                //   }
+                // });
+
+                // Update navigation state
+                await _updateNavigationState();
               },
               onProgressChanged: (controller, progressValue) {
                 setState(() {
@@ -451,60 +565,46 @@ class _WebViewPageState extends State<WebViewPage> {
                     return NavigationActionPolicy.ALLOW;
                   }
 
-                  // User clicked a link - open in new WebView
+                  // User clicked a link - allow navigation in same page
                   if (navigationAction.navigationType ==
                           NavigationType.LINK_ACTIVATED ||
                       navigationAction.hasGesture == true) {
-                    print('✅ User clicked link - opening in new page');
-                    _isUserInitiated = true;
+                    print('✅ User clicked link - navigating in same page');
                     _lastUserInteraction = DateTime.now();
-
-                    // Open in new WebView page
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            WebViewPage(url: url), // Your WebView widget
-                      ),
-                    );
-
-                    return NavigationActionPolicy
-                        .CANCEL; // Don't navigate in current page
+                    return NavigationActionPolicy.ALLOW;
                   }
 
-                  // Form submissions with user gesture
+                  // Form submissions with user gesture - allow in same page
                   if (navigationAction.navigationType ==
                       NavigationType.FORM_SUBMITTED) {
                     if (navigationAction.hasGesture == true) {
-                      print('✅ Form submission - opening in new page');
-                      _isUserInitiated = true;
+                      print('✅ Form submission - navigating in same page');
                       _lastUserInteraction = DateTime.now();
-
-                      // Open in new WebView page
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => WebViewPage(url: url),
-                        ),
-                      );
-
-                      return NavigationActionPolicy.CANCEL;
+                      return NavigationActionPolicy.ALLOW;
                     }
                   }
 
                   // Block automatic navigation (OTHER type without gesture)
                   if (navigationAction.navigationType == NavigationType.OTHER &&
                       navigationAction.hasGesture != true) {
-                    print('❌ Blocked automatic redirect to: $url');
+                    // Check if this is likely an automatic redirect
+                    if (_lastUserInteraction != null) {
+                      var timeSinceInteraction =
+                          DateTime.now().difference(_lastUserInteraction!);
+                      // If more than 2 seconds since last interaction, it's likely automatic
+                      if (timeSinceInteraction.inSeconds > 2) {
+                        print('❌ Blocked automatic redirect to: $url');
 
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Blocked automatic redirect'),
-                        duration: Duration(seconds: 1),
-                      ),
-                    );
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Blocked automatic redirect'),
+                            duration: Duration(seconds: 1),
+                          ),
+                        );
 
-                    return NavigationActionPolicy.CANCEL;
+                        return NavigationActionPolicy.CANCEL;
+                      }
+                    }
                   }
 
                   // Allow back/forward navigation
@@ -623,6 +723,48 @@ class _WebViewPageState extends State<WebViewPage> {
       }
     } catch (e) {
       debugPrint('❌ Error saving tab: $e');
+    }
+  }
+
+  Widget _buildActionButton(IconData icon, String label, VoidCallback onTap) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: Colors.grey.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Center(
+              child: Icon(icon, color: Colors.black87, size: 26),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11,
+            color: Colors.black54,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _updateNavigationState() async {
+    final canGoForward = await _controller.canGoForward();
+
+    if (mounted) {
+      setState(() {
+        _canGoForward = canGoForward;
+      });
     }
   }
 

@@ -161,32 +161,34 @@ class _TabsViewPageState extends State<TabsViewPage> {
           ],
         ),
         backgroundColor: Colors.white,
-        body: 
-   _tabsFromDb.isEmpty?Center(
-    child: Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(Icons.tab_outlined, size: 70, color: Colors.grey.shade400),
-        const SizedBox(height: 12),
-        const Text(
-          'No open tabs',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-            color: Colors.black54,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          'Open a new tab to start browsing',
-          style: TextStyle(
-            fontSize: 14,
-            color: Colors.grey.shade500,
-          ),
-        ),
-      ],
-    ),
-  ):_buildTabsGridView(),
+        body: _tabsFromDb.isEmpty
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.tab_outlined,
+                        size: 70, color: Colors.grey.shade400),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'No open tabs',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black54,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Open a new tab to start browsing',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade500,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            : _buildTabsGridView(),
       ),
     );
   }
@@ -204,114 +206,138 @@ class _TabsViewPageState extends State<TabsViewPage> {
         ),
         itemBuilder: (context, index) {
           final tab = _tabsFromDb[index];
-          return AnimatedSwitcher(
-            duration: const Duration(milliseconds: 300),
-            transitionBuilder: (child, animation) {
-              return FadeTransition(
-                  opacity: animation,
-                  child: ScaleTransition(scale: animation, child: child));
-            },
-            child: AspectRatio(
-              key: UniqueKey(),
-              aspectRatio: 0.7,
-              child: Container(
-                clipBehavior: Clip.antiAlias,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  color: Colors.white,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Container(
-                      color: const Color(0xFF8A2BE2),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 6),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              tab.title ?? 'New Tab',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                          GestureDetector(
-                            onTap: () async {
-                              setState(() => _tabsFromDb.removeAt(index));
-                              await db.deleteTab(tab.id);
-                            },
-                            child: const CircleAvatar(
-                              radius: 8,
-                              backgroundColor: Colors.transparent,
-                              child: Icon(Icons.close,
-                                  size: 16, color: Colors.white),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute<void>(
-                              builder: (BuildContext context) => WebViewPage(
-                                url: tab.url,
-                                title: tab.title,
-                                tabId: tab.id,
-                              ),
-                            ),
-                          );
-                        },
-                        child: Container(
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                                color: const Color(0xFF8A2BE2), width: 3),
-                            borderRadius: const BorderRadius.vertical(
-                              bottom: Radius.circular(12),
-                            ),
-                            color: Colors.grey[200],
-                          ),
-                          child: tab.imagePath == null
-                              ? const Center(
-                                  child: Icon(Icons.language, size: 40))
-                              : ClipRRect(
-                                  borderRadius: const BorderRadius.vertical(
-                                    bottom: Radius.circular(12),
-                                  ),
-                                  child: Image.file(
-                                    File(tab.imagePath!),
-                                    fit: BoxFit.cover,
-                                    width: double.infinity,
-                                    height: double.infinity,
-                                  ),
-                                ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
+          return _buildTabCard(tab, index);
         },
       ),
     );
+  }
+
+  final Map<String, bool> _deletingTabs = {};
+
+  Widget _buildTabCard(Tab tab, int index) {
+    final isDeleting = _deletingTabs[tab.id] ?? false;
+
+    return AnimatedScale(
+      scale: isDeleting ? 0.8 : 1.0,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeInOut,
+      child: AnimatedOpacity(
+        opacity: isDeleting ? 0.0 : 1.0,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeInOut,
+        child: AspectRatio(
+          aspectRatio: 0.7,
+          child: Container(
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  color: const Color(0xFF8A2BE2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          tab.title ?? 'New Tab',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () => _deleteTabWithAnimation(index, tab),
+                        child: const CircleAvatar(
+                          radius: 8,
+                          backgroundColor: Colors.transparent,
+                          child:
+                              Icon(Icons.close, size: 16, color: Colors.white),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (BuildContext context) => WebViewPage(
+                            url: tab.url,
+                            title: tab.title,
+                            tabId: tab.id,
+                          ),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                            color: const Color(0xFF8A2BE2), width: 3),
+                        borderRadius: const BorderRadius.vertical(
+                          bottom: Radius.circular(12),
+                        ),
+                        color: Colors.grey[200],
+                      ),
+                      child: tab.imagePath == null
+                          ? const Center(child: Icon(Icons.language, size: 40))
+                          : ClipRRect(
+                              borderRadius: const BorderRadius.vertical(
+                                bottom: Radius.circular(12),
+                              ),
+                              child: Image.file(
+                                File(tab.imagePath!),
+                                fit: BoxFit.cover,
+                                width: double.infinity,
+                                height: double.infinity,
+                              ),
+                            ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteTabWithAnimation(int index, Tab tab) async {
+    // Mark tab as deleting to trigger animation
+    setState(() {
+      _deletingTabs[tab.id] = true;
+    });
+
+    // Wait for animation to complete
+    await Future.delayed(const Duration(milliseconds: 250));
+
+    // Remove from list and clean up
+    setState(() {
+      _tabsFromDb.removeAt(index);
+      _deletingTabs.remove(tab.id);
+    });
+
+    // Delete from database
+    await db.deleteTab(tab.id);
   }
 
   Widget _buildTabTile(Tab tab, int index) {

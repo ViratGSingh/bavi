@@ -1,5 +1,8 @@
 part of 'home_bloc.dart';
 
+// // ignore: depend_on_referenced_packages
+// import 'package:image_picker/image_picker.dart';
+
 enum NavBarOption { home, search, player, profile }
 
 enum HomePageStatus {
@@ -24,13 +27,23 @@ enum HomePageStatus {
 
 enum HomeReplyStatus { loading, success, failure, idle }
 
+enum HomeSearchType { nsfw, general, shopping, map, extractUrl, portal }
+
+enum HomeActionType { general, agent, extractUrl }
+
 enum HomeSavedStatus { fetched, idle }
+
+enum HomeImageStatus { selected, unselected }
 
 enum HomeHistoryStatus { loading, idle }
 
 enum HomeEditStatus { loading, idle, selected }
 
 enum HomeProfileStatus { loading, success, failure, idle }
+
+enum HomeExtractUrlStatus { loading, success, failure, idle }
+
+enum HomeModel { deepseek, gemini, claude, openAI }
 
 final class HomeState extends Equatable {
   HomeState({
@@ -45,12 +58,20 @@ final class HomeState extends Equatable {
     this.loadingIndex = 0,
     this.editIndex = -1,
     this.backgroundLoading = true,
-    this.isSearchMode = true,
+    this.isSearchMode = false,
     this.isIncognito = false,
     this.threadHistory = const [],
     this.editQuery = "",
     ThreadSessionData? threadData,
     ThreadSessionData? cacheThreadData,
+    this.selectedImage,
+    this.imageStatus = HomeImageStatus.unselected,
+    this.uploadedImageUrl,
+    this.isAnalyzingImage = false,
+    this.selectedModel = HomeModel.deepseek,
+    this.searchType = HomeSearchType.general,
+    this.actionType = HomeActionType.general,
+    this.extractUrlStatus = HomeExtractUrlStatus.idle,
   })  : userData = userData ??
             UserProfileInfo(
               email: "NA",
@@ -70,7 +91,7 @@ final class HomeState extends Equatable {
               createdAt: Timestamp.now(),
               updatedAt: Timestamp.now(),
             ),
-          cacheThreadData = cacheThreadData ??
+        cacheThreadData = cacheThreadData ??
             ThreadSessionData(
               id: "",
               email: "",
@@ -78,8 +99,7 @@ final class HomeState extends Equatable {
               isIncognito: false,
               createdAt: Timestamp.now(),
               updatedAt: Timestamp.now(),
-            );   
-            
+            );
 
   final String sessionId;
   final String editQuery;
@@ -98,6 +118,14 @@ final class HomeState extends Equatable {
   final bool backgroundLoading;
   final int loadingIndex;
   final int editIndex;
+  final XFile? selectedImage;
+  final HomeImageStatus imageStatus;
+  final String? uploadedImageUrl;
+  final bool isAnalyzingImage;
+  final HomeModel selectedModel;
+  final HomeSearchType searchType;
+  final HomeActionType actionType;
+  final HomeExtractUrlStatus extractUrlStatus;
 
   HomeState copyWith({
     String? sessionId,
@@ -117,6 +145,14 @@ final class HomeState extends Equatable {
     List<ThreadSessionData>? threadHistory,
     ThreadSessionData? threadData,
     ThreadSessionData? cacheThreadData,
+    XFile? selectedImage,
+    HomeImageStatus? imageStatus,
+    String? uploadedImageUrl,
+    bool? isAnalyzingImage,
+    HomeModel? selectedModel,
+    HomeSearchType? searchType,
+    HomeActionType? actionType,
+    HomeExtractUrlStatus? extractUrlStatus,
   }) {
     return HomeState(
       editQuery: editQuery ?? this.editQuery,
@@ -136,6 +172,14 @@ final class HomeState extends Equatable {
       editStatus: editStatus ?? this.editStatus,
       historyStatus: historyStatus ?? this.historyStatus,
       profileStatus: profileStatus ?? this.profileStatus,
+      selectedImage: selectedImage ?? this.selectedImage,
+      imageStatus: imageStatus ?? this.imageStatus,
+      uploadedImageUrl: uploadedImageUrl ?? this.uploadedImageUrl,
+      isAnalyzingImage: isAnalyzingImage ?? this.isAnalyzingImage,
+      selectedModel: selectedModel ?? this.selectedModel,
+      searchType: searchType ?? this.searchType,
+      actionType: actionType ?? this.actionType,
+      extractUrlStatus: extractUrlStatus ?? this.extractUrlStatus,
     );
   }
 
@@ -157,5 +201,13 @@ final class HomeState extends Equatable {
         userData,
         isSearchMode,
         isIncognito,
+        selectedImage,
+        imageStatus,
+        uploadedImageUrl,
+        isAnalyzingImage,
+        selectedModel,
+        searchType,
+        actionType,
+        extractUrlStatus,
       ];
 }

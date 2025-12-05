@@ -48,15 +48,15 @@ class _ChatAppDrawerState extends State<ChatAppDrawer> {
             children: [
               Row(
                 children: [
-                  CircularAvatarWithShimmer(imageUrl: widget.profilePicUrl),
-                  SizedBox(width: 10),
+                  // CircularAvatarWithShimmer(imageUrl: widget.profilePicUrl),
+                  // SizedBox(width: 10),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Container(
                         width: MediaQuery.of(context).size.width / 2,
                         child: Text(
-                          widget.fullname,
+                          "History",
                           overflow: TextOverflow.ellipsis,
                           maxLines: 1,
                           style: TextStyle(
@@ -67,25 +67,25 @@ class _ChatAppDrawerState extends State<ChatAppDrawer> {
                           ),
                         ),
                       ),
-                      Container(
-                        width: MediaQuery.of(context).size.width / 2,
-                        child: Text(
-                          widget.email!=""?widget.email:"Hi There!",
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                          style: TextStyle(
-                            color: Colors.black,
-                            fontSize: 12,
-                            fontFamily: 'Poppins',
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
+                      // Container(
+                      //   width: MediaQuery.of(context).size.width / 2,
+                      //   child: Text(
+                      //     widget.email != "" ? widget.email : "Hi There!",
+                      //     overflow: TextOverflow.ellipsis,
+                      //     maxLines: 1,
+                      //     style: TextStyle(
+                      //       color: Colors.black,
+                      //       fontSize: 12,
+                      //       fontFamily: 'Poppins',
+                      //       fontWeight: FontWeight.w500,
+                      //     ),
+                      //   ),
+                      // ),
                     ],
                   )
                 ],
               ),
-              SizedBox(height: 24),
+              SizedBox(height: 14),
               // Container(
               //   decoration: BoxDecoration(
               //     color: Color(0xFFf3eafc),
@@ -196,19 +196,22 @@ class _ChatAppDrawerState extends State<ChatAppDrawer> {
                                   baseColor: Colors.grey.shade300,
                                   highlightColor: Colors.grey.shade100,
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(vertical: 0),
+                                    padding:
+                                        const EdgeInsets.symmetric(vertical: 0),
                                     decoration: BoxDecoration(
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Container(
                                           width: double.infinity,
                                           height: 18,
                                           decoration: BoxDecoration(
                                             color: Colors.white,
-                                            borderRadius: BorderRadius.circular(4),
+                                            borderRadius:
+                                                BorderRadius.circular(4),
                                           ),
                                         ),
                                         SizedBox(height: 8),
@@ -217,13 +220,16 @@ class _ChatAppDrawerState extends State<ChatAppDrawer> {
                                           height: 14,
                                           decoration: BoxDecoration(
                                             color: Colors.white,
-                                            borderRadius: BorderRadius.circular(4),
+                                            borderRadius:
+                                                BorderRadius.circular(4),
                                           ),
                                         ),
                                         Padding(
-                                          padding: const EdgeInsets.only(top: 10),
+                                          padding:
+                                              const EdgeInsets.only(top: 10),
                                           child: Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
                                             children: [
                                               Row(
                                                 children: [
@@ -232,7 +238,9 @@ class _ChatAppDrawerState extends State<ChatAppDrawer> {
                                                     height: 12,
                                                     decoration: BoxDecoration(
                                                       color: Colors.white,
-                                                      borderRadius: BorderRadius.circular(4),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              4),
                                                     ),
                                                   ),
                                                 ],
@@ -244,7 +252,9 @@ class _ChatAppDrawerState extends State<ChatAppDrawer> {
                                                     height: 12,
                                                     decoration: BoxDecoration(
                                                       color: Colors.white,
-                                                      borderRadius: BorderRadius.circular(4),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              4),
                                                     ),
                                                   ),
                                                 ],
@@ -267,20 +277,22 @@ class _ChatAppDrawerState extends State<ChatAppDrawer> {
                         children: [
                           ...widget.sessions.map((data) {
                             return InkWell(
-                              onTap: ()=>widget.onSessionTap(data),
+                              onTap: () => widget.onSessionTap(data),
                               child: Column(
                                 children: [
                                   Padding(
-                                    padding: const EdgeInsets.fromLTRB(0, 5, 0, 5),
+                                    padding:
+                                        const EdgeInsets.fromLTRB(0, 5, 0, 5),
                                     child: Container(
-                                      padding:
-                                          const EdgeInsets.symmetric(vertical: 0),
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 0),
                                       decoration: BoxDecoration(
                                         borderRadius: BorderRadius.circular(8),
                                       ),
                                       //width: MediaQuery.of(context).size.width / 3,
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Text(
                                             data.results.first.userQuery,
@@ -303,24 +315,30 @@ class _ChatAppDrawerState extends State<ChatAppDrawer> {
                                           //   ),
                                           // ),
                                           Padding(
-                                            padding: const EdgeInsets.only(top: 10),
+                                            padding:
+                                                const EdgeInsets.only(top: 10),
                                             child: Row(
                                               mainAxisAlignment:
-                                                  MainAxisAlignment.spaceBetween,
+                                                  MainAxisAlignment
+                                                      .spaceBetween,
                                               children: [
                                                 Row(
                                                   children: [
                                                     Icon(Iconsax.clock_outline,
-                                                        size: 14, color: Colors.grey),
+                                                        size: 14,
+                                                        color: Colors.grey),
                                                     SizedBox(width: 4),
                                                     Text(
-                                                      DateFormat("MMM d'' yy h:mm a")
-                                                          .format(data.createdAt.toDate()),
+                                                      DateFormat(
+                                                              "MMM d'' yy h:mm a")
+                                                          .format(data.createdAt
+                                                              .toDate()),
                                                       style: TextStyle(
                                                         fontSize: 12,
                                                         color: Colors.grey,
                                                         fontFamily: 'Poppins',
-                                                        fontWeight: FontWeight.w400,
+                                                        fontWeight:
+                                                            FontWeight.w400,
                                                       ),
                                                     ),
                                                   ],
@@ -328,7 +346,8 @@ class _ChatAppDrawerState extends State<ChatAppDrawer> {
                                                 Row(
                                                   children: [
                                                     Icon(Iconsax.link_2_outline,
-                                                        size: 14, color: Colors.grey),
+                                                        size: 14,
+                                                        color: Colors.grey),
                                                     SizedBox(width: 4),
                                                     Text(
                                                       "${data.results.length}",
@@ -336,7 +355,8 @@ class _ChatAppDrawerState extends State<ChatAppDrawer> {
                                                         fontSize: 12,
                                                         color: Colors.grey,
                                                         fontFamily: 'Poppins',
-                                                        fontWeight: FontWeight.w400,
+                                                        fontWeight:
+                                                            FontWeight.w400,
                                                       ),
                                                     ),
                                                   ],
@@ -358,81 +378,81 @@ class _ChatAppDrawerState extends State<ChatAppDrawer> {
                         ],
                       ),
               ),
-              const SizedBox(height: 24),
-              InkWell(
-                onTap: widget.onLogin,
-                child: widget.fullname == "Guest"
-                    ? Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(Iconsax.login_1_bold,
-                              color: Colors.black, size: 24),
-                          SizedBox(width: 15),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                "Login",
-                                style: TextStyle(
-                                  color: Colors.black,
-                                  fontSize: 16,
-                                  fontFamily: 'Poppins',
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              SizedBox(height: 5),
-                              Container(
-                                width: MediaQuery.of(context).size.width / 2,
-                                child: Text(
-                                  "Login to your account to access your search history",
-                                  style: TextStyle(
-                                    color: Colors.black,
-                                    fontSize: 12,
-                                    fontFamily: 'Poppins',
-                                    fontWeight: FontWeight.w400,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          )
-                        ],
-                      )
-                    : Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(Iconsax.login_1_bold,
-                              color: Colors.black, size: 24),
-                          SizedBox(width: 15),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                "Logout",
-                                style: TextStyle(
-                                  color: Colors.black,
-                                  fontSize: 16,
-                                  fontFamily: 'Poppins',
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              SizedBox(height: 5),
-                              Container(
-                                width: MediaQuery.of(context).size.width / 2,
-                                child: Text(
-                                  "Logout to create or login to another account of yours",
-                                  style: TextStyle(
-                                    color: Colors.black,
-                                    fontSize: 12,
-                                    fontFamily: 'Poppins',
-                                    fontWeight: FontWeight.w400,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          )
-                        ],
-                      ),
-              ),
+              //const SizedBox(height: 14),
+              // InkWell(
+              //   onTap: widget.onLogin,
+              //   child: widget.fullname == "Guest"
+              //       ? Row(
+              //           crossAxisAlignment: CrossAxisAlignment.start,
+              //           children: [
+              //             Icon(Iconsax.login_1_bold,
+              //                 color: Colors.black, size: 24),
+              //             SizedBox(width: 15),
+              //             Column(
+              //               crossAxisAlignment: CrossAxisAlignment.start,
+              //               children: [
+              //                 Text(
+              //                   "Login",
+              //                   style: TextStyle(
+              //                     color: Colors.black,
+              //                     fontSize: 16,
+              //                     fontFamily: 'Poppins',
+              //                     fontWeight: FontWeight.w500,
+              //                   ),
+              //                 ),
+              //                 SizedBox(height: 5),
+              //                 Container(
+              //                   width: MediaQuery.of(context).size.width / 2,
+              //                   child: Text(
+              //                     "Login to your account to access your search history",
+              //                     style: TextStyle(
+              //                       color: Colors.black,
+              //                       fontSize: 12,
+              //                       fontFamily: 'Poppins',
+              //                       fontWeight: FontWeight.w400,
+              //                     ),
+              //                   ),
+              //                 ),
+              //               ],
+              //             )
+              //           ],
+              //         )
+              //       : Row(
+              //           crossAxisAlignment: CrossAxisAlignment.start,
+              //           children: [
+              //             Icon(Iconsax.login_1_bold,
+              //                 color: Colors.black, size: 24),
+              //             SizedBox(width: 15),
+              //             Column(
+              //               crossAxisAlignment: CrossAxisAlignment.start,
+              //               children: [
+              //                 Text(
+              //                   "Logout",
+              //                   style: TextStyle(
+              //                     color: Colors.black,
+              //                     fontSize: 16,
+              //                     fontFamily: 'Poppins',
+              //                     fontWeight: FontWeight.w500,
+              //                   ),
+              //                 ),
+              //                 SizedBox(height: 5),
+              //                 Container(
+              //                   width: MediaQuery.of(context).size.width / 2,
+              //                   child: Text(
+              //                     "Logout to create or login to another account of yours",
+              //                     style: TextStyle(
+              //                       color: Colors.black,
+              //                       fontSize: 12,
+              //                       fontFamily: 'Poppins',
+              //                       fontWeight: FontWeight.w400,
+              //                     ),
+              //                   ),
+              //                 ),
+              //               ],
+              //             )
+              //           ],
+              //         ),
+              // ),
             ],
           ),
         ),

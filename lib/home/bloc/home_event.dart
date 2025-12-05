@@ -1,5 +1,8 @@
 part of 'home_bloc.dart';
 
+// // ignore: depend_on_referenced_packages
+// import 'package:image_picker/image_picker.dart';
+
 @immutable
 sealed class HomeEvent {}
 
@@ -7,7 +10,6 @@ final class HomeNavOptionSelect extends HomeEvent {
   final NavBarOption page;
   HomeNavOptionSelect(this.page);
 }
-
 
 final class HomeAccountSelect extends HomeEvent {
   final ExtractedAccountInfo accountInfo;
@@ -30,6 +32,18 @@ final class HomeNavToReply extends HomeEvent {
   final SearchData searchData;
 
   HomeNavToReply(this.searchData);
+}
+
+//Search
+final class HomeExtractUrlData extends HomeEvent {
+  final String inputUrl;
+  ValueNotifier<String> extractedUrlDescription;
+  ValueNotifier<String> extractedUrlTitle;
+  ValueNotifier<String> extractedUrl;
+  ValueNotifier<String> extractedImageUrl;
+
+  HomeExtractUrlData(this.inputUrl, this.extractedUrlDescription,
+      this.extractedUrlTitle, this.extractedUrl, this.extractedImageUrl);
 }
 
 //Search
@@ -71,6 +85,19 @@ final class HomeSwitchPrivacyType extends HomeEvent {
   HomeSwitchPrivacyType(this.isIncognito);
 }
 
+//Search Type Portal
+final class HomePortalSearch extends HomeEvent {
+  final String query;
+
+  HomePortalSearch(this.query);
+}
+
+//Model Select
+final class HomeModelSelect extends HomeEvent {
+  final HomeModel model;
+  HomeModelSelect(this.model);
+}
+
 //Search Type Switch
 final class HomeGenScreenshot extends HomeEvent {
   final GlobalKey globalKey;
@@ -81,17 +108,92 @@ final class HomeGenScreenshot extends HomeEvent {
 final class HomeGetAnswer extends HomeEvent {
   final String query;
   ValueNotifier<String> streamedText;
+  ValueNotifier<String> extractedUrlDescription;
+  ValueNotifier<String> extractedUrlTitle;
+  ValueNotifier<String> extractedUrl;
+  ValueNotifier<String> extractedImageUrl;
+  final String imageDescription;
+  final ValueNotifier<String> imageDescriptionNotifier;
 
-  HomeGetAnswer(this.query, this.streamedText);
+  HomeGetAnswer(
+      this.query,
+      this.streamedText,
+      this.extractedUrlDescription,
+      this.extractedUrlTitle,
+      this.extractedUrl,
+      this.extractedImageUrl,
+      this.imageDescription,
+      this.imageDescriptionNotifier);
+}
+
+//Watch Google Map Search
+final class HomeGetMapAnswer extends HomeEvent {
+  final String query;
+  ValueNotifier<String> streamedText;
+  ValueNotifier<String> extractedUrlDescription;
+  ValueNotifier<String> extractedUrlTitle;
+  ValueNotifier<String> extractedUrl;
+  ValueNotifier<String> extractedImageUrl;
+  final String imageDescription;
+  final ValueNotifier<String> imageDescriptionNotifier;
+
+  HomeGetMapAnswer(
+      this.query,
+      this.streamedText,
+      this.imageDescription,
+      this.imageDescriptionNotifier,
+      this.extractedUrlDescription,
+      this.extractedUrlTitle,
+      this.extractedUrl,
+      this.extractedImageUrl);
 }
 
 //Watch Google Search
 final class HomeUpdateAnswer extends HomeEvent {
   final String query;
   final int index;
+  final String imageDescription;
   ValueNotifier<String> streamedText;
+  ValueNotifier<String> extractedUrlDescription;
+  ValueNotifier<String> extractedUrlTitle;
+  ValueNotifier<String> extractedUrl;
+  ValueNotifier<String> extractedImageUrl;
+  final ValueNotifier<String> imageDescriptionNotifier;
 
-  HomeUpdateAnswer(this.query, this.index, this.streamedText);
+  HomeUpdateAnswer(
+      this.query,
+      this.index,
+      this.streamedText,
+      this.imageDescription,
+      this.imageDescriptionNotifier,
+      this.extractedUrlDescription,
+      this.extractedUrlTitle,
+      this.extractedUrl,
+      this.extractedImageUrl);
+}
+
+//Watch Google Search
+final class HomeUpdateMapAnswer extends HomeEvent {
+  final String query;
+  final int index;
+  final String imageDescription;
+  ValueNotifier<String> streamedText;
+  final ValueNotifier<String> imageDescriptionNotifier;
+  ValueNotifier<String> extractedUrlDescription;
+  ValueNotifier<String> extractedUrlTitle;
+  ValueNotifier<String> extractedUrl;
+  ValueNotifier<String> extractedImageUrl;
+
+  HomeUpdateMapAnswer(
+      this.query,
+      this.index,
+      this.streamedText,
+      this.imageDescription,
+      this.imageDescriptionNotifier,
+      this.extractedUrlDescription,
+      this.extractedUrlTitle,
+      this.extractedUrl,
+      this.extractedImageUrl);
 }
 
 //Watch Google Search
@@ -102,12 +204,20 @@ final class HomeGetSearch extends HomeEvent {
   HomeGetSearch(this.query, this.type);
 }
 
+//Watch Google ActionType
+final class HomeSwitchActionType extends HomeEvent {
+  final String query;
+
+  HomeSwitchActionType(this.query);
+}
+
 //Watch Reels Search
 final class HomeGetReelsSearch extends HomeEvent {
   final int index;
 
   HomeGetReelsSearch(this.index);
 }
+
 //Watch Videos Search
 final class HomeGetVideosSearch extends HomeEvent {
   final int index;
@@ -143,7 +253,6 @@ final class HomeFollowUpRecallVideos extends HomeEvent {
 }
 
 final class HomeStartNewThread extends HomeEvent {
-
   HomeStartNewThread();
 }
 
@@ -160,13 +269,22 @@ final class HomeRecallSearchVideos extends HomeEvent {
   HomeRecallSearchVideos(this.query);
 }
 
+//Select SearchType
+final class HomeSearchTypeSelected extends HomeEvent {
+  final HomeSearchType searchType;
+
+  HomeSearchTypeSelected(this.searchType);
+}
+
 //Select Edit Option
 final class SelectEditInputOption extends HomeEvent {
   final String query;
   final bool isEditMode;
   final int index;
   final bool isSearchMode;
-  SelectEditInputOption(this.query, this.isEditMode, this.index, this.isSearchMode);
+  final String uploadedImageUrl;
+  SelectEditInputOption(this.query, this.isEditMode, this.index,
+      this.isSearchMode, this.uploadedImageUrl);
 }
 
 //Retrieve Search Data
@@ -176,15 +294,19 @@ final class HomeRetrieveSearchData extends HomeEvent {
   HomeRetrieveSearchData(this.sessionData);
 }
 
-
 final class HomeInitialUserData extends HomeEvent {}
 
+final class HomeAttemptGoogleSignIn extends HomeEvent {}
 
-final class HomeAttemptGoogleSignIn extends HomeEvent {
+final class HomeAttemptGoogleSignOut extends HomeEvent {}
+
+final class HomeImageSelected extends HomeEvent {
+  final XFile image;
+  final ValueNotifier<String> imageDescription;
+  HomeImageSelected(this.image, this.imageDescription);
 }
 
-
-final class HomeAttemptGoogleSignOut extends HomeEvent {
+final class HomeImageUnselected extends HomeEvent {
+  final ValueNotifier<String> imageDescription;
+  HomeImageUnselected(this.imageDescription);
 }
-
-

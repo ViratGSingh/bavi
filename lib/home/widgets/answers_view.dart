@@ -1,10 +1,12 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:bavi/home/bloc/home_bloc.dart';
 import 'package:bavi/home/view/home_page.dart';
 import 'package:bavi/home/widgets/web_view.dart';
 import 'package:bavi/models/short_video.dart';
 import 'package:bavi/models/thread.dart';
+import 'package:bavi/navigation_service.dart';
 import 'package:bavi/widgets/profile_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -23,17 +25,26 @@ class ThreadAnswerView extends StatefulWidget {
   final HomeReplyStatus replyStatus;
   final Function() onRefresh;
   final Function() onEditSelected;
-  const ThreadAnswerView(
-      {super.key,
-      required this.answerResults,
-      required this.query,
-      required this.answer,
-      required this.status,
-      required this.replyStatus,
-      required this.onRefresh,
-      required this.onEditSelected,
-      required this.hideRefresh
-      });
+  final String sourceImageUrl;
+  final List<LocalResultData> local;
+  final Function(String url) onLinkTap;
+  final ExtractedUrlResultData? extractedUrlData;
+
+  const ThreadAnswerView({
+    super.key,
+    required this.answerResults,
+    required this.query,
+    required this.answer,
+    required this.status,
+    required this.replyStatus,
+    required this.onRefresh,
+    required this.onEditSelected,
+    required this.hideRefresh,
+    required this.sourceImageUrl,
+    required this.local,
+    required this.onLinkTap,
+    this.extractedUrlData,
+  });
 
   @override
   State<ThreadAnswerView> createState() => _ThreadAnswerViewState();
@@ -46,134 +57,240 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (widget.extractedUrlData?.title != "" ||
+            widget.extractedUrlData?.snippet != "")
+          Container(
+            margin: EdgeInsets.only(right: 8, left: 8, bottom: 12),
+            alignment: Alignment.centerRight,
+            width: MediaQuery.of(context).size.width,
+            height: 220,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 10,
+                  offset: Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Stack(
+              children: [
+                // Background Image
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.network(
+                    widget.extractedUrlData?.thumbnail ?? "",
+                    width: double.infinity,
+                    height: double.infinity,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        color: Colors.grey.shade200,
+                        child: Center(
+                          child: Icon(
+                            Icons.image_not_supported,
+                            color: Colors.grey.shade400,
+                            size: 40,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                // Gradient Overlay
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withOpacity(0.7),
+                      ],
+                      stops: [0.5, 1.0],
+                    ),
+                  ),
+                ),
+                // Title at Bottom Left
+                Positioned(
+                  left: 16,
+                  right: 16,
+                  bottom: 12,
+                  child: Text(
+                    (widget.extractedUrlData?.title == ""
+                            ? widget.extractedUrlData?.snippet
+                            : widget.extractedUrlData?.title) ??
+                        "",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      shadows: [
+                        Shadow(
+                          color: Colors.black.withOpacity(0.5),
+                          blurRadius: 4,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
         Container(
           //constraints: BoxConstraints(maxHeight: 150),
           width: MediaQuery.of(context).size.width,
-          decoration: BoxDecoration(
-              border: Border.all(),
-              borderRadius: BorderRadius.circular(12),
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(offset: Offset(0, 4), color: Colors.black)
-              ]),
-          padding: EdgeInsets.all(10),
+          // decoration: BoxDecoration(
+          //     border: Border.all(),
+          //     borderRadius: BorderRadius.circular(12),
+          //     color: Colors.white,
+          //     boxShadow: [
+          //       BoxShadow(offset: Offset(0, 4), color: Colors.black)
+          //     ]),
+          // padding: EdgeInsets.all(10),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                    Iconsax.magicpen_outline,
-                    color: Colors.black,
-                    size: 20,
-                  ),
-              SizedBox(width: 5),
+              // Icon(
+              //   Iconsax.magicpen_outline,
+              //   color: Colors.black,
+              //   size: 20,
+              // ),
+              // SizedBox(width: 5),
+
               Expanded(
-                child: Text(
-                  widget.query,
-                  // overflow: TextOverflow.ellipsis,
-                  // maxLines: 2,
-                  style: TextStyle(
-                    color: Colors.black,
-                    fontSize: 16,
-                    fontFamily: 'Poppins',
-                    fontWeight: FontWeight.w600,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 6),
+                  child: Text(
+                    widget.query,
+                    // overflow: TextOverflow.ellipsis,
+                    // maxLines: 2,
+                    style: TextStyle(
+                      color: Colors.black,
+                      fontSize: 22,
+                      fontFamily: 'Poppins',
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ),
+              //SizedBox(width: 5),
+              Builder(
+                builder: (iconContext) {
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: InkWell(
+                      onTap: () async {
+                        setState(() {
+                          _menuOpen = true;
+                        });
+                        final renderBox =
+                            iconContext.findRenderObject() as RenderBox;
+                        final position =
+                            renderBox.localToGlobal(Offset(-50, 10));
+                        final size = renderBox.size;
 
-              SizedBox(width: 5),
-
-            Builder(
-              builder: (iconContext) {
-                return InkWell(
-                  onTap: () async {
-                    setState(() {
-                      _menuOpen = true;
-                    });
-                    final renderBox = iconContext.findRenderObject() as RenderBox;
-                    final position = renderBox.localToGlobal(Offset(-50, 10));
-                    final size = renderBox.size;
-
-                    await showMenu(
-                      context: iconContext,
-                      color: Colors.white,
-                      elevation: 6,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      position: RelativeRect.fromLTRB(
-                        position.dx,
-                        position.dy + size.height,
-                        position.dx + size.width,
-                        position.dy,
-                      ),
-                      items: [
-                        PopupMenuItem(
-                          value: "copy",
-                          child: SizedBox(
-                            //width: 100,
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                
-                                Text("Copy"),
-                                Icon(Icons.copy, size: 18, color: Colors.black),
-                              ],
-                            ),
+                        await showMenu(
+                          context: iconContext,
+                          color: Colors.white,
+                          elevation: 6,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                        ),
-                        PopupMenuItem(
-                          value: "edit",
-                          child: SizedBox(
-                            //width: ,
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text("Edit"),
-                                Icon(Icons.edit, size: 18, color: Colors.black),
-                              ],
-                            ),
+                          position: RelativeRect.fromLTRB(
+                            position.dx,
+                            position.dy + size.height,
+                            position.dx + size.width,
+                            position.dy,
                           ),
-                        ),
-                      ],
-                    ).then((value) {
-                      setState(() {
-                        _menuOpen = false;
-                      });
-                      if (value == "copy") {
-                        Clipboard.setData(ClipboardData(text: widget.query));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            backgroundColor:
-                                Color(0xFF8A2BE2), // Purple background
-                            content: Text(
-                              'Copied to clipboard',
-                              style: TextStyle(
-                                color: Color(0xFFDFFF00), // Neon green text
-                                fontWeight: FontWeight.bold,
+                          items: [
+                            PopupMenuItem(
+                              value: "copy",
+                              child: SizedBox(
+                                //width: 100,
+                                child: Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text("Copy"),
+                                    Icon(Icons.copy,
+                                        size: 18, color: Colors.black),
+                                  ],
+                                ),
                               ),
                             ),
-                            duration: Duration(seconds: 2),
-                          ),
-                        );
-                      } else if (value == "edit") {
-                        // Add edit logic here
-                        widget.onEditSelected();
-                      }
-                    });
-                  },
-                  child: Icon(
-                    Icons.more_vert_outlined,
-                    color: _menuOpen ? Colors.grey.shade300 : Colors.black,
-                    size: 20,
-                  ),
-                );
-              },
-            ),
+                            PopupMenuItem(
+                              value: "edit",
+                              child: SizedBox(
+                                //width: ,
+                                child: Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text("Edit"),
+                                    Icon(Icons.edit,
+                                        size: 18, color: Colors.black),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ).then((value) {
+                          setState(() {
+                            _menuOpen = false;
+                          });
+                          if (value == "copy") {
+                            Clipboard.setData(
+                                ClipboardData(text: widget.query));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                backgroundColor:
+                                    Color(0xFF8A2BE2), // Purple background
+                                content: Text(
+                                  'Copied to clipboard',
+                                  style: TextStyle(
+                                    color: Color(0xFFDFFF00), // Neon green text
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          } else if (value == "edit") {
+                            // Add edit logic here
+                            widget.onEditSelected();
+                          }
+                        });
+                      },
+                      child: Icon(
+                        Icons.more_vert_outlined,
+                        color: _menuOpen ? Colors.grey.shade300 : Colors.black,
+                        size: 20,
+                      ),
+                    ),
+                  );
+                },
+              ),
             ],
           ),
         ),
-        
-        SizedBox(height: 10),
+        if (widget.sourceImageUrl.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(left: 6, right: 50, top: 10),
+            child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.network(
+                  widget.sourceImageUrl,
+                  height: 120,
+                )),
+          ),
+        SizedBox(height: 20),
         widget.status != HomePageStatus.success ||
                 widget.replyStatus != HomeReplyStatus.success
             ? Column(
@@ -190,48 +307,70 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
                   )
                 ],
               )
-            : MarkdownBody(
-                data: widget.answer,
-                onTapLink: (text, href, title) async {
-                  if (href != null) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute<void>(
-                        builder: (BuildContext context) =>
-                            WebViewPage(url: href),
+            : Padding(
+                padding: const EdgeInsets.fromLTRB(6, 0, 6, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (widget.local.isNotEmpty) ...[
+                      Container(
+                        height: 310,
+                        padding: EdgeInsets.only(bottom: 10),
+                        child: PageView.builder(
+                          padEnds: false,
+                          controller: PageController(viewportFraction: 0.92),
+                          itemCount:
+                              widget.local.length > 5 ? 5 : widget.local.length,
+                          itemBuilder: (context, index) {
+                            final place = widget.local[index];
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 10),
+                              child: PlaceCard(place: place),
+                            );
+                          },
+                        ),
                       ),
-                    );
-                  }
-                },
-                styleSheet:
-                    MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-                  h1: const TextStyle(
-                      color: Colors.black,
-                      fontFamily: 'Poppins',
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold),
-                  h2: const TextStyle(
-                      color: Colors.black,
-                      fontFamily: 'Poppins',
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold),
-                  h3: const TextStyle(
-                      color: Colors.black,
-                      fontFamily: 'Poppins',
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600),
-                  p: const TextStyle(
-                      color: Colors.black,
-                      fontFamily: 'Poppins',
-                      fontSize: 14,
-                      height: 1.5),
-                  a: const TextStyle(
-                    fontFamily: 'Poppins',
-                    color: Color(0xFF8A2BE2),
-                    decoration: TextDecoration.underline,
-                    decorationColor: Color(0xFF8A2BE2),
-                  ),
-                  listBullet: const TextStyle(fontSize: 16),
+                    ],
+                    MarkdownBody(
+                      data: widget.answer,
+                      onTapLink: (text, href, title) async {
+                        if (href != null) {
+                          widget.onLinkTap(href);
+                        }
+                      },
+                      styleSheet:
+                          MarkdownStyleSheet.fromTheme(Theme.of(context))
+                              .copyWith(
+                        h1: const TextStyle(
+                            color: Colors.black,
+                            fontFamily: 'Poppins',
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold),
+                        h2: const TextStyle(
+                            color: Colors.black,
+                            fontFamily: 'Poppins',
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold),
+                        h3: const TextStyle(
+                            color: Colors.black,
+                            fontFamily: 'Poppins',
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600),
+                        p: const TextStyle(
+                            color: Colors.black,
+                            fontFamily: 'Poppins',
+                            fontSize: 14,
+                            height: 1.5),
+                        a: const TextStyle(
+                          fontFamily: 'Poppins',
+                          color: Color(0xFF8A2BE2),
+                          decoration: TextDecoration.underline,
+                          decorationColor: Color(0xFF8A2BE2),
+                        ),
+                        listBullet: const TextStyle(fontSize: 16),
+                      ),
+                    ),
+                  ],
                 ),
               ),
         Visibility(
@@ -278,6 +417,34 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
                       ),
                     ),
                   ),
+                  // InkWell(
+                  //   onTap: () async {
+                  //     // context.read<HomeBloc>().add(
+                  //     //       HomeStartNewThread(),
+                  //     //     );
+                  //     // taskTextController.clear();
+                  //     // setState(() {
+                  //     //   isTaskValid = false;
+                  //     // });
+                  //     // mixpanel.track("start_new_thread");
+                  //   },
+                  //   child: Container(
+                  //     width: 32,
+                  //     height: 32,
+                  //     decoration: BoxDecoration(
+                  //         // borderRadius: BorderRadius.circular(18),
+                  //         // color: Color(0xFFDFFF00),
+                  //         // border: Border.all()
+                  //         ),
+                  //     child: Center(
+                  //       child: Icon(
+                  //         Iconsax.send_2_outline,
+                  //         color: Colors.black,
+                  //         size: 20,
+                  //       ),
+                  //     ),
+                  //   ),
+                  // )
                 ],
               ),
               Row(
@@ -333,25 +500,30 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
                                 SizedBox(height: 12),
                                 Expanded(
                                   child: ListView.separated(
-                                    itemCount:
-                                        widget.answerResults?.length ?? 0,
+                                    itemCount: widget.answerResults.length,
                                     separatorBuilder: (_, __) =>
                                         Divider(color: Colors.purple),
                                     itemBuilder: (context, index) {
-                                      final item = widget.answerResults?[index];
+                                      final item = widget.answerResults[index];
                                       return GestureDetector(
                                         onTap: () async {
-                                          if (item?.url != null) {
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute<void>(
-                                                builder:
-                                                    (BuildContext context) =>
+                                          if (item.url.isNotEmpty) {
+                                            Navigator.pop(context);
+                                            // Schedule navigation after current frame
+                                            WidgetsBinding.instance
+                                                .addPostFrameCallback((_) {
+                                              if (context.mounted) {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute<void>(
+                                                    builder: (BuildContext
+                                                            context) =>
                                                         WebViewPage(
-                                                            url: item?.url ??
-                                                                ""),
-                                              ),
-                                            );
+                                                            url: item.url),
+                                                  ),
+                                                );
+                                              }
+                                            });
                                           }
                                         },
                                         child: Column(
@@ -359,7 +531,7 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
                                               CrossAxisAlignment.start,
                                           children: [
                                             Text(
-                                              item?.title ?? "",
+                                              item.title,
                                               maxLines: 3,
                                               overflow: TextOverflow.ellipsis,
                                               style: TextStyle(
@@ -369,7 +541,7 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
                                             ),
                                             SizedBox(height: 4),
                                             Text(
-                                              item?.url ?? "",
+                                              item.url,
                                               style: TextStyle(
                                                 color: Color(0xFFDFFF00),
                                                 decoration:
@@ -485,6 +657,225 @@ class AnswerLoader extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class PlaceCard extends StatefulWidget {
+  final LocalResultData place;
+  const PlaceCard({super.key, required this.place});
+
+  @override
+  State<PlaceCard> createState() => _PlaceCardState();
+}
+
+class _PlaceCardState extends State<PlaceCard> {
+  int _currentImageIndex = 0;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.place.images.length > 1) {
+      _timer = Timer.periodic(Duration(seconds: 4), (timer) {
+        if (mounted) {
+          setState(() {
+            _currentImageIndex =
+                (_currentImageIndex + 1) % widget.place.images.length;
+          });
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () async {
+        final query = Uri.encodeComponent(
+            "${widget.place.title} ${widget.place.address}");
+        final url = Uri.parse(
+            "https://www.google.com/maps/search/?api=1&query=$query&query_place_id=${widget.place.placeId}");
+        if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+          // fallback to browser if external app fails (though externalApplication usually handles both)
+          launchUrl(url);
+        }
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.black,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 10,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Image Slideshow
+              AnimatedSwitcher(
+                duration: Duration(milliseconds: 800),
+                child: widget.place.images.isNotEmpty
+                    ? Image.network(
+                        widget.place.images[_currentImageIndex],
+                        key: ValueKey<String>(
+                            widget.place.images[_currentImageIndex]),
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        height: double.infinity,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          color: Colors.grey.shade900,
+                          child: Center(
+                              child: Icon(Icons.image_not_supported,
+                                  color: Colors.white54)),
+                        ),
+                      )
+                    : Container(
+                        color: Colors.grey.shade900,
+                        child: Center(
+                            child: Icon(Icons.place,
+                                size: 40, color: Colors.white54)),
+                      ),
+              ),
+
+              // Gradient Overlay
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.transparent,
+                      Colors.transparent,
+                      Colors.black.withOpacity(0.7),
+                      Colors.black.withOpacity(0.9),
+                    ],
+                    stops: [0.0, 0.5, 0.8, 1.0],
+                  ),
+                ),
+              ),
+
+              // // More button
+              // Positioned(
+              //   top: 0,
+              //   right: 0,
+              //   child: IconButton(
+              //     icon: Icon(
+              //       Iconsax.location_bold,
+              //       color: Colors.white,
+              //     ),
+              //     onPressed: () {},
+              //   ),
+              // ),
+
+              // Content
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.place.title,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'Poppins',
+                          shadows: [
+                            Shadow(
+                              color: Colors.black.withOpacity(0.5),
+                              blurRadius: 4,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Container(
+                            padding: EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Color(0xFF8A2BE2),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  "${widget.place.rating}",
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                    fontFamily: 'Poppins',
+                                  ),
+                                ),
+                                SizedBox(width: 4),
+                                Icon(Icons.star, size: 12, color: Colors.white),
+                              ],
+                            ),
+                          ),
+                          SizedBox(width: 10),
+                          Text(
+                            "${widget.place.reviews} reviews",
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.9),
+                              fontSize: 13,
+                              fontFamily: 'Poppins',
+                            ),
+                          ),
+                        ],
+                      ),
+                      // if (widget.place.address.isNotEmpty) ...[
+                      //   SizedBox(height: 8),
+                      //   Row(
+                      //     children: [
+                      //       Icon(Icons.location_on,
+                      //           size: 14, color: Colors.white70),
+                      //       SizedBox(width: 4),
+                      //       Expanded(
+                      //         child: Text(
+                      //           widget.place.address,
+                      //           style: TextStyle(
+                      //             color: Colors.white.withOpacity(0.8),
+                      //             fontSize: 13,
+                      //             fontFamily: 'Poppins',
+                      //           ),
+                      //           maxLines: 1,
+                      //           overflow: TextOverflow.ellipsis,
+                      //         ),
+                      //       ),
+                      //     ],
+                      //   ),
+                      // ],
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

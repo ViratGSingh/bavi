@@ -57,3 +57,24 @@
 
 # Flutter compatibility for SplitCompat
 -keep class io.flutter.app.FlutterPlayStoreSplitApplication { *; }
+
+# MediaPipe proto classes
+-keep class com.google.mediapipe.proto.** { *; }
+-dontwarn com.google.mediapipe.proto.**
+
+# MediaPipe framework
+-keep class com.google.mediapipe.framework.** { *; }
+-dontwarn com.google.mediapipe.framework.**
+
+# Protobuf
+-keep class com.google.protobuf.** { *; }
+-dontwarn com.google.protobuf.**
+
+# Ignore missing class warnings for R8 (missing proto classes referenced at runtime)
+-ignorewarnings
+
+# Prevent enum stripping
+-keepclassmembers enum * {
+    public static **[] values();
+    public static ** valueOf(java.lang.String);
+}

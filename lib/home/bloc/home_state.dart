@@ -27,11 +27,30 @@ enum HomePageStatus {
 
 enum HomeReplyStatus { loading, success, failure, idle }
 
-enum HomeSearchType { nsfw, general, shopping, map, extractUrl, portal }
+enum HomeSearchType {
+  nsfw,
+  general,
+  shopping,
+  map,
+  extractUrl,
+  portal,
+  youtube,
+  instagram,
+}
 
 enum HomeActionType { general, agent, extractUrl }
 
 enum HomeSavedStatus { fetched, idle }
+
+enum HomeMapStatus { enabled, disabled }
+
+enum HomeYoutubeStatus { enabled, disabled }
+
+enum HomeGeneralStatus { enabled, disabled }
+
+enum HomeInstagramStatus { enabled, disabled }
+
+enum HomeSpicyStatus { enabled, disabled }
 
 enum HomeImageStatus { selected, unselected }
 
@@ -43,7 +62,11 @@ enum HomeProfileStatus { loading, success, failure, idle }
 
 enum HomeExtractUrlStatus { loading, success, failure, idle }
 
+enum GemmaDownloadStatus { loading, success, failure, idle }
+
 enum HomeModel { deepseek, gemini, claude, openAI }
+
+const _sentinel = Object();
 
 final class HomeState extends Equatable {
   HomeState({
@@ -72,6 +95,14 @@ final class HomeState extends Equatable {
     this.searchType = HomeSearchType.general,
     this.actionType = HomeActionType.general,
     this.extractUrlStatus = HomeExtractUrlStatus.idle,
+    this.mapStatus = HomeMapStatus.disabled,
+    this.youtubeStatus = HomeYoutubeStatus.enabled,
+    this.spicyStatus = HomeSpicyStatus.disabled,
+    this.instagramStatus = HomeInstagramStatus.enabled,
+    this.generalStatus = HomeGeneralStatus.enabled,
+    this.gemmaDownloadStatus = GemmaDownloadStatus.idle,
+    this.gemmaDownloadProgress = 0.0,
+    this.showLocationRationale = false,
   })  : userData = userData ??
             UserProfileInfo(
               email: "NA",
@@ -126,6 +157,14 @@ final class HomeState extends Equatable {
   final HomeSearchType searchType;
   final HomeActionType actionType;
   final HomeExtractUrlStatus extractUrlStatus;
+  final HomeMapStatus mapStatus;
+  final HomeYoutubeStatus youtubeStatus;
+  final HomeSpicyStatus spicyStatus;
+  final HomeInstagramStatus instagramStatus;
+  final HomeGeneralStatus generalStatus;
+  final GemmaDownloadStatus gemmaDownloadStatus;
+  final double gemmaDownloadProgress;
+  final bool showLocationRationale;
 
   HomeState copyWith({
     String? sessionId,
@@ -145,14 +184,22 @@ final class HomeState extends Equatable {
     List<ThreadSessionData>? threadHistory,
     ThreadSessionData? threadData,
     ThreadSessionData? cacheThreadData,
-    XFile? selectedImage,
+    Object? selectedImage = _sentinel,
     HomeImageStatus? imageStatus,
-    String? uploadedImageUrl,
+    Object? uploadedImageUrl = _sentinel,
     bool? isAnalyzingImage,
     HomeModel? selectedModel,
     HomeSearchType? searchType,
     HomeActionType? actionType,
     HomeExtractUrlStatus? extractUrlStatus,
+    HomeMapStatus? mapStatus,
+    HomeYoutubeStatus? youtubeStatus,
+    HomeSpicyStatus? spicyStatus,
+    HomeInstagramStatus? instagramStatus,
+    HomeGeneralStatus? generalStatus,
+    GemmaDownloadStatus? gemmaDownloadStatus,
+    double? gemmaDownloadProgress,
+    bool? showLocationRationale,
   }) {
     return HomeState(
       editQuery: editQuery ?? this.editQuery,
@@ -172,14 +219,28 @@ final class HomeState extends Equatable {
       editStatus: editStatus ?? this.editStatus,
       historyStatus: historyStatus ?? this.historyStatus,
       profileStatus: profileStatus ?? this.profileStatus,
-      selectedImage: selectedImage ?? this.selectedImage,
+      selectedImage: selectedImage == _sentinel
+          ? this.selectedImage
+          : selectedImage as XFile?,
       imageStatus: imageStatus ?? this.imageStatus,
-      uploadedImageUrl: uploadedImageUrl ?? this.uploadedImageUrl,
+      uploadedImageUrl: uploadedImageUrl == _sentinel
+          ? this.uploadedImageUrl
+          : uploadedImageUrl as String?,
       isAnalyzingImage: isAnalyzingImage ?? this.isAnalyzingImage,
       selectedModel: selectedModel ?? this.selectedModel,
       searchType: searchType ?? this.searchType,
       actionType: actionType ?? this.actionType,
       extractUrlStatus: extractUrlStatus ?? this.extractUrlStatus,
+      mapStatus: mapStatus ?? this.mapStatus,
+      youtubeStatus: youtubeStatus ?? this.youtubeStatus,
+      spicyStatus: spicyStatus ?? this.spicyStatus,
+      instagramStatus: instagramStatus ?? this.instagramStatus,
+      generalStatus: generalStatus ?? this.generalStatus,
+      gemmaDownloadStatus: gemmaDownloadStatus ?? this.gemmaDownloadStatus,
+      gemmaDownloadProgress:
+          gemmaDownloadProgress ?? this.gemmaDownloadProgress,
+      showLocationRationale:
+          showLocationRationale ?? this.showLocationRationale,
     );
   }
 
@@ -209,5 +270,13 @@ final class HomeState extends Equatable {
         searchType,
         actionType,
         extractUrlStatus,
+        mapStatus,
+        youtubeStatus,
+        spicyStatus,
+        instagramStatus,
+        generalStatus,
+        gemmaDownloadStatus,
+        gemmaDownloadProgress,
+        showLocationRationale
       ];
 }

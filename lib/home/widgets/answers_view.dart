@@ -3,7 +3,7 @@ import 'dart:async';
 
 import 'package:bavi/home/bloc/home_bloc.dart';
 import 'package:bavi/home/view/home_page.dart';
-import 'package:bavi/home/widgets/web_view.dart';
+import 'package:bavi/home/widgets/youtube_video_card.dart';
 import 'package:bavi/models/short_video.dart';
 import 'package:bavi/models/thread.dart';
 import 'package:bavi/navigation_service.dart';
@@ -17,6 +17,7 @@ import 'package:shimmer/shimmer.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class ThreadAnswerView extends StatefulWidget {
+  final List<YoutubeVideoData> youtubeVideos;
   final List<InfluenceData> answerResults;
   final String query;
   final String answer;
@@ -26,12 +27,14 @@ class ThreadAnswerView extends StatefulWidget {
   final Function() onRefresh;
   final Function() onEditSelected;
   final String sourceImageUrl;
+  final Uint8List? sourceImage;
   final List<LocalResultData> local;
   final Function(String url) onLinkTap;
   final ExtractedUrlResultData? extractedUrlData;
 
   const ThreadAnswerView({
     super.key,
+    required this.youtubeVideos,
     required this.answerResults,
     required this.query,
     required this.answer,
@@ -41,6 +44,7 @@ class ThreadAnswerView extends StatefulWidget {
     required this.onEditSelected,
     required this.hideRefresh,
     required this.sourceImageUrl,
+    required this.sourceImage,
     required this.local,
     required this.onLinkTap,
     this.extractedUrlData,
@@ -52,11 +56,39 @@ class ThreadAnswerView extends StatefulWidget {
 
 class _ThreadAnswerViewState extends State<ThreadAnswerView> {
   bool _menuOpen = false;
+  String _selectedTab = "";
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeTab();
+  }
+
+  @override
+  void didUpdateWidget(covariant ThreadAnswerView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.youtubeVideos != widget.youtubeVideos ||
+        oldWidget.local != widget.local) {
+      _initializeTab();
+    }
+  }
+
+  void _initializeTab() {
+    if (widget.youtubeVideos.isNotEmpty) {
+      _selectedTab = "YouTube";
+    } else if (widget.local.isNotEmpty) {
+      _selectedTab = "Map";
+    } else {
+      _selectedTab = "";
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        //Extracted URL
         if (widget.extractedUrlData?.title != "" ||
             widget.extractedUrlData?.snippet != "")
           Container(
@@ -280,15 +312,20 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
             ],
           ),
         ),
-        if (widget.sourceImageUrl.isNotEmpty)
+        if (widget.sourceImageUrl.isNotEmpty || widget.sourceImage != null)
           Padding(
             padding: const EdgeInsets.only(left: 6, right: 50, top: 10),
             child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: Image.network(
-                  widget.sourceImageUrl,
-                  height: 120,
-                )),
+                child: widget.sourceImageUrl.isNotEmpty
+                    ? Image.network(
+                        widget.sourceImageUrl,
+                        height: 120,
+                      )
+                    : Image.memory(
+                        widget.sourceImage!,
+                        height: 120,
+                      )),
           ),
         SizedBox(height: 20),
         widget.status != HomePageStatus.success ||
@@ -312,7 +349,97 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (widget.local.isNotEmpty) ...[
+                    if (widget.youtubeVideos.isNotEmpty ||
+                        widget.local.isNotEmpty) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12.0),
+                        child: Row(
+                          children: [
+                            if (widget.youtubeVideos.isNotEmpty) ...[
+                              InkWell(
+                                onTap: () {
+                                  setState(() {
+                                    _selectedTab = "YouTube";
+                                  });
+                                },
+                                child: Container(
+                                  padding: EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: _selectedTab == "YouTube"
+                                        ? Color(0xFF8A2BE2)
+                                        : Colors.grey.shade200,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    "YouTube",
+                                    style: TextStyle(
+                                      color: _selectedTab == "YouTube"
+                                          ? Colors.white
+                                          : Colors.black,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              SizedBox(width: 8),
+                            ],
+                            if (widget.local.isNotEmpty) ...[
+                              InkWell(
+                                onTap: () {
+                                  setState(() {
+                                    _selectedTab = "Map";
+                                  });
+                                },
+                                child: Container(
+                                  padding: EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: _selectedTab == "Map"
+                                        ? Color(0xFF8A2BE2)
+                                        : Colors.grey.shade200,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    "Map",
+                                    style: TextStyle(
+                                      color: _selectedTab == "Map"
+                                          ? Colors.white
+                                          : Colors.black,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              SizedBox(width: 8),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                    if (_selectedTab == "YouTube" &&
+                        widget.youtubeVideos.isNotEmpty) ...[
+                      AspectRatio(
+                        aspectRatio: 1.65,
+                        child: Container(
+                          padding: EdgeInsets.only(bottom: 10),
+                          child: PageView.builder(
+                            padEnds: false,
+                            controller: PageController(viewportFraction: 0.92),
+                            itemCount: widget.youtubeVideos.length > 5
+                                ? 5
+                                : widget.youtubeVideos.length,
+                            itemBuilder: (context, index) {
+                              final video = widget.youtubeVideos[index];
+                              return YoutubeVideoCard(video: video);
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (_selectedTab == "Map" && widget.local.isNotEmpty) ...[
                       Container(
                         height: 310,
                         padding: EdgeInsets.only(bottom: 10),
@@ -509,21 +636,13 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
                                         onTap: () async {
                                           if (item.url.isNotEmpty) {
                                             Navigator.pop(context);
-                                            // Schedule navigation after current frame
-                                            WidgetsBinding.instance
-                                                .addPostFrameCallback((_) {
-                                              if (context.mounted) {
-                                                Navigator.push(
-                                                  context,
-                                                  MaterialPageRoute<void>(
-                                                    builder: (BuildContext
-                                                            context) =>
-                                                        WebViewPage(
-                                                            url: item.url),
-                                                  ),
-                                                );
-                                              }
-                                            });
+                                            // Open in external browser
+                                            final uri = Uri.parse(item.url);
+                                            if (!await launchUrl(uri,
+                                                mode: LaunchMode
+                                                    .externalApplication)) {
+                                              launchUrl(uri);
+                                            }
                                           }
                                         },
                                         child: Column(

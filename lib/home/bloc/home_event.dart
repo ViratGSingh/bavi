@@ -114,6 +114,7 @@ final class HomeGetAnswer extends HomeEvent {
   ValueNotifier<String> extractedImageUrl;
   final String imageDescription;
   final ValueNotifier<String> imageDescriptionNotifier;
+  bool ignoreLocation;
 
   HomeGetAnswer(
       this.query,
@@ -123,7 +124,8 @@ final class HomeGetAnswer extends HomeEvent {
       this.extractedUrl,
       this.extractedImageUrl,
       this.imageDescription,
-      this.imageDescriptionNotifier);
+      this.imageDescriptionNotifier,
+      {this.ignoreLocation = true});
 }
 
 //Watch Google Map Search
@@ -309,4 +311,47 @@ final class HomeImageSelected extends HomeEvent {
 final class HomeImageUnselected extends HomeEvent {
   final ValueNotifier<String> imageDescription;
   HomeImageUnselected(this.imageDescription);
+}
+
+final class HomeDownloadGemmaModel extends HomeEvent {}
+
+final class HomeCheckLocationPermission extends HomeEvent {}
+
+final class HomeRequestLocationPermission extends HomeEvent {}
+
+final class HomeToggleMapStatus extends HomeEvent {}
+
+final class HomeToggleYoutubeStatus extends HomeEvent {}
+
+final class HomeToggleSpicyStatus extends HomeEvent {}
+
+final class HomeToggleInstagramStatus extends HomeEvent {}
+
+final class HomeToggleGeneralStatus extends HomeEvent {}
+
+final class HomeShowLocationRationale extends HomeEvent {}
+
+final class HomeRetryPendingSearch extends HomeEvent {
+  final bool ignoreLocation;
+  HomeRetryPendingSearch({this.ignoreLocation = false});
+}
+
+final class HomeCheckLocationAndAnswer extends HomeEvent {
+  final String query;
+  final ValueNotifier<String> streamedText;
+  final ValueNotifier<String> extractedUrlDescription;
+  final ValueNotifier<String> extractedUrlTitle;
+  final ValueNotifier<String> extractedUrl;
+  final ValueNotifier<String> extractedImageUrl;
+  final String imageDescription;
+  final ValueNotifier<String> imageDescriptionNotifier;
+  HomeCheckLocationAndAnswer(
+      this.query,
+      this.streamedText,
+      this.extractedUrlDescription,
+      this.extractedUrlTitle,
+      this.extractedUrl,
+      this.extractedImageUrl,
+      this.imageDescription,
+      this.imageDescriptionNotifier);
 }

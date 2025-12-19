@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:bavi/home/bloc/home_bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; // Import for Timestamp
@@ -17,9 +18,11 @@ class ThreadResultData extends Equatable {
   final String answer;
   final String sourceImageDescription;
   final String sourceImageLink;
+  final Uint8List? sourceImage;
   final List<InfluenceData> influence;
   final bool isSearchMode;
   final List<LocalResultData> local;
+  final List<YoutubeVideoData> youtubeVideos;
   final HomeSearchType searchType;
   final ExtractedUrlResultData? extractedUrlData;
 
@@ -39,7 +42,9 @@ class ThreadResultData extends Equatable {
     required this.isSearchMode,
     required this.sourceImageDescription,
     required this.sourceImageLink,
+    this.sourceImage,
     required this.local,
+    required this.youtubeVideos,
     this.knowledgeGraph,
     this.answerBox,
     this.extractedUrlData,
@@ -86,6 +91,10 @@ class ThreadResultData extends Equatable {
               ?.map((e) => LocalResultData.fromJson(e))
               .toList() ??
           [],
+      youtubeVideos: (json['youtube_videos'] as List<dynamic>?)
+              ?.map((e) => YoutubeVideoData.fromJson(e))
+              .toList() ??
+          [],
       createdAt: json['createdAt'] is Timestamp
           ? json['createdAt']
           : (json['createdAt'] != null
@@ -104,6 +113,11 @@ class ThreadResultData extends Equatable {
               .toList() ??
           [],
       isSearchMode: json['isSearchMode'] ?? false,
+      sourceImage: json['sourceImage'] is Blob
+          ? (json['sourceImage'] as Blob).bytes
+          : (json['sourceImage'] is List
+              ? Uint8List.fromList(List<int>.from(json['sourceImage']))
+              : null),
     );
   }
 
@@ -119,6 +133,7 @@ class ThreadResultData extends Equatable {
         'news': news.map((e) => e.toJson()).toList(),
         'images': images.map((e) => e.toJson()).toList(),
         'local': local.map((e) => e.toJson()).toList(),
+        'youtube_videos': youtubeVideos.map((e) => e.toJson()).toList(),
         'createdAt': createdAt,
         'updatedAt': updatedAt,
         'userQuery': userQuery,
@@ -128,6 +143,7 @@ class ThreadResultData extends Equatable {
         'isSearchMode': isSearchMode,
         'sourceImageDescription': sourceImageDescription,
         'sourceImageLink': sourceImageLink,
+        if (sourceImage != null) 'sourceImage': Blob(sourceImage!),
       };
 
   @override
@@ -142,6 +158,7 @@ class ThreadResultData extends Equatable {
         news,
         images,
         local,
+        youtubeVideos,
         createdAt,
         updatedAt,
         userQuery,
@@ -151,6 +168,7 @@ class ThreadResultData extends Equatable {
         isSearchMode,
         sourceImageDescription,
         sourceImageLink,
+        sourceImage,
       ];
 }
 
@@ -793,5 +811,67 @@ class LocalResultData extends Equatable {
         phone,
         website,
         snippet,
+      ];
+}
+
+class YoutubeVideoData extends Equatable {
+  final String videoId;
+  final String title;
+  final String startTimestamp;
+  final String endTimestamp;
+  final String snippet;
+  final String thumbnail;
+  final String channelTitle;
+  final String channelId;
+  final String description;
+
+  const YoutubeVideoData({
+    required this.videoId,
+    required this.title,
+    required this.startTimestamp,
+    required this.endTimestamp,
+    required this.snippet,
+    required this.thumbnail,
+    required this.channelTitle,
+    required this.channelId,
+    required this.description,
+  });
+
+  factory YoutubeVideoData.fromJson(Map<String, dynamic> json) =>
+      YoutubeVideoData(
+        videoId: json['videoId'] ?? '',
+        title: json['title'] ?? '',
+        startTimestamp: json['startTimestamp'] ?? '',
+        endTimestamp: json['endTimestamp'] ?? '',
+        snippet: json['snippet'] ?? '',
+        thumbnail: json['thumbnail'] ?? '',
+        channelTitle: json['channelTitle'] ?? '',
+        channelId: json['channelId'] ?? '',
+        description: json['description'] ?? '',
+      );
+
+  Map<String, dynamic> toJson() => {
+        'videoId': videoId,
+        'title': title,
+        'startTimestamp': startTimestamp,
+        'endTimestamp': endTimestamp,
+        'snippet': snippet,
+        'thumbnail': thumbnail,
+        'channelTitle': channelTitle,
+        'channelId': channelId,
+        'description': description,
+      };
+
+  @override
+  List<Object> get props => [
+        videoId,
+        title,
+        startTimestamp,
+        endTimestamp,
+        snippet,
+        thumbnail,
+        channelTitle,
+        channelId,
+        description,
       ];
 }

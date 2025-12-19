@@ -6,11 +6,22 @@ import 'package:image_picker/image_picker.dart';
 
 class SourcesBottomSheet extends StatefulWidget {
   final void Function(XFile) onImageSelected;
-  final void Function(HomeSearchType) onSearchTypeSelected;
+  final VoidCallback onToggleMap;
+  final VoidCallback onToggleYoutube;
+  final VoidCallback onToggleInstagram;
+  final bool isMapEnabled;
+  final bool isYoutubeEnabled;
+  final bool isInstagramEnabled;
+
   const SourcesBottomSheet({
     super.key,
     required this.onImageSelected,
-    required this.onSearchTypeSelected,
+    required this.onToggleMap,
+    required this.onToggleYoutube,
+    required this.onToggleInstagram,
+    required this.isMapEnabled,
+    required this.isYoutubeEnabled,
+    required this.isInstagramEnabled,
   });
 
   @override
@@ -59,11 +70,11 @@ class _SourcesBottomSheetState extends State<SourcesBottomSheet> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
-                'Sources',
+                'Drissea',
                 style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'Jua'),
               ),
               InkWell(
                 onTap: () async {
@@ -105,52 +116,85 @@ class _SourcesBottomSheetState extends State<SourcesBottomSheet> {
             ],
           ),
           const SizedBox(height: 24),
+          // _buildTypeRow(
+          //   icon: const Icon(Iconsax.global_outline, size: 24),
+          //   label: 'Web',
+          //   sublabel: 'Shows the best general information for your answer',
+          //   value: HomeSearchType.general,
+          //   isEnabled: widget.isGeneralEnabled,
+          //   onChanged: (value) async {
+          //     await Future.delayed(const Duration(milliseconds: 200));
+          //     widget.onToggleGeneral();
+          //   },
+          // ),
+          // const SizedBox(height: 16),
           _buildTypeRow(
-            icon: const Icon(Iconsax.huobi_token_ht_outline, size: 24),
-            label: 'Spicy',
-            sublabel: 'Helps give more uncensored answers',
-            value: HomeSearchType.nsfw,
+            icon: const Icon(Iconsax.youtube_outline, size: 24),
+            label: 'YouTube',
+            sublabel: 'Shows the best youtube videos for your answer',
+            value: HomeSearchType.youtube,
+            isEnabled: widget.isYoutubeEnabled,
             onChanged: (value) async {
               await Future.delayed(const Duration(milliseconds: 200));
-              if (context.mounted) {
-                Navigator.pop(context);
-              }
-              widget.onSearchTypeSelected(HomeSearchType.nsfw);
+              widget.onToggleYoutube();
             },
           ),
           const SizedBox(height: 16),
           _buildTypeRow(
-            icon: const Icon(Iconsax.map_outline, size: 24),
+            icon: const Icon(Iconsax.instagram_outline, size: 24),
+            label: 'Instagram',
+            sublabel: 'Shows the best instagram videos for your answer',
+            value: HomeSearchType.instagram,
+            isEnabled: widget.isInstagramEnabled,
+            onChanged: (value) async {
+              await Future.delayed(const Duration(milliseconds: 200));
+              widget.onToggleInstagram();
+            },
+          ),
+          const SizedBox(height: 16),
+          _buildTypeRow(
+            icon: const Icon(Iconsax.map_1_outline, size: 24),
             label: 'Map',
-            sublabel: 'Helps you decide best places or services to visit',
+            sublabel:
+                'Helps you decide best places to visit or services to use',
             value: HomeSearchType.map,
+            isEnabled: widget.isMapEnabled,
             onChanged: (value) async {
               await Future.delayed(const Duration(milliseconds: 200));
-              if (context.mounted) {
-                Navigator.pop(context);
-              }
-              widget.onSearchTypeSelected(HomeSearchType.map);
+              widget.onToggleMap();
             },
           ),
-          const SizedBox(height: 16),
-          _buildTypeRow(
-            icon: Image.asset(
-              "assets/images/home/portal_icon.png",
-              fit: BoxFit.contain,
-              width: 24,
-              color: Colors.black,
-            ),
-            label: 'Portal',
-            sublabel: 'Helps you visit any webpage using keywords',
-            value: HomeSearchType.portal,
-            onChanged: (value) async {
-              await Future.delayed(const Duration(milliseconds: 200));
-              if (context.mounted) {
-                Navigator.pop(context);
-              }
-              widget.onSearchTypeSelected(HomeSearchType.portal);
-            },
-          ),
+          // const SizedBox(height: 16),
+          // _buildTypeRow(
+          //   icon: const Icon(Iconsax.huobi_token_ht_outline, size: 24),
+          //   label: 'Spicy',
+          //   sublabel: 'Helps you get more uncensored answers',
+          //   value: HomeSearchType.nsfw,
+          //   isEnabled: widget.isSpicyEnabled,
+          //   onChanged: (value) async {
+          //     await Future.delayed(const Duration(milliseconds: 200));
+          //     widget.onToggleSpicy();
+          //   },
+          // ),
+          // const SizedBox(height: 16),
+          // _buildTypeRow(
+          //   icon: Image.asset(
+          //     "assets/images/home/portal_icon.png",
+          //     fit: BoxFit.contain,
+          //     width: 24,
+          //     color: Colors.black,
+          //   ),
+          //   label: 'Portal',
+          //   sublabel: 'Agent that helps you visit any webpage using keywords',
+          //   value: HomeSearchType.portal,
+          //   onChanged: (value) async {
+          //     await Future.delayed(const Duration(milliseconds: 200));
+          //     if (context.mounted) {
+          //       Navigator.pop(context);
+          //     }
+          //     widget.onSearchTypeSelected(HomeSearchType.portal);
+          //   },
+          // ),
           // const SizedBox(height: 16),
           // _buildTypeRow(
           //   icon: Iconsax.image_outline,
@@ -221,6 +265,7 @@ class _SourcesBottomSheetState extends State<SourcesBottomSheet> {
     required String sublabel,
     required HomeSearchType value,
     required ValueChanged<HomeSearchType> onChanged,
+    required bool isEnabled,
   }) {
     return InkWell(
       onTap: () => onChanged(value),
@@ -249,14 +294,18 @@ class _SourcesBottomSheetState extends State<SourcesBottomSheet> {
               ],
             ),
           ),
-          // Switch(
-          //   value: value,
-          //   onChanged: onChanged,
-          //   activeColor: Colors.white,
-          //   activeTrackColor: Colors.grey,
-          //   inactiveThumbColor: Colors.white,
-          //   inactiveTrackColor: Colors.grey.shade300,
-          // ),
+          IgnorePointer(
+            ignoring: true,
+            child: Switch(
+              value: isEnabled,
+              onChanged: (val) => onChanged(value),
+              activeTrackColor: Color(0xFF8A2BE2),
+              //activeThumbColor: Color(0xFFDFFF00),
+              inactiveThumbColor: Colors.white,
+              inactiveTrackColor: Colors.grey.shade300,
+              trackOutlineColor: WidgetStateProperty.all(Colors.transparent),
+            ),
+          ),
         ],
       ),
     );

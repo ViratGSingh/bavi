@@ -13,6 +13,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:app_links/app_links.dart';
+import 'package:flutter_gemma/flutter_gemma.dart';
 
 void main() async {
   Bloc.observer = BaviBlocObserver();
@@ -32,14 +33,25 @@ void main() async {
   } else {
     await Firebase.initializeApp();
   }
-   FirebaseFirestore.instance.settings = const Settings(
+  FirebaseFirestore.instance.settings = const Settings(
     persistenceEnabled: true,
   );
-  final bool isLoggedIn = true;//await _checkUserLogin();
+  final bool isLoggedIn = true; //await _checkUserLogin();
   final router = AppRouter(isLoggedIn).router;
   navService.setRouter(router);
+  // Initialize FlutterGemma with HuggingFace token for authenticated model downloads
+  final hfToken = dotenv.env['HUGGINGFACE_TOKEN'];
+  print("HuggingFace Token: $hfToken");
+  print("");
+  if (hfToken != null && hfToken.isNotEmpty) {
+    print("done");
+    await FlutterGemma.initialize(huggingFaceToken: hfToken);
+  } else {
+    await FlutterGemma.initialize();
+  }
+
   runApp(BaviApp(router: router));
-   // Start listening for links
+  // Start listening for links
   //_initAppLinks();
 }
 
@@ -49,14 +61,14 @@ Future<bool> _checkUserLogin() async {
   return prefs.getBool('isLoggedIn') ?? false;
 }
 
-  // Future<bool> _checkUserOnboard() async {
-  //   final prefs = await SharedPreferences.getInstance();
-  //   return prefs.getBool('isOnboarded') ?? false;
-  // }
-  // Future<String> _getDisplayName() async {
-  //   final prefs = await SharedPreferences.getInstance();
-  //   return prefs.getString('displayName') ?? "";
-  // }
+// Future<bool> _checkUserOnboard() async {
+//   final prefs = await SharedPreferences.getInstance();
+//   return prefs.getBool('isOnboarded') ?? false;
+// }
+// Future<String> _getDisplayName() async {
+//   final prefs = await SharedPreferences.getInstance();
+//   return prefs.getString('displayName') ?? "";
+// }
 
 StreamSubscription<Uri>? _linkSub;
 
@@ -69,7 +81,7 @@ Future<void> _initAppLinks() async {
       debugPrint('onAppLink: $uri');
       _openWebView(uri);
     });
-    } catch (e) {
+  } catch (e) {
     print('Error fetching initial link: $e');
   }
 
@@ -83,7 +95,7 @@ Future<void> _initAppLinks() async {
 
 void _openWebView(Uri uri) {
   // Navigate to your WebView route, passing the URL
-  navService.goTo('/webview', extra: {"url":uri.toString()});
+  navService.goTo('/webview', extra: {"url": uri.toString()});
 }
 
 // Future<bool> _checkUserLogin() async {

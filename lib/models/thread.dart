@@ -134,8 +134,8 @@ class ThreadResultData extends Equatable {
         'images': images.map((e) => e.toJson()).toList(),
         'local': local.map((e) => e.toJson()).toList(),
         'youtube_videos': youtubeVideos.map((e) => e.toJson()).toList(),
-        'createdAt': createdAt,
-        'updatedAt': updatedAt,
+        'createdAt': createdAt.toDate().toIso8601String(),
+        'updatedAt': updatedAt.toDate().toIso8601String(),
         'userQuery': userQuery,
         'searchQuery': searchQuery,
         'answer': answer,
@@ -143,7 +143,7 @@ class ThreadResultData extends Equatable {
         'isSearchMode': isSearchMode,
         'sourceImageDescription': sourceImageDescription,
         'sourceImageLink': sourceImageLink,
-        if (sourceImage != null) 'sourceImage': Blob(sourceImage!),
+        if (sourceImage != null) 'sourceImage': sourceImage!.toList(),
       };
 
   @override
@@ -631,13 +631,11 @@ class ThreadSessionData extends Equatable {
   final List<ThreadResultData> results;
   final Timestamp createdAt;
   final Timestamp updatedAt;
-  final String email;
   final bool isIncognito;
 
   const ThreadSessionData({
     required this.id,
     required this.isIncognito,
-    required this.email,
     required this.results,
     required this.createdAt,
     required this.updatedAt,
@@ -647,7 +645,6 @@ class ThreadSessionData extends Equatable {
     return ThreadSessionData(
       id: json['id'] ?? '',
       isIncognito: json['isIncognito'] ?? false,
-      email: json['email'] ?? '',
       results: (json['results'] as List<dynamic>?)
               ?.map((e) => ThreadResultData.fromJson(e))
               .toList() ??
@@ -667,16 +664,14 @@ class ThreadSessionData extends Equatable {
 
   Map<String, dynamic> toJson() => {
         'id': id,
-        'email': email,
         'isIncognito': isIncognito,
         'results': results.map((e) => e.toJson()).toList(),
-        'createdAt': createdAt,
-        'updatedAt': updatedAt,
+        'createdAt': createdAt.toDate().toIso8601String(),
+        'updatedAt': updatedAt.toDate().toIso8601String(),
       };
 
   @override
-  List<Object> get props =>
-      [id, email, isIncognito, results, createdAt, updatedAt];
+  List<Object> get props => [id, isIncognito, results, createdAt, updatedAt];
 }
 
 class LocalResultData extends Equatable {

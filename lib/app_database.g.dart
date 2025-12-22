@@ -386,15 +386,286 @@ class TabsCompanion extends UpdateCompanion<Tab> {
   }
 }
 
+class $ThreadsTable extends Threads with TableInfo<$ThreadsTable, Thread> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ThreadsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      clientDefault: () => const Uuid().v4());
+  static const VerificationMeta _sessionDataMeta =
+      const VerificationMeta('sessionData');
+  @override
+  late final GeneratedColumn<String> sessionData = GeneratedColumn<String>(
+      'session_data', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      clientDefault: () => DateTime.now());
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      clientDefault: () => DateTime.now());
+  @override
+  List<GeneratedColumn> get $columns => [id, sessionData, createdAt, updatedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'threads';
+  @override
+  VerificationContext validateIntegrity(Insertable<Thread> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('session_data')) {
+      context.handle(
+          _sessionDataMeta,
+          sessionData.isAcceptableOrUnknown(
+              data['session_data']!, _sessionDataMeta));
+    } else if (isInserting) {
+      context.missing(_sessionDataMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Thread map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Thread(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      sessionData: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}session_data'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+    );
+  }
+
+  @override
+  $ThreadsTable createAlias(String alias) {
+    return $ThreadsTable(attachedDatabase, alias);
+  }
+}
+
+class Thread extends DataClass implements Insertable<Thread> {
+  final String id;
+  final String sessionData;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const Thread(
+      {required this.id,
+      required this.sessionData,
+      required this.createdAt,
+      required this.updatedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['session_data'] = Variable<String>(sessionData);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  ThreadsCompanion toCompanion(bool nullToAbsent) {
+    return ThreadsCompanion(
+      id: Value(id),
+      sessionData: Value(sessionData),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory Thread.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Thread(
+      id: serializer.fromJson<String>(json['id']),
+      sessionData: serializer.fromJson<String>(json['sessionData']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'sessionData': serializer.toJson<String>(sessionData),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  Thread copyWith(
+          {String? id,
+          String? sessionData,
+          DateTime? createdAt,
+          DateTime? updatedAt}) =>
+      Thread(
+        id: id ?? this.id,
+        sessionData: sessionData ?? this.sessionData,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+  Thread copyWithCompanion(ThreadsCompanion data) {
+    return Thread(
+      id: data.id.present ? data.id.value : this.id,
+      sessionData:
+          data.sessionData.present ? data.sessionData.value : this.sessionData,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Thread(')
+          ..write('id: $id, ')
+          ..write('sessionData: $sessionData, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, sessionData, createdAt, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Thread &&
+          other.id == this.id &&
+          other.sessionData == this.sessionData &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class ThreadsCompanion extends UpdateCompanion<Thread> {
+  final Value<String> id;
+  final Value<String> sessionData;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const ThreadsCompanion({
+    this.id = const Value.absent(),
+    this.sessionData = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ThreadsCompanion.insert({
+    this.id = const Value.absent(),
+    required String sessionData,
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : sessionData = Value(sessionData);
+  static Insertable<Thread> custom({
+    Expression<String>? id,
+    Expression<String>? sessionData,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (sessionData != null) 'session_data': sessionData,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ThreadsCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? sessionData,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
+      Value<int>? rowid}) {
+    return ThreadsCompanion(
+      id: id ?? this.id,
+      sessionData: sessionData ?? this.sessionData,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (sessionData.present) {
+      map['session_data'] = Variable<String>(sessionData.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ThreadsCompanion(')
+          ..write('id: $id, ')
+          ..write('sessionData: $sessionData, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $TabsTable tabs = $TabsTable(this);
+  late final $ThreadsTable threads = $ThreadsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
-  List<DatabaseSchemaEntity> get allSchemaEntities => [tabs];
+  List<DatabaseSchemaEntity> get allSchemaEntities => [tabs, threads];
 }
 
 typedef $$TabsTableCreateCompanionBuilder = TabsCompanion Function({
@@ -590,9 +861,161 @@ typedef $$TabsTableProcessedTableManager = ProcessedTableManager<
     (Tab, BaseReferences<_$AppDatabase, $TabsTable, Tab>),
     Tab,
     PrefetchHooks Function()>;
+typedef $$ThreadsTableCreateCompanionBuilder = ThreadsCompanion Function({
+  Value<String> id,
+  required String sessionData,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<int> rowid,
+});
+typedef $$ThreadsTableUpdateCompanionBuilder = ThreadsCompanion Function({
+  Value<String> id,
+  Value<String> sessionData,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<int> rowid,
+});
+
+class $$ThreadsTableFilterComposer
+    extends Composer<_$AppDatabase, $ThreadsTable> {
+  $$ThreadsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get sessionData => $composableBuilder(
+      column: $table.sessionData, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$ThreadsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ThreadsTable> {
+  $$ThreadsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get sessionData => $composableBuilder(
+      column: $table.sessionData, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$ThreadsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ThreadsTable> {
+  $$ThreadsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get sessionData => $composableBuilder(
+      column: $table.sessionData, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$ThreadsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $ThreadsTable,
+    Thread,
+    $$ThreadsTableFilterComposer,
+    $$ThreadsTableOrderingComposer,
+    $$ThreadsTableAnnotationComposer,
+    $$ThreadsTableCreateCompanionBuilder,
+    $$ThreadsTableUpdateCompanionBuilder,
+    (Thread, BaseReferences<_$AppDatabase, $ThreadsTable, Thread>),
+    Thread,
+    PrefetchHooks Function()> {
+  $$ThreadsTableTableManager(_$AppDatabase db, $ThreadsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ThreadsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ThreadsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ThreadsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> sessionData = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              ThreadsCompanion(
+            id: id,
+            sessionData: sessionData,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            required String sessionData,
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              ThreadsCompanion.insert(
+            id: id,
+            sessionData: sessionData,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$ThreadsTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $ThreadsTable,
+    Thread,
+    $$ThreadsTableFilterComposer,
+    $$ThreadsTableOrderingComposer,
+    $$ThreadsTableAnnotationComposer,
+    $$ThreadsTableCreateCompanionBuilder,
+    $$ThreadsTableUpdateCompanionBuilder,
+    (Thread, BaseReferences<_$AppDatabase, $ThreadsTable, Thread>),
+    Thread,
+    PrefetchHooks Function()>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
   $AppDatabaseManager(this._db);
   $$TabsTableTableManager get tabs => $$TabsTableTableManager(_db, _db.tabs);
+  $$ThreadsTableTableManager get threads =>
+      $$ThreadsTableTableManager(_db, _db.threads);
 }

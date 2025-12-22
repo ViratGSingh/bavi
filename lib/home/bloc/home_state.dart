@@ -62,9 +62,12 @@ enum HomeProfileStatus { loading, success, failure, idle }
 
 enum HomeExtractUrlStatus { loading, success, failure, idle }
 
-enum GemmaDownloadStatus { loading, success, failure, idle }
+enum GemmaDownloadStatus { loading, success, failure, idle, cancelled }
 
-enum HomeModel { deepseek, gemini, claude, openAI }
+/// Which model is currently being downloaded for local memory
+enum LocalMemoryModelType { embedding, queryLlm }
+
+enum HomeModel { deepseek, gemini, claude, openAI, flashThink }
 
 const _sentinel = Object();
 
@@ -102,7 +105,10 @@ final class HomeState extends Equatable {
     this.generalStatus = HomeGeneralStatus.enabled,
     this.gemmaDownloadStatus = GemmaDownloadStatus.idle,
     this.gemmaDownloadProgress = 0.0,
+    this.gemmaDownloadMessage = "",
+    this.currentDownloadingModel,
     this.showLocationRationale = false,
+    this.isChatModeActive = false,
   })  : userData = userData ??
             UserProfileInfo(
               email: "NA",
@@ -116,7 +122,6 @@ final class HomeState extends Equatable {
         threadData = threadData ??
             ThreadSessionData(
               id: "",
-              email: "",
               results: [],
               isIncognito: false,
               createdAt: Timestamp.now(),
@@ -125,7 +130,6 @@ final class HomeState extends Equatable {
         cacheThreadData = cacheThreadData ??
             ThreadSessionData(
               id: "",
-              email: "",
               results: [],
               isIncognito: false,
               createdAt: Timestamp.now(),
@@ -164,7 +168,10 @@ final class HomeState extends Equatable {
   final HomeGeneralStatus generalStatus;
   final GemmaDownloadStatus gemmaDownloadStatus;
   final double gemmaDownloadProgress;
+  final String gemmaDownloadMessage;
+  final LocalMemoryModelType? currentDownloadingModel;
   final bool showLocationRationale;
+  final bool isChatModeActive;
 
   HomeState copyWith({
     String? sessionId,
@@ -199,7 +206,10 @@ final class HomeState extends Equatable {
     HomeGeneralStatus? generalStatus,
     GemmaDownloadStatus? gemmaDownloadStatus,
     double? gemmaDownloadProgress,
+    String? gemmaDownloadMessage,
+    LocalMemoryModelType? currentDownloadingModel,
     bool? showLocationRationale,
+    bool? isChatModeActive,
   }) {
     return HomeState(
       editQuery: editQuery ?? this.editQuery,
@@ -239,8 +249,12 @@ final class HomeState extends Equatable {
       gemmaDownloadStatus: gemmaDownloadStatus ?? this.gemmaDownloadStatus,
       gemmaDownloadProgress:
           gemmaDownloadProgress ?? this.gemmaDownloadProgress,
+      gemmaDownloadMessage: gemmaDownloadMessage ?? this.gemmaDownloadMessage,
+      currentDownloadingModel:
+          currentDownloadingModel ?? this.currentDownloadingModel,
       showLocationRationale:
           showLocationRationale ?? this.showLocationRationale,
+      isChatModeActive: isChatModeActive ?? this.isChatModeActive,
     );
   }
 
@@ -277,6 +291,9 @@ final class HomeState extends Equatable {
         generalStatus,
         gemmaDownloadStatus,
         gemmaDownloadProgress,
-        showLocationRationale
+        gemmaDownloadMessage,
+        currentDownloadingModel,
+        showLocationRationale,
+        isChatModeActive,
       ];
 }

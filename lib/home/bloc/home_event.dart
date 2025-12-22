@@ -37,10 +37,10 @@ final class HomeNavToReply extends HomeEvent {
 //Search
 final class HomeExtractUrlData extends HomeEvent {
   final String inputUrl;
-  ValueNotifier<String> extractedUrlDescription;
-  ValueNotifier<String> extractedUrlTitle;
-  ValueNotifier<String> extractedUrl;
-  ValueNotifier<String> extractedImageUrl;
+  final ValueNotifier<String> extractedUrlDescription;
+  final ValueNotifier<String> extractedUrlTitle;
+  final ValueNotifier<String> extractedUrl;
+  final ValueNotifier<String> extractedImageUrl;
 
   HomeExtractUrlData(this.inputUrl, this.extractedUrlDescription,
       this.extractedUrlTitle, this.extractedUrl, this.extractedImageUrl);
@@ -107,14 +107,14 @@ final class HomeGenScreenshot extends HomeEvent {
 //Watch Google Search
 final class HomeGetAnswer extends HomeEvent {
   final String query;
-  ValueNotifier<String> streamedText;
-  ValueNotifier<String> extractedUrlDescription;
-  ValueNotifier<String> extractedUrlTitle;
-  ValueNotifier<String> extractedUrl;
-  ValueNotifier<String> extractedImageUrl;
+  final ValueNotifier<String> streamedText;
+  final ValueNotifier<String> extractedUrlDescription;
+  final ValueNotifier<String> extractedUrlTitle;
+  final ValueNotifier<String> extractedUrl;
+  final ValueNotifier<String> extractedImageUrl;
   final String imageDescription;
   final ValueNotifier<String> imageDescriptionNotifier;
-  bool ignoreLocation;
+  final bool ignoreLocation;
 
   HomeGetAnswer(
       this.query,
@@ -131,11 +131,11 @@ final class HomeGetAnswer extends HomeEvent {
 //Watch Google Map Search
 final class HomeGetMapAnswer extends HomeEvent {
   final String query;
-  ValueNotifier<String> streamedText;
-  ValueNotifier<String> extractedUrlDescription;
-  ValueNotifier<String> extractedUrlTitle;
-  ValueNotifier<String> extractedUrl;
-  ValueNotifier<String> extractedImageUrl;
+  final ValueNotifier<String> streamedText;
+  final ValueNotifier<String> extractedUrlDescription;
+  final ValueNotifier<String> extractedUrlTitle;
+  final ValueNotifier<String> extractedUrl;
+  final ValueNotifier<String> extractedImageUrl;
   final String imageDescription;
   final ValueNotifier<String> imageDescriptionNotifier;
 
@@ -155,11 +155,11 @@ final class HomeUpdateAnswer extends HomeEvent {
   final String query;
   final int index;
   final String imageDescription;
-  ValueNotifier<String> streamedText;
-  ValueNotifier<String> extractedUrlDescription;
-  ValueNotifier<String> extractedUrlTitle;
-  ValueNotifier<String> extractedUrl;
-  ValueNotifier<String> extractedImageUrl;
+  final ValueNotifier<String> streamedText;
+  final ValueNotifier<String> extractedUrlDescription;
+  final ValueNotifier<String> extractedUrlTitle;
+  final ValueNotifier<String> extractedUrl;
+  final ValueNotifier<String> extractedImageUrl;
   final ValueNotifier<String> imageDescriptionNotifier;
 
   HomeUpdateAnswer(
@@ -179,12 +179,12 @@ final class HomeUpdateMapAnswer extends HomeEvent {
   final String query;
   final int index;
   final String imageDescription;
-  ValueNotifier<String> streamedText;
+  final ValueNotifier<String> streamedText;
   final ValueNotifier<String> imageDescriptionNotifier;
-  ValueNotifier<String> extractedUrlDescription;
-  ValueNotifier<String> extractedUrlTitle;
-  ValueNotifier<String> extractedUrl;
-  ValueNotifier<String> extractedImageUrl;
+  final ValueNotifier<String> extractedUrlDescription;
+  final ValueNotifier<String> extractedUrlTitle;
+  final ValueNotifier<String> extractedUrl;
+  final ValueNotifier<String> extractedImageUrl;
 
   HomeUpdateMapAnswer(
       this.query,
@@ -315,6 +315,8 @@ final class HomeImageUnselected extends HomeEvent {
 
 final class HomeDownloadGemmaModel extends HomeEvent {}
 
+final class HomeCancelGemmaDownload extends HomeEvent {}
+
 final class HomeCheckLocationPermission extends HomeEvent {}
 
 final class HomeRequestLocationPermission extends HomeEvent {}
@@ -355,3 +357,5 @@ final class HomeCheckLocationAndAnswer extends HomeEvent {
       this.imageDescription,
       this.imageDescriptionNotifier);
 }
+
+final class HomeToggleChatMode extends HomeEvent {}

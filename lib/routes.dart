@@ -1,5 +1,8 @@
 import 'package:bavi/answer/view/answer_page.dart';
 import 'package:bavi/home/view/home_page.dart';
+import 'package:bavi/memory/bloc/memory_bloc.dart';
+import 'package:bavi/memory/view/memory_page.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:bavi/home/widgets/answers_view.dart';
 import 'package:bavi/home/widgets/video_grid.dart';
 import 'package:bavi/home/widgets/video_scroll.dart';
@@ -23,18 +26,17 @@ class AppRouter {
   AppRouter(this.isLoggedIn);
   late final GoRouter router = GoRouter(
     initialLocation: isLoggedIn == true ? '/home' : '/login',
-    redirect:(context, state) {
+    redirect: (context, state) {
       final uriString = state.uri.toString();
       if (uriString.startsWith('http') || uriString.startsWith('https')) {
         navService.goTo('/webview', extra: {'url': uriString});
       }
       return null;
-    
     },
     errorBuilder: (context, state) {
-    // Fallback — show WebView for any unmatched URL
-    return WebViewPage(url: state.uri.toString(), isInitial: true);
-  },
+      // Fallback — show WebView for any unmatched URL
+      return WebViewPage(url: state.uri.toString(), isInitial: true);
+    },
     routes: [
       GoRoute(
         path: '/login',
@@ -52,7 +54,7 @@ class AppRouter {
           }
         },
       ),
-       GoRoute(
+      GoRoute(
         path: '/webview',
         builder: (context, state) {
           if (state.extra != null) {
@@ -92,7 +94,7 @@ class AppRouter {
               return false;
             },
             child: ReplyView(
-              isGlanceMode:isGlanceMode,
+              isGlanceMode: isGlanceMode,
               similarVideos: videos,
               query: query,
               searchId: searchId,
@@ -123,13 +125,12 @@ class AppRouter {
               return false;
             },
             child: AnswerView(
-              sourceUrls: videos,
-              query: query,
-              process: process,
-              answer: answer,
-              searchTime: searchTime,
-              searchId:searchId
-            ),
+                sourceUrls: videos,
+                query: query,
+                process: process,
+                answer: answer,
+                searchTime: searchTime,
+                searchId: searchId),
           );
         },
       ),
@@ -184,6 +185,13 @@ class AppRouter {
       GoRoute(
         path: '/settings',
         builder: (context, state) => const SettingsPage(),
+      ),
+      GoRoute(
+        path: '/memory',
+        builder: (context, state) => BlocProvider(
+          create: (context) => MemoryBloc(),
+          child: const MemoryPage(),
+        ),
       ),
       GoRoute(
         path: '/onboarding',

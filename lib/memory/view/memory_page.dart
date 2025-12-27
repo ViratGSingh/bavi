@@ -100,32 +100,34 @@ class _MemoryPageState extends State<MemoryPage> with TickerProviderStateMixin {
         }
       },
       builder: (context, state) {
-        return Scaffold(
-          backgroundColor: Colors.white,
-          body: Container(
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              // gradient: LinearGradient(
-              //   begin: Alignment.topCenter,
-              //   end: Alignment.bottomCenter,
-              //   colors: [
-              //     Colors.white,
-              //     Color(0xFFF8F9FA),
-              //     Color(0xFFF3F4F6),
-              //   ],
-              // ),
-            ),
-            child: SafeArea(
-              child: Column(
-                children: [
-                  // Custom AppBar
-                  _buildAppBar(state),
+        return SafeArea(
+          child: Scaffold(
+            backgroundColor: Colors.white,
+            body: Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                // gradient: LinearGradient(
+                //   begin: Alignment.topCenter,
+                //   end: Alignment.bottomCenter,
+                //   colors: [
+                //     Colors.white,
+                //     Color(0xFFF8F9FA),
+                //     Color(0xFFF3F4F6),
+                //   ],
+                // ),
+              ),
+              child: SafeArea(
+                child: Column(
+                  children: [
+                    // Custom AppBar
+                    _buildAppBar(state),
 
-                  // Content
-                  Expanded(
-                    child: _buildContent(state),
-                  ),
-                ],
+                    // Content
+                    Expanded(
+                      child: _buildContent(state),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

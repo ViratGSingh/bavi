@@ -13,7 +13,6 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:app_links/app_links.dart';
-import 'package:flutter_gemma/flutter_gemma.dart';
 
 void main() async {
   Bloc.observer = BaviBlocObserver();
@@ -39,18 +38,9 @@ void main() async {
   final bool isLoggedIn = true; //await _checkUserLogin();
   final router = AppRouter(isLoggedIn).router;
   navService.setRouter(router);
-  // Initialize FlutterGemma with HuggingFace token for authenticated model downloads
-  final hfToken = dotenv.env['HUGGINGFACE_TOKEN'];
-  print("HuggingFace Token: $hfToken");
-  print("");
-  if (hfToken != null && hfToken.isNotEmpty) {
-    print("done");
-    await FlutterGemma.initialize(huggingFaceToken: hfToken);
-  } else {
-    await FlutterGemma.initialize();
-  }
 
   runApp(BaviApp(router: router));
+
   // Start listening for links
   //_initAppLinks();
 }

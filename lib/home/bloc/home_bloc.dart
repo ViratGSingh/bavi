@@ -1413,17 +1413,21 @@ Rules:
     return false;
   }
 
-  /// Function to search using SerpAPI Google results for Instagram Reels
-  Future<void> _watchGeneralGoogleAnswer(
+  /// Check location permission and handle rationale if needed.
+  /// Returns true if the search should proceed, false if blocked by location permission.
+  Future<bool> _checkLocationPermissionForQuery(
       HomeGetAnswer event, Emitter<HomeState> emit) async {
-    // Check location permission ONLY if the query needs location context
     bool queryNeedsLocation = _queryNeedsLocation(event.query);
+    print(
+        "DEBUG: Query='${event.query}', needsLocation=$queryNeedsLocation, ignoreLocation=${event.ignoreLocation}");
     if (!event.ignoreLocation && queryNeedsLocation) {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       LocationPermission permission = await Geolocator.checkPermission();
+      print("DEBUG: serviceEnabled=$serviceEnabled, permission=$permission");
       if (!serviceEnabled ||
           permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
+        print("DEBUG: Location not available, showing rationale sheet");
         _pendingGetAnswerEvent = HomeGetAnswer(
           event.query,
           event.streamedText,
@@ -1436,8 +1440,23 @@ Rules:
           ignoreLocation: true,
         );
         emit(state.copyWith(showLocationRationale: true));
-        return; // Stop here, do not proceed with search
+        return false; // Stop here, do not proceed with search
+      } else {
+        print("DEBUG: Location already granted, proceeding with search");
       }
+    }
+    return true; // Proceed with search
+  }
+
+  /// Function to search using SerpAPI Google results for Instagram Reels
+  Future<void> _watchGeneralGoogleAnswer(
+      HomeGetAnswer event, Emitter<HomeState> emit) async {
+    print(
+        "=== DEBUG _watchGeneralGoogleAnswer ENTRY: query='${event.query}' ===");
+    // Check location permission ONLY if the query needs location context
+    final shouldProceed = await _checkLocationPermissionForQuery(event, emit);
+    if (!shouldProceed) {
+      return; // Stop here, location rationale is being shown
     }
 
     String query = event.query;
@@ -1585,8 +1604,6 @@ Rules:
         userData.country,
       );
     } else {
-      //Get user details
-      final userData = await _getUserLocation();
       event.imageDescriptionNotifier.value = "";
 
       // Check if chat mode is active - skip search and generate reply directly
@@ -1602,6 +1619,9 @@ Rules:
             loadingIndex: updThreadData.results.length - 1,
             selectedImage: null,
             replyStatus: HomeReplyStatus.loading));
+
+        //Get user details
+        final userData = await _getUserLocation();
 
         // If there's an image, use imageVercelGenerateReply
         if (imageBytes != null) {
@@ -1620,10 +1640,39 @@ Rules:
             userData.country,
           );
         } else {
-          // No image, use vercelGenerateReply with empty search results
+          // Search memory for relevant content to enhance the chat reply
+          List<({String text, String sourceQuery, double score})>
+              chatMemoryChunks = [];
+          try {
+            chatMemoryChunks =
+                await AnswerMemoryService.instance.searchRelevantMemory(
+              query,
+              maxResults: 10,
+              minScore: 0.3,
+            );
+          } catch (e) {
+            print("Error searching memory for chat: $e");
+          }
+
+          // Format memory chunks as context
+          final List<Map<String, String>> memoryContext =
+              chatMemoryChunks.map((chunk) {
+            return {
+              "title": "[Memory] Previously learned from: ${chunk.sourceQuery}",
+              "url": "memory://local",
+              "snippet": chunk.text,
+            };
+          }).toList();
+
+          if (memoryContext.isNotEmpty) {
+            print(
+                "📚 Adding ${memoryContext.length} memory chunks to chat context");
+          }
+
+          // No image, use vercelGenerateChatReply with memory context
           answer = await vercelGenerateChatReply(
             query,
-            [],
+            memoryContext,
             event.streamedText,
             emit,
             event.imageDescription,
@@ -1647,6 +1696,9 @@ Rules:
             selectedImage: null,
           ),
         );
+
+        //Get user details
+        final userData = await _getUserLocation();
 
         try {
           if (state.searchType == HomeSearchType.nsfw) {
@@ -1686,6 +1738,20 @@ Rules:
         if (_cancelTaskGen) {
           //emit(state.copyWith(status: HomePageStatus.success));
           return;
+        }
+
+        // Search memory for relevant content to enhance the answer
+        List<({String text, String sourceQuery, double score})> memoryChunks =
+            [];
+        try {
+          memoryChunks =
+              await AnswerMemoryService.instance.searchRelevantMemory(
+            query,
+            maxResults: 10,
+            minScore: 0.3,
+          );
+        } catch (e) {
+          print("Error searching memory: $e");
         }
 
         // Continue with search flow for non-chat action types
@@ -1884,6 +1950,20 @@ Rules:
           };
         }));
 
+        // Add memory chunks as context for the AI (high priority - add first)
+        if (memoryChunks.isNotEmpty) {
+          print("📚 Adding ${memoryChunks.length} memory chunks to context");
+          final memoryResults = memoryChunks.map((chunk) {
+            return {
+              "title": "[Memory] Previously learned from: ${chunk.sourceQuery}",
+              "url": "memory://local",
+              "snippet": chunk.text,
+            };
+          }).toList();
+          // Insert memory at beginning for higher priority
+          formattedResults.insertAll(0, memoryResults);
+        }
+
         answer = await vercelGenerateReply(
           query,
           formattedResults,
@@ -1971,9 +2051,11 @@ Rules:
     event.imageDescriptionNotifier.value = "";
 
     if (updThreadData.results.length == 1) {
-      await createSession(updThreadData, threadId);
+      await createSession(updThreadData, threadId,
+          skipMemoryProcessing: state.isChatModeActive);
     } else {
-      await updateSession(updThreadData, state.threadData.id);
+      await updateSession(updThreadData, state.threadData.id,
+          skipMemoryProcessing: state.isChatModeActive);
     }
 
     // Refresh history
@@ -3235,10 +3317,10 @@ Rules:
 - Only use the sources that directly answer the query.
 - If no strong or direct matches are found, gracefully say: _“There isn’t a perfect match for that, but here are a few options that might still interest you.”_
 - Do not repeat the question or use generic filler lines.
-- Keep your language short, engaging, and optimized for mobile readability.
+- Keep your language engaging, be as detailed and exhaustive as possible, ensuring no relevant detail from the sources is omitted, while still maintaining clarity and readability.
 - If the query consists primarily of a URL (e.g., youtube.com/...), use the provided content from the extracted URL to summarize what the page or video is about.
 
-You may use the following user context for additional personalization (if relevant):
+Use the following user context for additional personalization (if relevant):
 $formattedUserContext
 """;
 
@@ -3455,20 +3537,21 @@ $formattedUserContext
 
     // Step 3: Build systemPrompt
     final systemPrompt = """
-You are a friendly and knowledgeable conversational assistant. You engage in natural, helpful dialogue with users, analyzing any images they share and providing thoughtful, personalized responses.
+You are a personal memory assistant that helps users recall and explore information from their saved memories. Your primary purpose is to help users remember things they've previously searched, learned, or saved.
 
 Rules:
 - Always respond in Markdown format.
+- **ONLY use information from the provided memory_recall_results** - do NOT make up or hallucinate any information.
+- If the memory results don't contain relevant information, honestly say "I don't have that in your memories" rather than guessing.
 - Be conversational and warm - respond as a helpful friend would.
 - When analyzing images, describe what you see clearly and answer any questions about them.
 - **Bold key insights** and important information to make responses scannable.
 - Use bullet points or numbered lists when presenting multiple items or steps.
 - Keep responses concise and optimized for mobile readability.
-- Never use phrases like "As an AI" or "I don't have personal opinions" - just be helpful and natural.
-- If the user shares an image, acknowledge it and provide relevant observations or answers based on what you see.
-- Draw on the conversation history to maintain context and provide coherent follow-up responses.
-- If you're unsure about something in an image, say so honestly rather than guessing.
-- Be proactive in offering helpful suggestions or related information when appropriate.
+- Draw on the conversation history and memory results to maintain context.
+- When recalling memories, cite the source or context when available.
+- If you're unsure about something, say so honestly rather than guessing.
+- Never fabricate information that isn't in the user's memories.
 
 User context for personalization:
 $formattedUserContext
@@ -3522,7 +3605,7 @@ $formattedUserContext
                 "role": "assistant",
                 "content": item.isSearchMode
                     ? jsonEncode({
-                        "previous_web_results": item.web
+                        "memory_recall_results": item.web
                             .map((inf) => {
                                   "title": inf.title,
                                   "url": inf.link,
@@ -3703,74 +3786,50 @@ $formattedUserContext
       initMixpanel();
     }
 
-    // Check if Gemma model is already installed FIRST to update UI faster
+    // Check if EmbeddingGemma model is already installed FIRST to update UI faster
     try {
-      final isGemmaInstalled =
-          await FlutterGemma.isModelInstalled('gemma3-270m-it-q8.task');
-      if (isGemmaInstalled &&
+      final isEmbedderInstalled = await FlutterGemma.isModelInstalled(
+          'embeddinggemma-300M_seq1024_mixed-precision.tflite');
+      if (isEmbedderInstalled &&
           state.gemmaDownloadStatus == GemmaDownloadStatus.idle) {
-        print("DEBUG: Gemma model detected as installed on startup");
+        print("DEBUG: EmbeddingGemma model detected as installed on startup");
 
-        // Emit loading state to show premium warm-up indicator
+        // Emit loading state to show warm-up indicator
         emit(state.copyWith(
           gemmaDownloadStatus: GemmaDownloadStatus.loading,
-          gemmaDownloadMessage: "Warming up local AI...",
+          gemmaDownloadMessage: "Warming up memory system...",
         ));
 
         try {
           // We MUST call install() once per session to "activate" the model,
           // even if it's already on disk. This won't redownload it.
           final hfToken = dotenv.env['HUGGINGFACE_TOKEN'];
-          await FlutterGemma.installModel(
-            modelType: ModelType.gemmaIt,
-          )
-              .fromNetwork(
-                'https://huggingface.co/litert-community/gemma-3-270m-it/resolve/main/gemma3-270m-it-q8.task',
+          await FlutterGemma.installEmbedder()
+              .modelFromNetwork(
+                'https://huggingface.co/litert-community/embeddinggemma-300m/resolve/main/embeddinggemma-300M_seq1024_mixed-precision.tflite',
                 token: hfToken,
               )
+              .tokenizerFromNetwork(
+                'https://huggingface.co/litert-community/Gecko-110m-en/resolve/main/sentencepiece.model',
+              )
               .install();
+          print("DEBUG: EmbeddingGemma activated for memory feature");
 
-          // Also activate the Gecko embedder for answer memory feature
-          try {
-            await FlutterGemma.installEmbedder()
-                .modelFromNetwork(
-                  'https://huggingface.co/litert-community/Gecko-110m-en/resolve/main/Gecko_256_quant.tflite',
-                  token: hfToken,
-                )
-                .tokenizerFromNetwork(
-                  'https://huggingface.co/litert-community/Gecko-110m-en/resolve/main/sentencepiece.model',
-                )
-                .install();
-            print("DEBUG: Gecko embedder activated");
-          } catch (embedderError) {
-            print(
-                "DEBUG: Gecko embedder activation failed (non-fatal): $embedderError");
-          }
-
-          // Pre-load (warm-up) the model instance at startup
-          print("DEBUG: Warming up Gemma model...");
-          await _getGemmaModel();
-
-          // Pre-create and cache the chat session to avoid createChat() on each query
-          print("DEBUG: Creating cached chat session...");
-          _activeGemmaChat = await _activeGemmaModel!.createChat();
-
-          print("DEBUG: Gemma model and chat session warmed up and ready!");
           emit(state.copyWith(
             gemmaDownloadStatus: GemmaDownloadStatus.success,
-            gemmaDownloadMessage: "Local AI ready",
+            gemmaDownloadMessage: "Memory system ready",
           ));
         } catch (activationError) {
           print(
-              "DEBUG: Error activating Gemma model on startup: $activationError");
+              "DEBUG: Error activating EmbeddingGemma on startup: $activationError");
           emit(state.copyWith(
             gemmaDownloadStatus: GemmaDownloadStatus.failure,
-            gemmaDownloadMessage: "Failed to warm up local AI",
+            gemmaDownloadMessage: "Failed to warm up memory system",
           ));
         }
       }
     } catch (e) {
-      print("DEBUG: Error checking Gemma installation status: $e");
+      print("DEBUG: Error checking EmbeddingGemma installation status: $e");
     }
 
     emit(state.copyWith(historyStatus: HomeHistoryStatus.loading));
@@ -3792,8 +3851,8 @@ $formattedUserContext
     }
   }
 
-  Future<String?> createSession(
-      ThreadSessionData sessionData, String sessionId) async {
+  Future<String?> createSession(ThreadSessionData sessionData, String sessionId,
+      {bool skipMemoryProcessing = false}) async {
     try {
       final thread = ThreadsCompanion.insert(
         id: drift.Value(sessionId),
@@ -3806,7 +3865,10 @@ $formattedUserContext
       print("✅ Session created in local database with ID: $sessionId");
 
       // Process and cache answers for memory system (fire-and-forget, isolated)
-      _processAnswersForMemory(sessionData.results);
+      // Skip if chat mode is active
+      if (!skipMemoryProcessing) {
+        _processAnswersForMemory(sessionData.results);
+      }
 
       return sessionId;
     } catch (e) {
@@ -3900,8 +3962,8 @@ $formattedUserContext
     );
   }
 
-  Future<String?> updateSession(
-      ThreadSessionData sessionData, String sessionId) async {
+  Future<String?> updateSession(ThreadSessionData sessionData, String sessionId,
+      {bool skipMemoryProcessing = false}) async {
     try {
       final thread = ThreadsCompanion(
         id: drift.Value(sessionId),
@@ -3914,7 +3976,8 @@ $formattedUserContext
       print("✅ Session updated in local database with ID: $sessionId");
 
       // Process and cache the latest answer for memory system (fire-and-forget, isolated)
-      if (sessionData.results.isNotEmpty) {
+      // Skip if chat mode is active
+      if (!skipMemoryProcessing && sessionData.results.isNotEmpty) {
         final latestResult = sessionData.results.last;
         _processAnswerForMemory(latestResult.answer, latestResult.userQuery);
       }
@@ -3940,66 +4003,37 @@ $formattedUserContext
     final hfToken = dotenv.env['HUGGINGFACE_TOKEN'];
 
     try {
-      // ========== STEP 1: Download Gecko Embedding Model (~114 MB) ==========
-      print("DEBUG: Starting Gecko embedding model download (Step 1/2)");
+      // ========== Download EmbeddingGemma-300M Embedding Model (~183 MB) ==========
+      print("DEBUG: Starting EmbeddingGemma-300M embedding model download");
       emit(state.copyWith(
         gemmaDownloadStatus: GemmaDownloadStatus.loading,
         gemmaDownloadProgress: 0.0,
-        gemmaDownloadMessage: "Downloading embedding model (1/2)...",
+        gemmaDownloadMessage: "Downloading memory model...",
         currentDownloadingModel: LocalMemoryModelType.embedding,
       ));
 
-      // Download Gecko-110m embedding model (.tflite) and tokenizer
+      // Download EmbeddingGemma-300M model (.tflite) and tokenizer
+      // Using seq1024 variant for good balance of context length and performance
       await FlutterGemma.installEmbedder()
           .modelFromNetwork(
-            'https://huggingface.co/litert-community/Gecko-110m-en/resolve/main/Gecko_256_quant.tflite',
+            'https://huggingface.co/litert-community/embeddinggemma-300m/resolve/main/embeddinggemma-300M_seq1024_mixed-precision.tflite',
             token: hfToken,
           )
           .tokenizerFromNetwork(
+            // Using Gecko's sentencepiece tokenizer which is compatible
             'https://huggingface.co/litert-community/Gecko-110m-en/resolve/main/sentencepiece.model',
           )
           .withModelProgress((progress) {
-        // Embedding model is ~27% of total (~114MB of ~420MB)
-        final totalProgress = (progress / 100) * 0.27;
         emit(state.copyWith(
-          gemmaDownloadProgress: totalProgress,
+          gemmaDownloadProgress: progress / 100,
           gemmaDownloadMessage:
-              "Downloading embedding model: ${progress.toStringAsFixed(1)}%",
+              "Downloading memory model: ${progress.toStringAsFixed(1)}%",
         ));
       }).install();
 
-      print("DEBUG: Gecko embedding model downloaded successfully");
+      print("DEBUG: EmbeddingGemma-300M model downloaded successfully");
 
-      // ========== STEP 2: Download Gemma 3 270M Query Model (~300 MB) ==========
-      print("DEBUG: Starting Gemma 3 270M query model download (Step 2/2)");
-      emit(state.copyWith(
-        gemmaDownloadProgress: 0.27,
-        gemmaDownloadMessage: "Downloading query model (2/2)...",
-        currentDownloadingModel: LocalMemoryModelType.queryLlm,
-      ));
-
-      // Download Gemma 3 270M IT instruction tuned model (int4 quantized, ~300 MB)
-      await FlutterGemma.installModel(
-        modelType: ModelType.gemmaIt,
-      )
-          .fromNetwork(
-            'https://huggingface.co/litert-community/gemma-3-270m-it/resolve/main/gemma3-270m-it-q8.task',
-            token: hfToken,
-          )
-          .withCancelToken(_gemmaCancelToken!)
-          .withProgress((progress) {
-        // Query model is ~73% of total (~300MB of ~420MB)
-        final totalProgress = 0.27 + (progress / 100) * 0.73;
-        emit(state.copyWith(
-          gemmaDownloadProgress: totalProgress,
-          gemmaDownloadMessage:
-              "Downloading query model: ${progress.toStringAsFixed(1)}%",
-        ));
-      }).install();
-
-      print("DEBUG: Gemma 3 270M query model downloaded successfully");
-
-      // ========== All Downloads Complete ==========
+      // ========== Download Complete ==========
       emit(state.copyWith(
         gemmaDownloadStatus: GemmaDownloadStatus.success,
         gemmaDownloadProgress: 1.0,
@@ -4044,16 +4078,24 @@ $formattedUserContext
 
   /// Process multiple results for memory caching. Runs in background, won't block.
   void _processAnswersForMemory(List<ThreadResultData> results) {
+    debugPrint(
+        '🧠 _processAnswersForMemory called with ${results.length} results');
     Future(() async {
       try {
+        debugPrint('🧠 Starting memory processing loop...');
         for (final result in results) {
+          debugPrint(
+              '🧠 Checking result: answer length=${result.answer.length}, query="${result.userQuery}"');
           if (result.answer.isNotEmpty) {
+            debugPrint('🧠 Processing answer for memory...');
             await AnswerMemoryService.instance.processAndCacheAnswer(
               result.answer,
               result.userQuery,
             );
+            debugPrint('🧠 Finished processing answer for memory');
           }
         }
+        debugPrint('🧠 Memory processing loop complete');
       } catch (e) {
         debugPrint('⚠️ Answer memory processing error (ignored): $e');
         // Don't rethrow - this is fire-and-forget
@@ -4063,11 +4105,18 @@ $formattedUserContext
 
   /// Process a single answer for memory caching. Runs in background, won't block.
   void _processAnswerForMemory(String answer, String query) {
-    if (answer.isEmpty) return;
+    debugPrint(
+        '🧠 _processAnswerForMemory called: answer length=${answer.length}, query="$query"');
+    if (answer.isEmpty) {
+      debugPrint('🧠 Answer empty, skipping');
+      return;
+    }
 
     Future(() async {
       try {
+        debugPrint('🧠 Starting single answer memory processing...');
         await AnswerMemoryService.instance.processAndCacheAnswer(answer, query);
+        debugPrint('🧠 Single answer memory processing complete');
       } catch (e) {
         debugPrint('⚠️ Answer memory processing error (ignored): $e');
         // Don't rethrow - this is fire-and-forget

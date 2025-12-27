@@ -125,7 +125,7 @@ final class HomeGetAnswer extends HomeEvent {
       this.extractedImageUrl,
       this.imageDescription,
       this.imageDescriptionNotifier,
-      {this.ignoreLocation = true});
+      {this.ignoreLocation = false});
 }
 
 //Watch Google Map Search

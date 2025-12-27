@@ -1,15 +1,17 @@
+import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_gemma/flutter_gemma.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:http/http.dart' as http;
 import 'package:bavi/models/answer_chunk.dart';
 import 'package:bavi/objectbox_store.dart';
 import 'package:bavi/objectbox.g.dart';
 
 /// Service for managing answer-memory with semantic search and recency scoring.
 /// Handles chunk processing, embedding generation, and cache management.
+/// Uses OpenAI text-embedding-3-small for embedding generation.
 class AnswerMemoryService {
   static AnswerMemoryService? _instance;
-  dynamic _embedder; // Using dynamic since EmbedderModel may not be exported
 
   AnswerMemoryService._internal();
 
@@ -26,24 +28,22 @@ class AnswerMemoryService {
   static const double confidenceDecayFactor = 0.98;
 
   /// Top-K results to fetch in vector search
-  static const int topK = 5;
+  static const int topK = 10;
 
   /// Cached status of whether memory system is available (models installed)
   bool? _isAvailable;
 
-  /// Check if the answer memory system is available (Gecko embedder + ObjectBox).
+  /// Check if the answer memory system is available (ObjectBox + API key).
   /// This is a quick check that won't interrupt the normal query flow.
   /// Initializes ObjectBox lazily on first call.
   Future<bool> isAvailable() async {
     if (_isAvailable != null) return _isAvailable!;
 
     try {
-      // Check if Gecko embedding model is installed
-      final isGeckoInstalled =
-          await FlutterGemma.isModelInstalled('Gecko_256_quant.tflite');
-
-      if (!isGeckoInstalled) {
-        debugPrint('ℹ️ Answer memory disabled: Gecko embedder not installed');
+      // Check if OpenAI API key is configured
+      final apiKey = dotenv.env['OPENAI_API_KEY'];
+      if (apiKey == null || apiKey.isEmpty) {
+        debugPrint('ℹ️ Answer memory disabled: OPENAI_API_KEY not configured');
         _isAvailable = false;
         return false;
       }
@@ -129,65 +129,13 @@ class AnswerMemoryService {
   }
 
   // ============================================
-  // CHUNK CLASSIFICATION (Info vs Not-Info)
+  // CHUNK CLASSIFICATION (Heuristic-based)
   // ============================================
 
-  /// Classify a chunk as "info" (factual/reusable) or "not-info" using Gemma 3 270M.
+  /// Classify a chunk as info (factual/reusable) or not-info using heuristics.
   /// Returns true if the chunk contains useful factual information.
-  Future<bool> classifyChunkAsInfo(String chunk) async {
-    try {
-      // Check if the 270M model is installed
-      final is270MInstalled =
-          await FlutterGemma.isModelInstalled('gemma3-270m-it-q8.task');
-
-      if (!is270MInstalled) {
-        debugPrint(
-            '⚠️ Gemma 270M not installed, using heuristics for classification');
-        return _heuristicClassify(chunk);
-      }
-
-      // Create a classification prompt
-      final prompt = '''Classify: INFO or NOT_INFO.
-INFO = anything which is not filler.
-NOT_INFO = filler content only.
-
-"$chunk"
-
-Reply ONLY: INFO or NOT_INFO''';
-
-      final model = await FlutterGemma.getActiveModel(maxTokens: 16);
-      final chat = await model.createChat();
-
-      await chat.addQueryChunk(Message.text(text: prompt, isUser: true));
-
-      // Get streaming response and collect tokens
-      StringBuffer responseBuffer = StringBuffer();
-      int tokenCount = 0;
-      const maxTokens = 10;
-
-      while (tokenCount < maxTokens) {
-        final response = await chat.generateChatResponse();
-        tokenCount++;
-
-        if (response is TextResponse) {
-          final token = response.token;
-          if (token.isEmpty) break;
-          responseBuffer.write(token);
-        } else {
-          break;
-        }
-      }
-
-      final answer = responseBuffer.toString().toLowerCase().trim();
-      final isInfo = answer.contains('info') && !answer.contains('not_info');
-
-      debugPrint(
-          '🏷️ Classification: ${isInfo ? "INFO" : "NOT_INFO"} - "${chunk.substring(0, min(40, chunk.length))}..."');
-      return isInfo;
-    } catch (e) {
-      debugPrint('❌ Chunk classification error: $e');
-      return _heuristicClassify(chunk);
-    }
+  bool classifyChunkAsInfo(String chunk) {
+    return _heuristicClassify(chunk);
   }
 
   /// Simple heuristic fallback for classification
@@ -206,42 +154,54 @@ Reply ONLY: INFO or NOT_INFO''';
   }
 
   // ============================================
-  // EMBEDDING GENERATION
+  // EMBEDDING GENERATION (OpenAI API)
   // ============================================
 
-  /// Get or create the embedding model instance
-  Future<dynamic> _getEmbedder() async {
-    if (_embedder != null) return _embedder;
-
-    try {
-      // Use CPU backend to avoid GPU conflicts with Gemma model
-      _embedder = await FlutterGemma.getActiveEmbedder(
-        preferredBackend: PreferredBackend.cpu,
-      );
-      return _embedder;
-    } catch (e) {
-      debugPrint('❌ Failed to get embedder: $e');
-      return null;
-    }
-  }
-
-  /// Generate a 256-dimensional Gecko embedding for the given text.
+  /// Generate embedding for the given text using OpenAI text-embedding-3-small.
+  /// Returns a 1536-dimensional embedding vector.
   Future<List<double>?> generateEmbedding(String text) async {
     try {
-      // Add small delay to let GPU settle after Gemma operations
-      await Future.delayed(const Duration(milliseconds: 100));
-
-      final embedder = await _getEmbedder();
-      if (embedder == null) return null;
-
-      final embedding = await embedder.generateEmbedding(text) as List<double>;
-
-      if (embedding.isEmpty) {
-        debugPrint('⚠️ Empty embedding returned for text');
+      final apiKey = dotenv.env['OPENAI_API_KEY'];
+      if (apiKey == null || apiKey.isEmpty) {
+        debugPrint('⚠️ OPENAI_API_KEY not configured');
         return null;
       }
 
-      debugPrint('🔢 Generated ${embedding.length}-dim embedding');
+      // Truncate text to avoid token limits (8191 tokens max for text-embedding-3-small)
+      // Approximate: 1 token ≈ 4 chars, so ~32000 chars max
+      final truncatedText =
+          text.length > 30000 ? text.substring(0, 30000) : text;
+
+      final response = await http.post(
+        Uri.parse('https://api.openai.com/v1/embeddings'),
+        headers: {
+          'Authorization': 'Bearer $apiKey',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'model': 'text-embedding-3-small',
+          'input': truncatedText,
+        }),
+      );
+
+      if (response.statusCode != 200) {
+        debugPrint(
+            '❌ OpenAI embedding API error: ${response.statusCode} ${response.body}');
+        return null;
+      }
+
+      final json = jsonDecode(response.body);
+      final embeddingData = json['data']?[0]?['embedding'];
+
+      if (embeddingData == null) {
+        debugPrint('⚠️ No embedding in response');
+        return null;
+      }
+
+      final embedding =
+          (embeddingData as List).map((e) => (e as num).toDouble()).toList();
+
+      debugPrint('🔢 Generated ${embedding.length}-dim embedding via OpenAI');
       return embedding;
     } catch (e) {
       debugPrint('❌ Embedding generation error: $e');
@@ -303,11 +263,17 @@ Reply ONLY: INFO or NOT_INFO''';
       // Calculate final scores with recency weighting
       final scoredResults = results.map((result) {
         final chunk = result.object;
-        // ObjectBox returns distance scores, convert to similarity (lower distance = higher similarity)
-        // For cosine distance: similarity = 1 - distance (approximately)
-        final similarity = max(0.0, 1.0 - result.score);
-        final finalScore =
-            computeFinalScore(similarity, chunk.lastUsedAt, chunk.confidence);
+        // ObjectBox returns L2 (Euclidean) distance - lower is more similar
+        // Convert to similarity using: similarity = 1 / (1 + distance)
+        // This maps distance 0 -> similarity 1, distance ∞ -> similarity 0
+        final rawDistance = result.score;
+        final similarity = 1.0 / (1.0 + rawDistance);
+        final recencyWeight = computeRecencyWeight(chunk.lastUsedAt);
+        final finalScore = similarity * recencyWeight * chunk.confidence;
+
+        debugPrint(
+            '  🔢 Raw distance: ${rawDistance.toStringAsFixed(3)}, similarity: ${similarity.toStringAsFixed(3)}, recency: ${recencyWeight.toStringAsFixed(2)}, final: ${finalScore.toStringAsFixed(3)}');
+
         return (chunk: chunk, score: finalScore);
       }).toList();
 
@@ -488,6 +454,57 @@ Reply ONLY: INFO or NOT_INFO''';
     }
   }
 
+  /// Search memory for relevant content to use in answer generation.
+  /// Returns list of relevant memory chunks sorted by score (similarity × recency × confidence).
+  /// Use this to enhance AI answers with previously learned information.
+  Future<List<({String text, String sourceQuery, double score})>>
+      searchRelevantMemory(
+    String query, {
+    int maxResults = 20,
+    double minScore = 0.05,
+  }) async {
+    if (!await isAvailable()) return [];
+
+    try {
+      debugPrint(
+          '🧠 Searching memory for: "${query.substring(0, min(50, query.length))}..."');
+
+      // Generate embedding for query
+      final queryEmbedding = await generateEmbedding(query);
+      if (queryEmbedding == null) {
+        debugPrint('⚠️ Failed to generate query embedding');
+        return [];
+      }
+
+      // Search for similar chunks
+      final matches = await searchSimilarChunks(queryEmbedding);
+
+      // Debug: show all scores before filtering
+      for (final m in matches) {
+        debugPrint(
+            '  📊 Chunk score: ${m.score.toStringAsFixed(3)} - "${m.chunk.text.substring(0, min(40, m.chunk.text.length))}..."');
+      }
+
+      // Filter by minimum score and limit results
+      final relevantChunks = matches
+          .where((m) => m.score >= minScore)
+          .take(maxResults)
+          .map((m) => (
+                text: m.chunk.text,
+                sourceQuery: m.chunk.sourceQuery,
+                score: m.score,
+              ))
+          .toList();
+
+      debugPrint(
+          '📚 Found ${relevantChunks.length} relevant memory chunks (minScore: $minScore)');
+      return relevantChunks;
+    } catch (e) {
+      debugPrint('❌ Memory search error: $e');
+      return [];
+    }
+  }
+
   /// Get statistics about the answer memory store.
   Future<Map<String, dynamic>> getStats() async {
     try {
@@ -503,17 +520,5 @@ Reply ONLY: INFO or NOT_INFO''';
     } catch (e) {
       return {'error': e.toString()};
     }
-  }
-
-  /// Close resources when done
-  Future<void> close() async {
-    if (_embedder != null) {
-      try {
-        await _embedder.close();
-      } catch (e) {
-        debugPrint('Warning: Could not close embedder: $e');
-      }
-    }
-    _embedder = null;
   }
 }

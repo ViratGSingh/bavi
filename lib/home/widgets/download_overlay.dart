@@ -33,7 +33,7 @@ class DownloadOverlay extends StatelessWidget {
         final downloadedBytes = progress * totalSizeBytes;
 
         return Material(
-          color: Colors.black.withOpacity(0.95),
+          color: Colors.white,
           child: SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -55,15 +55,15 @@ class DownloadOverlay extends StatelessWidget {
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                             colors: [
-                              const Color(0xFFB388FF).withOpacity(0.3),
-                              const Color(0xFF8A2BE2).withOpacity(0.3),
+                              const Color(0xFFB388FF).withOpacity(0.4),
+                              const Color(0xFF8A2BE2).withOpacity(0.4),
                             ],
                           ),
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(
                           Iconsax.arrow_down_2_bold,
-                          color: Colors.white,
+                          color: Color(0xFF8A2BE2),
                           size: 48,
                         ),
                       );
@@ -77,7 +77,7 @@ class DownloadOverlay extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: Color(0xFF1A1A1A),
                       letterSpacing: -0.5,
                     ),
                   ),
@@ -91,7 +91,7 @@ class DownloadOverlay extends StatelessWidget {
                         : "Setting up query model (2/2)...",
                     style: TextStyle(
                       fontSize: 16,
-                      color: Colors.white.withOpacity(0.7),
+                      color: Colors.black.withOpacity(0.6),
                     ),
                   ),
                   const SizedBox(height: 48),
@@ -102,7 +102,7 @@ class DownloadOverlay extends StatelessWidget {
                     child: LinearProgressIndicator(
                       value: progress,
                       minHeight: 8,
-                      backgroundColor: Colors.white.withOpacity(0.1),
+                      backgroundColor: Colors.black.withOpacity(0.08),
                       valueColor: const AlwaysStoppedAnimation<Color>(
                         Color(0xFF8A2BE2),
                       ),
@@ -119,7 +119,7 @@ class DownloadOverlay extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
-                          color: Colors.white.withOpacity(0.9),
+                          color: Colors.black.withOpacity(0.8),
                         ),
                       ),
                       Text(
@@ -127,14 +127,14 @@ class DownloadOverlay extends StatelessWidget {
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFFB388FF),
+                          color: Color(0xFF8A2BE2),
                         ),
                       ),
                       Text(
                         "~420 MB",
                         style: TextStyle(
                           fontSize: 14,
-                          color: Colors.white.withOpacity(0.5),
+                          color: Colors.black.withOpacity(0.5),
                         ),
                       ),
                     ],
@@ -151,9 +151,9 @@ class DownloadOverlay extends StatelessWidget {
                         context.read<HomeBloc>().add(HomeCancelGemmaDownload());
                       },
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white,
+                        foregroundColor: const Color(0xFF8A2BE2),
                         side: BorderSide(
-                          color: Colors.white.withOpacity(0.3),
+                          color: Colors.black.withOpacity(0.15),
                           width: 1,
                         ),
                         shape: RoundedRectangleBorder(

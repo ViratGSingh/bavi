@@ -10,8 +10,8 @@ class AnswerChunk {
   /// The atomic text chunk (1-2 sentences of factual/info content)
   String text;
 
-  /// 256-dimensional Gecko embedding for semantic similarity search
-  @HnswIndex(dimensions: 256)
+  /// 1536-dimensional OpenAI text-embedding-3-small for semantic similarity search
+  @HnswIndex(dimensions: 1536)
   @Property(type: PropertyType.floatVector)
   List<double>? embedding;
 

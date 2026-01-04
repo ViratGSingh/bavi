@@ -49,7 +49,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     on<HomeSwitchType>(_switchType);
     on<HomeSwitchPrivacyType>(_switchPrivacyType);
     on<HomeSwitchActionType>(_switchActionType);
-    on<HomeGetAnswer>(_watchGeneralGoogleAnswer);
+    on<HomeGetAnswer>(_getFastAnswer);
     on<HomeUpdateAnswer>(_updateGeneralGoogleAnswer);
 
     on<HomeCancelTaskGen>(_cancelTaskSearchQuery);
@@ -1009,56 +1009,15 @@ Rules:
 5. Return ONLY the search query, nothing else.
 """;
 
-      // Use local Gemma if chat session is already warmed up at startup
-      // NOTE: We use _activeGemmaChat directly (pre-created at startup) to avoid
-      // any native allocation during the search flow.
-      if (_activeGemmaChat != null &&
-          state.gemmaDownloadStatus == GemmaDownloadStatus.success) {
-        try {
-          print(
-              "DEBUG: Using pre-warmed local Gemma chat for query optimization");
-
-          // Use a very simple, direct prompt for the 270M model
-          // Complex prompts confuse it - keep it minimal
-          final localPrompt =
-              """Convert this question to a Google search query (max 10 words).
-              Rules:
-1. If the user mentions "right now" or "today" or time-sensitive terms, use the current date and time from the context to determine the part of the day (morning, afternoon, evening, night) or specific date in the query.
-2. If the user mentions "near me" or "nearby", use the provided location in the context (City, Region, Country) to make the query specific to that location.
-3. If the query consists primarily of a URL (e.g., youtube.com/...), use the URL to generate a search query relevant to that video or page.
-4. Generate a concise, effective Google search query (max 10 words).
-5. Return ONLY the search query, nothing else.
-
-                  User Context: $formattedUserContext
-                  User query: $query
-                  Search query:""";
-
-          await _activeGemmaChat!.addQueryChunk(Message.text(
-            text: localPrompt,
-            isUser: true,
-          ));
-          final response = await _activeGemmaChat!.generateChatResponse();
-
-          if (response is TextResponse && response.token.trim().isNotEmpty) {
-            final cleanedQuery = response.token.trim();
-            print("DEBUG: Generated local search query: $cleanedQuery");
-            return (type: "general", searchQuery: cleanedQuery);
-          }
-        } catch (e) {
-          print("DEBUG: Local Gemma query optimization error: $e");
-          // Continue to Vercel fallback if local inference fails
-        }
-      }
-
-      final url = Uri.parse("https://ai-gateway.vercel.sh/v1/chat/completions");
+      final url = Uri.parse("https://api.groq.com/openai/v1/chat/completions");
       final request = http.Request("POST", url);
       request.headers.addAll({
         "Content-Type": "application/json",
-        "Authorization": "Bearer ${dotenv.get("AI_GATEWAY_API_KEY")}",
+        "Authorization": "Bearer ${dotenv.get("GROQ_API_KEY")}",
       });
 
       request.body = jsonEncode({
-        "model": "google/gemini-2.5-flash-lite",
+        "model": "llama-3.1-8b-instant",
         "stream": false,
         "messages": [
           {"role": "user", "content": prompt}
@@ -1413,6 +1372,93 @@ Rules:
     return false;
   }
 
+  /// Check if the query requires a web search
+  bool _queryNeedsWebSearch(String query) {
+    if (query.trim().isEmpty) return false;
+
+    // Always search for long queries as they are likely specific questions
+    if (query.length > 20) return true;
+
+    final lowerQuery = query.toLowerCase();
+
+    // Direct questions
+    final questionWords = [
+      'who',
+      'what',
+      'where',
+      'when',
+      'why',
+      'how',
+      'which',
+      'can',
+      'could',
+      'should',
+      'would',
+      'is',
+      'are',
+      'do',
+      'does'
+    ];
+    for (final word in questionWords) {
+      if (lowerQuery.startsWith('$word ')) return true;
+    }
+
+    // Specific search patterns
+    final searchKeywords = [
+      'weather',
+      'price',
+      'cost',
+      'news',
+      'latest',
+      'vs',
+      'versus',
+      'meaning',
+      'define',
+      'definition',
+      'synonym',
+      'antonym',
+      'review',
+      'rating',
+      'score',
+      'top',
+      'best',
+      'list',
+      'schedule',
+      'calendar',
+      'time',
+      'date',
+      'map',
+      'location',
+      'navigate',
+      'direction',
+      'video',
+      'image',
+      'photo',
+      'movie',
+      'film',
+      'cast',
+      'plot',
+      'ticket',
+      'buy',
+      'sell',
+      'stock',
+      'market',
+      'forecast'
+    ];
+    for (final keyword in searchKeywords) {
+      if (lowerQuery.contains(keyword)) return true;
+    }
+
+    // Check for location signals as well (reuse existing logic)
+    if (_queryNeedsLocation(query)) return true;
+
+    // If it's a very short query without keywords (e.g., "hello", "thanks"), assume chat
+    if (query.split(' ').length < 3) return false;
+
+    // Default to true for robust search coverage if unsure
+    return true;
+  }
+
   /// Check location permission and handle rationale if needed.
   /// Returns true if the search should proceed, false if blocked by location permission.
   Future<bool> _checkLocationPermissionForQuery(
@@ -1462,7 +1508,6 @@ Rules:
     String query = event.query;
     String searchQuery = event.query;
     String threadId = Uuid().v4().substring(0, 8);
-    String drisseaApiHost = dotenv.get('API_HOST');
     _cancelTaskGen = false;
     List<YoutubeVideoData> youtubeVideos = [];
 
@@ -1689,8 +1734,8 @@ Rules:
         //Understand the query
         emit(
           state.copyWith(
+            status: HomePageStatus.getSearchResults,
             imageStatus: HomeImageStatus.unselected,
-            status: HomePageStatus.generateQuery,
             threadData: updThreadData,
             loadingIndex: updThreadData.results.length - 1,
             selectedImage: null,
@@ -1699,6 +1744,7 @@ Rules:
 
         //Get user details
         final userData = await _getUserLocation();
+        print(userData);
 
         try {
           if (state.searchType == HomeSearchType.nsfw) {
@@ -1756,155 +1802,77 @@ Rules:
 
         // Continue with search flow for non-chat action types
         //Get Search Results
-        emit(
-          state.copyWith(status: HomePageStatus.getSearchResults),
-        );
+
         try {
-          final algoliaAppId = dotenv.get('ALGOLIA_APP_ID');
-          final algoliaApiKey = dotenv.get('ALGOLIA_API_KEY');
-          final algoliaIndexName = 'ig_reels';
-          final algoliaUrl = Uri.parse(
-              "https://${algoliaAppId}-dsn.algolia.net/1/indexes/${algoliaIndexName}/query");
+          // Unified search API call
 
-          final drisseaGeneralUrl = Uri.parse(
-              "https://$drisseaApiHost/dev/api/search/source/general?query=${Uri.encodeComponent(searchQuery)}");
+          final drisseaApiHost = dotenv.get('API_HOST');
+          final apiSecret = dotenv.get('API_SECRET');
+          final unifiedSearchUrl =
+              Uri.parse("https://$drisseaApiHost/api/search");
 
-          final youtubeExcerptUrl =
-              Uri.parse("https://$drisseaApiHost/api/search/youtube");
+          final searchResponse = await http.post(
+            unifiedSearchUrl,
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $apiSecret',
+            },
+            body: jsonEncode({
+              'query': searchQuery,
+              'country': userData.countryCode.toLowerCase(),
+            }),
+          );
+          print(searchResponse.body);
 
-          Future<http.Response> algoliaFuture;
-          if (state.instagramStatus == HomeInstagramStatus.enabled) {
-            algoliaFuture = http.post(
-              algoliaUrl,
-              headers: {
-                'X-Algolia-Application-Id': algoliaAppId,
-                'X-Algolia-API-Key': algoliaApiKey,
-                'Content-Type': 'application/json',
-              },
-              body:
-                  jsonEncode({'params': 'query=${Uri.encodeComponent(query)}'}),
-            );
-          } else {
-            algoliaFuture = Future.value(http.Response("{}", 400));
-          }
-
-          Future<http.Response> drisseaFuture;
-          if (state.generalStatus == HomeGeneralStatus.enabled) {
-            drisseaFuture = http.get(
-              drisseaGeneralUrl,
-              headers: {
-                'Authorization': 'Bearer ${dotenv.get("API_SECRET")}',
-                'Content-Type': 'application/json',
-              },
-            );
-          } else {
-            drisseaFuture = Future.value(http.Response("{}", 400));
-          }
-
-          Future<http.Response> youtubeFuture;
-          if (state.youtubeStatus == HomeYoutubeStatus.enabled) {
-            youtubeFuture = http.post(
-              youtubeExcerptUrl,
-              headers: {
-                'Authorization': 'Bearer ${dotenv.get("API_SECRET")}',
-                'Content-Type': 'application/json',
-              },
-              body: jsonEncode({
-                'query': searchQuery,
-                "userQuery": query,
-                "country": userData.countryCode
-              }),
-            );
-          } else {
-            youtubeFuture = Future.value(http.Response("{}", 400));
-          }
-
-          Future<List<LocalResultData>> mapFuture;
-          if (state.mapStatus == HomeMapStatus.enabled) {
-            mapFuture = _getMapSearchData(searchQuery);
-          } else {
-            mapFuture = Future.value([]);
-          }
-
-          final futures = await Future.wait([
-            algoliaFuture,
-            drisseaFuture,
-            youtubeFuture,
-            mapFuture,
-          ]);
-
-          final algoliaResponse = futures[0] as http.Response;
-          final drisseaGeneralResponse = futures[1] as http.Response;
-          final youtubeExcerptResponse = futures[2] as http.Response;
-          mapResults = futures[3] as List<LocalResultData>;
-
-          // Map results are already fetched and will be stored in local field
-          print("Map results found: ${mapResults.length}");
-
-          // Parse Algolia Reels Results (reels → ExtractedResultInfo)
-          if (algoliaResponse.statusCode == 200) {
-            final Map<String, dynamic> algoliaJson =
-                jsonDecode(algoliaResponse.body);
-            final List hits = algoliaJson['hits'] ?? [];
-
-            if (hits.isNotEmpty) {
-              print("Algolia hits found: ${hits.length}");
-              hits.asMap().forEach((i, entry) {
-                final hit = entry as Map<String, dynamic>;
-                extractedResults.add(
-                  ExtractedResultInfo(
-                    url: hit['permalink'] ?? '',
-                    title: '${hit['full_name'] ?? ''}',
-                    excerpts:
-                        "Creator Username: ${hit['username']}| Creator Full Name: ${hit['full_name'] ?? ''}| Caption: ${hit['caption'] ?? ''} | Likes: ${hit['like_count'] ?? 0}| Comments: ${hit['comment_count'] ?? 0}| Views: ${hit['view_count'] ?? 0}| Posted on: ${hit['taken_at'] ?? ''}| Transcription: ${hit['transcription'] ?? ''}| Video Overview: ${hit['framewatch'] ?? ''}"
-                            .trim(),
-                    thumbnailUrl:
-                        hit['thumbnail_url'] ?? hit['profile_pic_url'] ?? '',
+          if (searchResponse.statusCode == 200) {
+            final Map<String, dynamic> respJson =
+                jsonDecode(searchResponse.body);
+            print(respJson);
+            if (respJson["success"] == true) {
+              // Parse web results -> ExtractedResultInfo
+              if (state.generalStatus == HomeGeneralStatus.enabled) {
+                final webResults = respJson['web'] is List
+                    ? List<dynamic>.from(respJson['web'])
+                    : [];
+                extractedResults.addAll(
+                  webResults.map(
+                    (e) => ExtractedResultInfo(
+                      url: e['url'] ?? '',
+                      title: e['title'] ?? '',
+                      excerpts: e['excerpts'] ?? '',
+                      thumbnailUrl: '',
+                    ),
                   ),
                 );
-              });
+                print("Web results found: ${webResults.length}");
+              }
+
+              // Parse YouTube results -> YoutubeVideoData
+              if (state.youtubeStatus == HomeYoutubeStatus.enabled) {
+                final youtubeResults = respJson['youtube'] is List
+                    ? List<dynamic>.from(respJson['youtube'])
+                    : [];
+                youtubeVideos = youtubeResults
+                    .map((e) =>
+                        YoutubeVideoData.fromJson(e as Map<String, dynamic>))
+                    .toList();
+                print("YouTube results found: ${youtubeResults.length}");
+              }
+
+              // Parse map results -> LocalResultData
+              if (state.mapStatus == HomeMapStatus.enabled) {
+                final mapResultsJson = respJson['map'] is List
+                    ? List<dynamic>.from(respJson['map'])
+                    : [];
+                mapResults = mapResultsJson
+                    .map((e) =>
+                        LocalResultData.fromJson(e as Map<String, dynamic>))
+                    .toList();
+                print("Map results found: ${mapResults.length}");
+              }
             }
           } else {
-            print("⚠️ Algolia search failed: ${algoliaResponse.statusCode}");
-          }
-
-          // Parse Drissea general results
-          if (drisseaGeneralResponse.statusCode == 200) {
-            final Map<String, dynamic> respJson =
-                jsonDecode(drisseaGeneralResponse.body);
-
-            if (respJson["success"] == true) {
-              final rawResults = respJson['results'] is List
-                  ? List<dynamic>.from(respJson['results'])
-                  : [];
-              extractedResults.addAll(
-                rawResults.map(
-                  (e) =>
-                      ExtractedResultInfo.fromJson(e as Map<String, dynamic>),
-                ),
-              );
-            }
-          }
-
-          // Parse Youtube Data
-          // Parse Youtube Data
-          // List<YoutubeVideoData> youtubeVideos = [];
-          if (youtubeExcerptResponse.statusCode == 200) {
-            final Map<String, dynamic> respJson =
-                jsonDecode(youtubeExcerptResponse.body);
-
-            if (respJson["success"] == true) {
-              final rawResults = respJson['data'] is List
-                  ? List<dynamic>.from(respJson['data'])
-                  : [];
-              youtubeVideos = rawResults
-                  .map((e) =>
-                      YoutubeVideoData.fromJson(e as Map<String, dynamic>))
-                  .toList();
-
-              // Also allow these to be used as context? Maybe later.
-              // For now, just storing them in ThreadResultData.
-            }
+            print("⚠️ Unified search API failed: ${searchResponse.statusCode}");
           }
 
           emit(state.copyWith(
@@ -1964,7 +1932,7 @@ Rules:
           formattedResults.insertAll(0, memoryResults);
         }
 
-        answer = await vercelGenerateReply(
+        answer = await vercelNewGenerateReply(
           query,
           formattedResults,
           event.streamedText,
@@ -1979,6 +1947,664 @@ Rules:
           userData.country,
         );
       } // Close the else block for non-chat action types
+    }
+
+    //Update ThreadData
+    ThreadResultData updResultData = ThreadResultData(
+      youtubeVideos: youtubeVideos,
+      searchType: resultData.searchType,
+      extractedUrlData: resultData.extractedUrlData,
+      sourceImageDescription: resultData.sourceImageDescription,
+      sourceImageLink: resultData.sourceImageLink,
+      sourceImage: resultData.sourceImage,
+      isSearchMode: resultData.isSearchMode,
+      web: resultData.web,
+      shortVideos: resultData.shortVideos,
+      videos: resultData.videos,
+      news: resultData.news,
+      images: resultData.images,
+      createdAt: resultData.createdAt,
+      updatedAt: resultData.updatedAt,
+      userQuery: query,
+      searchQuery: searchQuery,
+      answer: answer ?? "",
+      influence: extractedResults.map((searchResult) {
+        return InfluenceData(
+            url: searchResult.url,
+            snippet: searchResult.excerpts,
+            title: searchResult.title,
+            similarity: 0);
+      }).toList()
+        ..addAll(mapResults.map((searchResult) {
+          final locationQuery = Uri.encodeComponent(
+              "${searchResult.title} ${searchResult.address}");
+          return InfluenceData(
+              url:
+                  "https://www.google.com/maps/search/?api=1&query=$locationQuery&query_place_id=${searchResult.placeId}",
+              snippet: searchResult.snippet,
+              title: searchResult.title,
+              similarity: 0);
+        })),
+      local: mapResults,
+    );
+
+    final updatedResults = List<ThreadResultData>.from(state.threadData.results)
+      ..removeLast()
+      ..add(updResultData);
+
+    if (state.threadData.id != "") {
+      updThreadData = ThreadSessionData(
+          id: state.threadData.id,
+          isIncognito: state.threadData.isIncognito,
+          results: updatedResults,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now());
+    } else {
+      updThreadData = ThreadSessionData(
+          id: threadId,
+          isIncognito: state.isIncognito,
+          results: updatedResults,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now());
+    }
+    if (_cancelTaskGen) {
+      return;
+    }
+    emit(state.copyWith(
+        replyStatus: HomeReplyStatus.success,
+        threadData: updThreadData,
+        uploadedImageUrl: "",
+        selectedImage: null,
+        imageStatus: HomeImageStatus.unselected));
+    event.imageDescriptionNotifier.value = "";
+
+    if (updThreadData.results.length == 1) {
+      await createSession(updThreadData, threadId,
+          skipMemoryProcessing: state.isChatModeActive);
+    } else {
+      await updateSession(updThreadData, state.threadData.id,
+          skipMemoryProcessing: state.isChatModeActive);
+    }
+
+    // Refresh history
+    add(HomeInitialUserData());
+  }
+
+  Future<Map<String, dynamic>> _checkIntent(String query) async {
+    // 1. Define stop words (common conversational fillers, question words, etc.)
+    // These are words that generally DO NOT indicate a specific search entity on their own in this context.
+    final stopWords = {
+      "a",
+      "an",
+      "the",
+      "is",
+      "are",
+      "was",
+      "were",
+      "be",
+      "been",
+      "being",
+      "have",
+      "has",
+      "had",
+      "do",
+      "does",
+      "did",
+      "can",
+      "could",
+      "will",
+      "would",
+      "shall",
+      "should",
+      "may",
+      "might",
+      "must",
+      "i",
+      "you",
+      "he",
+      "she",
+      "it",
+      "we",
+      "they",
+      "what",
+      "which",
+      "who",
+      "whom",
+      "whose",
+      "where",
+      "when",
+      "why",
+      "how",
+      "please",
+      "tell",
+      "show",
+      "give",
+      "find",
+      "search",
+      "looking",
+      "look",
+      "me",
+      "us",
+      "my",
+      "your",
+      "his",
+      "her",
+      "its",
+      "our",
+      "their",
+      "about",
+      "with",
+      "by",
+      "from",
+      "up",
+      "down",
+      "out",
+      "of",
+      "for",
+      "to",
+      "in",
+      "on",
+      "at"
+    };
+
+    // 2. Normalize and tokenize the query
+    // Remove punctuation and convert to lowercase for checking
+    String cleanQuery = query.toLowerCase().replaceAll(RegExp(r'[^\w\s]'), '');
+    List<String> tokens =
+        cleanQuery.split(' ').where((t) => t.isNotEmpty).toList();
+
+    // 3. Filter tokens
+    // We are looking for "keywords" - anything that is NOT a stop word.
+    // This includes nouns, names, specific verbs, etc.
+    List<String> keywords = tokens.where((token) {
+      return !stopWords.contains(token);
+    }).toList();
+
+    // 4. Determine Intent
+    if (keywords.isNotEmpty) {
+      // Found potential search terms (nouns, names, etc.)
+      return {
+        'intent': 'search',
+        'keywords': keywords,
+        'finalQuery':
+            keywords.join(' ') // Optional: constructing a keyword-only query
+      };
+    } else {
+      // Only stop words found (e.g. "how are you", "tell me about it")
+      return {'intent': 'chat', 'keywords': [], 'finalQuery': query};
+    }
+  }
+
+  /// Function to search using SerpAPI Google results for Instagram Reels
+  Future<void> _getFastAnswer(
+      HomeGetAnswer event, Emitter<HomeState> emit) async {
+    print(
+        "=== DEBUG _watchGeneralGoogleAnswer ENTRY: query='${event.query}' ===");
+    // Check location permission ONLY if the query needs location context
+    String query = event.query;
+    String searchQuery = event.query;
+    String city = state.userCity;
+    String region = state.userRegion;
+    String country = state.userCountry;
+    String countryCode = state.userCountryCode;
+
+    //Check if query need web search or not
+
+    String threadId = Uuid().v4().substring(0, 8);
+    _cancelTaskGen = false;
+    List<YoutubeVideoData> youtubeVideos = [];
+
+    //String country = userData.countryCode.toLowerCase();
+
+    // Read image bytes if available
+    Uint8List? imageBytes;
+    if (state.selectedImage != null) {
+      try {
+        imageBytes = await File(state.selectedImage!.path).readAsBytes();
+      } catch (e) {
+        print("Error reading image bytes: $e");
+      }
+    }
+
+    //Set Initial Result Data
+    ThreadResultData resultData = ThreadResultData(
+      youtubeVideos: [],
+      searchType: state.searchType,
+      sourceImageDescription: event.imageDescription,
+      sourceImageLink: state.uploadedImageUrl ?? "",
+      sourceImage: imageBytes,
+      isSearchMode: false,
+      extractedUrlData: ExtractedUrlResultData(
+        snippet: event.extractedUrlDescription.value,
+        title: event.extractedUrlTitle.value,
+        link: event.extractedUrl.value,
+        thumbnail: event.extractedImageUrl.value,
+      ),
+      web: [],
+      shortVideos: [],
+      videos: [],
+      news: [],
+      images: [],
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+      userQuery: query,
+      searchQuery: searchQuery,
+      answer: "",
+      influence: [],
+      local: [],
+    );
+    List<ExtractedResultInfo> extractedResults = [];
+
+    ThreadSessionData updThreadData = state.threadData;
+
+    event.extractedUrlTitle.value = "";
+    event.extractedUrlDescription.value = "";
+    event.extractedImageUrl.value = "";
+    event.extractedUrl.value = "";
+
+    // Set Initial Result Data
+    List<ThreadResultData> tempUpdatedResults =
+        List<ThreadResultData>.from(state.threadData.results)..add(resultData);
+    if (state.threadData.id != "") {
+      updThreadData = ThreadSessionData(
+          id: state.threadData.id,
+          isIncognito: state.threadData.isIncognito,
+          results: tempUpdatedResults,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now());
+    } else {
+      updThreadData = ThreadSessionData(
+          id: threadId,
+          isIncognito: state.isIncognito,
+          results: tempUpdatedResults,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now());
+    }
+    String? answer;
+    List<LocalResultData> mapResults = [];
+
+    // Search memory for relevant content to enhance the answer
+    List<({String text, String sourceQuery, double score})> memoryChunks = [];
+    // try {
+    //   memoryChunks = await AnswerMemoryService.instance.searchRelevantMemory(
+    //     query,
+    //     maxResults: 10,
+    //     minScore: 0.3,
+    //   );
+    // } catch (e) {
+    //   print("Error searching memory: $e");
+    // }
+
+    if (_queryNeedsLocation(query)) {
+      // Check location permission ONLY if the query needs location context
+      final shouldProceed = await _checkLocationPermissionForQuery(event, emit);
+      if (!shouldProceed) {
+        return; // Stop here, location rationale is being shown
+      }
+
+      if (city.isEmpty) {
+        //Understand the query
+        emit(
+          state.copyWith(
+            status: HomePageStatus.generateQuery,
+            imageStatus: HomeImageStatus.unselected,
+            threadData: updThreadData,
+            loadingIndex: updThreadData.results.length - 1,
+          ),
+        );
+        final userData = await _getUserLocation();
+        city = userData.city;
+        region = userData.region;
+        country = userData.country;
+        countryCode = userData.countryCode;
+      }
+
+      if (city.isNotEmpty) {
+        final replaceWithIn = [
+          'near me',
+          'nearby',
+          'close to me',
+          'around me',
+          'in my area',
+          'around here',
+          'this area',
+          'my location',
+          'where i am'
+        ];
+        final appendIn = ['local', 'closest', 'nearest'];
+        final appendCity = [
+          'places near',
+          'restaurants near',
+          'shops near',
+          'bars near',
+          'cafes near',
+          'hotels near',
+          'stores near'
+        ];
+
+        String lowerQuery = searchQuery.toLowerCase();
+        bool modified = false;
+
+        for (final keyword in replaceWithIn) {
+          if (lowerQuery.contains(keyword)) {
+            final pattern =
+                RegExp(RegExp.escape(keyword), caseSensitive: false);
+            searchQuery = searchQuery.replaceAll(pattern, "in $city");
+            modified = true;
+            break;
+          }
+        }
+
+        if (!modified) {
+          for (final keyword in appendIn) {
+            if (lowerQuery.contains(keyword)) {
+              searchQuery = "$searchQuery in $city";
+              modified = true;
+              break;
+            }
+          }
+        }
+
+        if (!modified) {
+          for (final keyword in appendCity) {
+            if (lowerQuery.contains(keyword)) {
+              searchQuery = "$searchQuery $city";
+              modified = true;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // Continue with search flow for non-chat action types
+    //Get Search Results
+    //Image Response
+    if (state.selectedImage != null) {
+      emit(state.copyWith(
+          status: HomePageStatus.success,
+          threadData: updThreadData,
+          loadingIndex: updThreadData.results.length - 1,
+          searchType: state.searchType == HomeSearchType.extractUrl
+              ? HomeSearchType.general
+              : state.searchType,
+          replyStatus: HomeReplyStatus.loading,
+          selectedImage: null,
+          imageStatus: HomeImageStatus.unselected));
+
+      event.imageDescriptionNotifier.value = "";
+
+      print("asdasdas");
+      print("");
+
+      //reply for image
+      answer = await imageVercelGenerateReply(
+        query,
+        [],
+        event.streamedText,
+        emit,
+        resultData.sourceImage!,
+        state.threadData.results
+            .getRange(0, state.threadData.results.length - 1)
+            .toList(),
+        resultData.extractedUrlData,
+        city,
+        region,
+        country,
+      );
+    } else {
+      // Check if chat mode is active - skip search and generate reply directly
+      if (state.isChatModeActive) {
+        //Understand the query
+        emit(state.copyWith(
+            status: HomePageStatus.success,
+            searchType: state.searchType == HomeSearchType.extractUrl
+                ? HomeSearchType.general
+                : state.searchType,
+            imageStatus: HomeImageStatus.unselected,
+            threadData: updThreadData,
+            loadingIndex: updThreadData.results.length - 1,
+            selectedImage: null,
+            replyStatus: HomeReplyStatus.loading));
+
+        // If there's an image, use imageVercelGenerateReply
+        if (imageBytes != null) {
+          answer = await imageVercelGenerateChatReply(
+            query,
+            [],
+            event.streamedText,
+            emit,
+            imageBytes,
+            state.threadData.results
+                .getRange(0, state.threadData.results.length - 1)
+                .toList(),
+            resultData.extractedUrlData,
+            city,
+            region,
+            country,
+          );
+        } else {
+          // Search memory for relevant content to enhance the chat reply
+          List<({String text, String sourceQuery, double score})>
+              chatMemoryChunks = [];
+          try {
+            chatMemoryChunks =
+                await AnswerMemoryService.instance.searchRelevantMemory(
+              query,
+              maxResults: 10,
+              minScore: 0.3,
+            );
+          } catch (e) {
+            print("Error searching memory for chat: $e");
+          }
+
+          // Format memory chunks as context
+          final List<Map<String, String>> memoryContext =
+              chatMemoryChunks.map((chunk) {
+            return {
+              "title": "[Memory] Previously learned from: ${chunk.sourceQuery}",
+              "url": "memory://local",
+              "snippet": chunk.text,
+            };
+          }).toList();
+
+          if (memoryContext.isNotEmpty) {
+            print(
+                "📚 Adding ${memoryContext.length} memory chunks to chat context");
+          }
+
+          // No image, use vercelGenerateChatReply with memory context
+          answer = await vercelGenerateChatReply(
+            query,
+            memoryContext,
+            event.streamedText,
+            emit,
+            event.imageDescription,
+            state.threadData.results
+                .getRange(0, state.threadData.results.length - 1)
+                .toList(),
+            resultData.extractedUrlData,
+            city,
+            region,
+            country,
+          );
+        }
+      } else {
+        //Understand the query
+        emit(
+          state.copyWith(
+            status: HomePageStatus.getSearchResults,
+            imageStatus: HomeImageStatus.unselected,
+            threadData: updThreadData,
+            loadingIndex: updThreadData.results.length - 1,
+            selectedImage: null,
+          ),
+        );
+
+        try {
+          // Unified search API call
+
+          final drisseaApiHost = dotenv.get('API_HOST');
+          final apiSecret = dotenv.get('API_SECRET');
+          final unifiedSearchUrl =
+              Uri.parse("https://$drisseaApiHost/api/search");
+
+          final searchStartTime = DateTime.now();
+          final searchResponse = await http.post(
+            unifiedSearchUrl,
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $apiSecret',
+            },
+            body: jsonEncode({
+              'query': searchQuery,
+              'country': countryCode.toLowerCase(),
+            }),
+          );
+          final searchEndTime = DateTime.now();
+          final searchDuration = searchEndTime.difference(searchStartTime);
+
+          print("");
+          print("Search duration: ${searchDuration.inMilliseconds} ms");
+          print("");
+
+          if (searchResponse.statusCode == 200) {
+            final Map<String, dynamic> respJson =
+                jsonDecode(searchResponse.body);
+            if (respJson["success"] == true) {
+              // Parse web results -> ExtractedResultInfo
+              if (state.generalStatus == HomeGeneralStatus.enabled) {
+                final webResults = respJson['web'] is List
+                    ? List<dynamic>.from(respJson['web'])
+                    : [];
+                extractedResults.addAll(
+                  webResults.map(
+                    (e) => ExtractedResultInfo(
+                      url: e['url'] ?? '',
+                      title: e['title'] ?? '',
+                      excerpts: e['excerpts'] ?? '',
+                      thumbnailUrl: '',
+                    ),
+                  ),
+                );
+                print("Web results found: ${webResults.length}");
+              }
+
+              // Parse YouTube results -> YoutubeVideoData
+              if (state.youtubeStatus == HomeYoutubeStatus.enabled) {
+                final youtubeResults = respJson['youtube'] is List
+                    ? List<dynamic>.from(respJson['youtube'])
+                    : [];
+                youtubeVideos = youtubeResults
+                    .map((e) =>
+                        YoutubeVideoData.fromJson(e as Map<String, dynamic>))
+                    .toList();
+                print("YouTube results found: ${youtubeResults.length}");
+              }
+
+              // Parse map results -> LocalResultData
+              if (state.mapStatus == HomeMapStatus.enabled) {
+                final mapResultsJson = respJson['map'] is List
+                    ? List<dynamic>.from(respJson['map'])
+                    : [];
+                mapResults = mapResultsJson
+                    .map((e) =>
+                        LocalResultData.fromJson(e as Map<String, dynamic>))
+                    .toList();
+                print("Map results found: ${mapResults.length}");
+              }
+            }
+          } else {
+            print("⚠️ Unified search API failed: ${searchResponse.statusCode}");
+          }
+
+          print(
+              "Finsihed processing: ${DateTime.now().difference(searchStartTime).inMilliseconds} ms");
+          emit(state.copyWith(
+              status: HomePageStatus.success,
+              searchType: state.searchType == HomeSearchType.extractUrl
+                  ? HomeSearchType.general
+                  : state.searchType,
+              replyStatus: HomeReplyStatus.loading));
+          print(
+              "Finsihed changing state: ${DateTime.now().difference(searchStartTime).inMilliseconds} ms");
+        } catch (e) {
+          print("Error in parallel search: $e");
+        }
+        if (_cancelTaskGen) {
+          //emit(state.copyWith(status: HomePageStatus.idle));
+          return;
+        }
+
+        print("Starting to get answer");
+        final formatSourceStartTime = DateTime.now();
+
+        // Get Answer
+        //Format watchedVideos to different json structure
+        final List<Map<String, String>> formattedResults =
+            extractedResults.map((searchResult) {
+          return {
+            "title": searchResult.title,
+            "url": searchResult.url,
+            "snippet": searchResult.excerpts.trim(),
+          };
+        }).toList();
+
+        formattedResults.addAll(youtubeVideos.map((video) {
+          return {
+            "title": video.title,
+            "url": "https://www.youtube.com/watch?v=${video.videoId}",
+            "snippet": "${video.snippet} ${video.description}",
+          };
+        }));
+
+        formattedResults.addAll(mapResults.map((result) {
+          return {
+            "title": result.title,
+            "url":
+                "https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent("${result.title} ${result.address}")}&query_place_id=${result.placeId}",
+            "snippet":
+                "Local Place: ${result.title}. Address: ${result.address}. Rating: ${result.rating} (${result.reviews} reviews). ${result.snippet}",
+          };
+        }));
+
+        // Add memory chunks as context for the AI (high priority - add first)
+        if (memoryChunks.isNotEmpty) {
+          print("📚 Adding ${memoryChunks.length} memory chunks to context");
+          final memoryResults = memoryChunks.map((chunk) {
+            return {
+              "title": "[Memory] Previously learned from: ${chunk.sourceQuery}",
+              "url": "memory://local",
+              "snippet": chunk.text,
+            };
+          }).toList();
+          // Insert memory at beginning for higher priority
+          formattedResults.insertAll(0, memoryResults);
+        }
+
+        final formatSourceEndTime = DateTime.now();
+
+        print(
+            "Finished formatting sources: ${formatSourceEndTime.difference(formatSourceStartTime).inMilliseconds} ms");
+
+        print("");
+
+        print("Starting to generate answer");
+        answer = await vercelNewGenerateReply(
+          query,
+          formattedResults,
+          event.streamedText,
+          emit,
+          event.imageDescription,
+          state.threadData.results
+              .getRange(0, state.threadData.results.length - 1)
+              .toList(),
+          resultData.extractedUrlData,
+          city,
+          region,
+          country,
+        );
+      }
     }
 
     //Update ThreadData
@@ -3274,6 +3900,7 @@ $formattedUserContext
     String region,
     String country,
   ) async {
+    final generateAnswerStartTime = DateTime.now();
     streamedText.value = "";
     // Step 1: Format sources with token counting, skip if would exceed 125,000 tokens.
     int totalTokens = 0;
@@ -3325,39 +3952,211 @@ $formattedUserContext
 """;
 
     // Step 4: Determine Model
-    String modelName;
-    switch (state.selectedModel) {
-      case HomeModel.deepseek:
-        modelName = "deepseek/deepseek-v3";
-        break;
-      case HomeModel.gemini:
-        modelName = "google/gemini-2.5-flash";
-        break;
-      case HomeModel.claude:
-        modelName = "anthropic/claude-haiku-4.5";
-        break;
-      case HomeModel.openAI:
-        modelName = "openai/gpt-5-nano";
-        break;
-      case HomeModel.flashThink:
-        modelName =
-            "google/gemini-2.0-flash-thinking-exp"; // Placeholder or appropriate model
-        break;
-    }
+    // Using Sarvam AI sarvam-m model as requested
 
-    // Step 5: Make the streaming API request to Vercel AI SDK Gateway
-    // Correct Vercel AI Gateway URL found via search.
-    final url = Uri.parse("https://ai-gateway.vercel.sh/v1/chat/completions");
+    // Step 5: Make the streaming API request to Sarvam AI
+    final url = Uri.parse("https://api.sarvam.ai/v1/chat/completions");
 
     final request = http.Request("POST", url);
     request.headers.addAll({
       "Content-Type": "application/json",
-      "Authorization": "Bearer ${dotenv.get("AI_GATEWAY_API_KEY")}",
+      "Authorization": "Bearer ${dotenv.get("SARVAM_API_KEY")}",
     });
 
     request.body = jsonEncode({
-      "model": modelName,
+      "model": "sarvam-m",
       "stream": true,
+      "max_tokens": 1000,
+      "temperature": 0.5,
+      "top_p": 1,
+      "messages": [
+        {"role": "system", "content": systemPrompt},
+        // Add previous queries and answers as context
+        ...previousResults.expand((item) => [
+              {
+                "role": "user",
+                "content": item.sourceImageDescription != ""
+                    ? "${item.userQuery} | Here's the image description:${item.sourceImageDescription}"
+                    : item.userQuery
+              },
+              {
+                "role": "assistant",
+                "content": item.isSearchMode
+                    ? jsonEncode({
+                        "previous_web_results": item.web
+                            .map((inf) => {
+                                  "title": inf.title,
+                                  "url": inf.link,
+                                  "snippet": inf.snippet,
+                                })
+                            .toList(),
+                      })
+                    : item.answer,
+              },
+            ]),
+
+        {
+          "role": "user",
+          "content": """
+$query ${imageDescription == "" ? "" : "| Here's the image description: $imageDescription"}  ${extractedUrlData?.snippet == "" ? "" : "| Here's the extracted url page description: ${extractedUrlData?.snippet}"}
+
+Context:
+${jsonEncode({
+                "results": formattedSources,
+                "city": city,
+                "region": region,
+                "country": country,
+              })}
+"""
+              .trim()
+        }
+      ],
+    });
+    print("");
+    print("Starting streaming request to Sarvam AI (sarvam-m)...");
+    print("");
+
+    try {
+      final streamedResponse = await httpClient.send(request);
+      print("Response Status Code: ${streamedResponse.statusCode}");
+
+      if (streamedResponse.statusCode != 200) {
+        final body =
+            await streamedResponse.stream.transform(utf8.decoder).join();
+        print("❌ Error Body: $body");
+        return null;
+      }
+
+      final stream = streamedResponse.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter());
+
+      String finalContent = "";
+      print("Listening to stream...");
+      print(
+          "TTFT:${DateTime.now().difference(generateAnswerStartTime).inMilliseconds}");
+
+      await for (final line in stream) {
+        if (!line.startsWith("data:")) continue;
+        final chunk = line.substring(5).trim();
+        if (chunk == "[DONE]") continue;
+
+        try {
+          final decoded = jsonDecode(chunk);
+          final delta = decoded["choices"]?[0]?["delta"];
+          if (delta == null) continue;
+
+          if (delta["content"] != null) {
+            emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+            final chunkText = delta["content"];
+            streamedText.value += chunkText;
+            finalContent += chunkText;
+          }
+        } catch (e) {
+          print("Streaming parse error: $e");
+        }
+      }
+
+      if (finalContent.isNotEmpty) {
+        if (finalContent.contains("</think>")) {
+          final parts = finalContent.split("</think>");
+          finalContent = parts.length > 1
+              ? parts.sublist(1).join("</think>").trim()
+              : parts[0].trim();
+        }
+        return finalContent;
+      } else {
+        print("❌ Streaming failed or empty content");
+        return null;
+      }
+    } catch (e) {
+      print("❌ Groq Request failed: $e");
+      return null;
+    }
+  }
+
+  Future<String?> vercelNewGenerateReply(
+    String query,
+    List<Map<String, String>> results,
+    ValueNotifier<String> streamedText,
+    Emitter<HomeState> emit,
+    String imageDescription,
+    List<ThreadResultData> previousResults,
+    ExtractedUrlResultData? extractedUrlData,
+    String city,
+    String region,
+    String country,
+  ) async {
+    final generateAnswerStartTime = DateTime.now();
+    streamedText.value = "";
+    // Step 1: Format sources with token counting, skip if would exceed 125,000 tokens.
+    int totalTokens = 0;
+    List<Map<String, String>> formattedSources = [];
+    for (final result in results) {
+      if (result["title"] == null ||
+          result["url"] == null ||
+          result["snippet"] == null) {
+        continue;
+      }
+      // Simple token estimate: 1 token ≈ 4 chars
+      int tokens = ((result["title"]!.length +
+              result["url"]!.length +
+              result["snippet"]!.length) ~/
+          4);
+      if (totalTokens + tokens > 125000) {
+        break;
+      }
+      formattedSources.add({
+        "title": result["title"]!,
+        "url": result["url"]!,
+        "snippet": result["snippet"]!,
+      });
+      totalTokens += tokens;
+    }
+
+    // Step 2: IP lookup and user context
+    String formattedUserContext =
+        "The user is located in $city, $region, $country. The current date and time is ${DateTime.now()}.";
+
+    // Step 3: Build systemPrompt
+    final systemPrompt = """
+You are a helpful, concise, and insightful assistant. You answer user questions using a list of web sources, each with a title, url, and snippet.
+
+Rules:
+- Always answer in Markdown.
+- Structure your response with clear headings and bullet points as needed.
+- Always **bold key insights** and highlight notable places, dishes, or experiences.
+- For any place, food item, or experience that was featured in a source, wrap the main word or phrase in this format: `[text to show](<link>)` (e.g., Try the **[Dum Pukht Biryani](https://example.com/food)**).
+- Write naturally as if you're recommending or informing—never say “based on search results” or “these sources say.”
+- Only use the sources that directly answer the query.
+- If no strong or direct matches are found, gracefully say: _“There isn’t a perfect match for that, but here are a few options that might still interest you.”_
+- Do not repeat the question or use generic filler lines.
+- Keep your language engaging, be as detailed and exhaustive as possible, ensuring no relevant detail from the sources is omitted, while still maintaining clarity and readability.
+- If the query consists primarily of a URL (e.g., youtube.com/...), use the provided content from the extracted URL to summarize what the page or video is about.
+
+Use the following user context for additional personalization (if relevant):
+$formattedUserContext
+""";
+
+    // Step 4: Determine Model
+    // Step 4: Determine Model
+    // Using Groq llama-3.1-8b-instant for fastest TTFT as requested
+
+    // Step 5: Make the streaming API request to Vercel AI SDK Gateway
+    // Correct Vercel AI Gateway URL found via search.
+    final url = Uri.parse("https://api.groq.com/openai/v1/chat/completions");
+
+    final request = http.Request("POST", url);
+    request.headers.addAll({
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${dotenv.get("GROQ_API_KEY")}",
+    });
+
+    request.body = jsonEncode({
+      "model": "llama-3.1-8b-instant",
+      "stream": true,
+      "max_tokens": 1200,
+      "stop": null,
       "messages": [
         {"role": "system", "content": systemPrompt},
         // Add previous queries and answers as context
@@ -3408,7 +4207,7 @@ $formattedUserContext
       ],
     });
     print("");
-    print("Starting streaming request to Vercel AI SDK ($modelName)...");
+    print("Starting streaming request to Groq (llama-3.1-8b-instant)...");
     print("");
 
     try {
@@ -3419,54 +4218,33 @@ $formattedUserContext
         final body =
             await streamedResponse.stream.transform(utf8.decoder).join();
         print("❌ Error Body: $body");
-        if (body.contains("OIDC")) {
-          print(
-              "⚠️ Vercel AI Gateway Auth Error: The Gateway attempted OIDC verification because the provided API Key was either missing or invalid.");
-          print(
-              "   - Ensure 'AI_GATEWAY_API_KEY' in your .env file is a valid Vercel AI Gateway API Key (starts with 'vak_').");
-          print(
-              "   - Do NOT use provider keys (like 'sk-...') directly with the Vercel AI Gateway URL.");
-        }
         return null;
       }
 
-      final stream = streamedResponse.stream.transform(utf8.decoder);
+      final stream = streamedResponse.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter());
 
       String finalContent = "";
-      String buffer = "";
       print("Listening to stream...");
+      print(
+          "TTFT:${DateTime.now().difference(generateAnswerStartTime).inMilliseconds}");
 
-      await for (final rawChunk in stream) {
-        // print("Raw Chunk: $rawChunk"); // DEBUG: Print raw chunk
+      await for (final line in stream) {
+        if (!line.startsWith("data:")) continue;
+        final chunk = line.substring(5).trim();
+        if (chunk == "[DONE]") continue;
+
         try {
-          String cleaned = rawChunk.trim();
-          final lines = cleaned.split("\n");
+          final decoded = jsonDecode(chunk);
+          final delta = decoded["choices"]?[0]?["delta"];
+          if (delta == null) continue;
 
-          for (final line in lines) {
-            String l = line.trim();
-            if (!l.startsWith("data:")) continue;
-
-            l = l.substring(5).trim(); // Remove "data:"
-            if (l == "[DONE]") continue;
-
-            buffer += l;
-
-            try {
-              final decoded = jsonDecode(buffer);
-              buffer = ""; // reset after successful parse
-
-              final delta = decoded["choices"]?[0]?["delta"];
-              if (delta == null) continue;
-
-              if (delta["content"] != null) {
-                emit(state.copyWith(replyStatus: HomeReplyStatus.success));
-                final chunkText = delta["content"];
-                streamedText.value += chunkText;
-                finalContent += chunkText;
-              }
-            } catch (e) {
-              continue;
-            }
+          if (delta["content"] != null) {
+            final chunkText = delta["content"];
+            streamedText.value += chunkText;
+            finalContent += chunkText;
+            emit(state.copyWith(replyStatus: HomeReplyStatus.success));
           }
         } catch (e) {
           print("Streaming parse error: $e");
@@ -3486,7 +4264,7 @@ $formattedUserContext
         return null;
       }
     } catch (e) {
-      print("❌ Vercel AI SDK Request failed: $e");
+      print("❌ Sarvam AI Request failed: $e");
       return null;
     }
   }
@@ -3834,6 +4612,15 @@ $formattedUserContext
 
     emit(state.copyWith(historyStatus: HomeHistoryStatus.loading));
 
+    // Get user location silently
+    final userLocation = await _getUserLocation();
+    emit(state.copyWith(
+      userCity: userLocation.city,
+      userRegion: userLocation.region,
+      userCountry: userLocation.country,
+      userCountryCode: userLocation.countryCode,
+    ));
+
     //Get Local History Data from Drift
     try {
       final threads = await AppDatabase().getAllThreads();
@@ -3853,6 +4640,7 @@ $formattedUserContext
 
   Future<String?> createSession(ThreadSessionData sessionData, String sessionId,
       {bool skipMemoryProcessing = false}) async {
+    final FirebaseFirestore firestore = FirebaseFirestore.instance;
     try {
       final thread = ThreadsCompanion.insert(
         id: drift.Value(sessionId),
@@ -3864,6 +4652,24 @@ $formattedUserContext
       await AppDatabase().insertThread(thread);
       print("✅ Session created in local database with ID: $sessionId");
 
+      print(sessionId);
+      print("aa");
+      print(sessionData.toJson());
+      print("aa");
+
+      final firestoreData = sessionData.toJson();
+      firestoreData['createdAt'] = sessionData.createdAt;
+      firestoreData['updatedAt'] = sessionData.updatedAt;
+      firestoreData['results'] = sessionData.results.map((e) {
+        final data = e.toJson();
+        data['createdAt'] = e.createdAt;
+        data['updatedAt'] = e.updatedAt;
+        return data;
+      }).toList();
+
+      await firestore.collection("threads").doc(sessionId).set(firestoreData);
+      print("✅ Session created/updated in Firestore with ID: $sessionId");
+
       // Process and cache answers for memory system (fire-and-forget, isolated)
       // Skip if chat mode is active
       if (!skipMemoryProcessing) {
@@ -3872,7 +4678,7 @@ $formattedUserContext
 
       return sessionId;
     } catch (e) {
-      print("Error creating local session: $e");
+      print("Error creating session: $e");
       return null;
     }
   }
@@ -3964,6 +4770,7 @@ $formattedUserContext
 
   Future<String?> updateSession(ThreadSessionData sessionData, String sessionId,
       {bool skipMemoryProcessing = false}) async {
+    final FirebaseFirestore firestore = FirebaseFirestore.instance;
     try {
       final thread = ThreadsCompanion(
         id: drift.Value(sessionId),
@@ -3975,6 +4782,27 @@ $formattedUserContext
       await AppDatabase().updateThread(sessionId, thread);
       print("✅ Session updated in local database with ID: $sessionId");
 
+      final docRef = firestore.collection("threads").doc(sessionId);
+      final docSnapshot = await docRef.get();
+
+      final firestoreData = sessionData.toJson();
+      firestoreData['createdAt'] = sessionData.createdAt;
+      firestoreData['updatedAt'] = Timestamp.now();
+      firestoreData['results'] = sessionData.results.map((e) {
+        final data = e.toJson();
+        data['createdAt'] = e.createdAt;
+        data['updatedAt'] = e.updatedAt;
+        return data;
+      }).toList();
+
+      if (docSnapshot.exists) {
+        await docRef.update(firestoreData);
+        print("✅ Session updated successfully with ID: $sessionId");
+      } else {
+        await docRef.set(firestoreData);
+        print("🆕 Session created with ID: $sessionId");
+      }
+
       // Process and cache the latest answer for memory system (fire-and-forget, isolated)
       // Skip if chat mode is active
       if (!skipMemoryProcessing && sessionData.results.isNotEmpty) {
@@ -3984,7 +4812,7 @@ $formattedUserContext
 
       return sessionId;
     } catch (e) {
-      print("❌ Local session update failed: $e");
+      print("❌ Session update failed: $e");
       return null;
     }
   }

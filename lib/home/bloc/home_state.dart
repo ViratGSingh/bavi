@@ -108,7 +108,11 @@ final class HomeState extends Equatable {
     this.gemmaDownloadMessage = "",
     this.currentDownloadingModel,
     this.showLocationRationale = false,
-    this.isChatModeActive = false,
+    this.isChatModeActive = true,
+    this.userCity = "",
+    this.userRegion = "",
+    this.userCountry = "",
+    this.userCountryCode = "",
   })  : userData = userData ??
             UserProfileInfo(
               email: "NA",
@@ -172,6 +176,10 @@ final class HomeState extends Equatable {
   final LocalMemoryModelType? currentDownloadingModel;
   final bool showLocationRationale;
   final bool isChatModeActive;
+  final String userCity;
+  final String userRegion;
+  final String userCountry;
+  final String userCountryCode;
 
   HomeState copyWith({
     String? sessionId,
@@ -210,6 +218,10 @@ final class HomeState extends Equatable {
     LocalMemoryModelType? currentDownloadingModel,
     bool? showLocationRationale,
     bool? isChatModeActive,
+    String? userCity,
+    String? userRegion,
+    String? userCountry,
+    String? userCountryCode,
   }) {
     return HomeState(
       editQuery: editQuery ?? this.editQuery,
@@ -255,6 +267,10 @@ final class HomeState extends Equatable {
       showLocationRationale:
           showLocationRationale ?? this.showLocationRationale,
       isChatModeActive: isChatModeActive ?? this.isChatModeActive,
+      userCity: userCity ?? this.userCity,
+      userRegion: userRegion ?? this.userRegion,
+      userCountry: userCountry ?? this.userCountry,
+      userCountryCode: userCountryCode ?? this.userCountryCode,
     );
   }
 
@@ -295,5 +311,9 @@ final class HomeState extends Equatable {
         currentDownloadingModel,
         showLocationRationale,
         isChatModeActive,
+        userCity,
+        userRegion,
+        userCountry,
+        userCountryCode,
       ];
 }

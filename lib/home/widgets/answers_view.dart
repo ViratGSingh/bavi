@@ -55,7 +55,6 @@ class ThreadAnswerView extends StatefulWidget {
 }
 
 class _ThreadAnswerViewState extends State<ThreadAnswerView> {
-  bool _menuOpen = false;
   String _selectedTab = "";
 
   @override
@@ -175,141 +174,98 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
               ],
             ),
           ),
-        Container(
-          //constraints: BoxConstraints(maxHeight: 150),
-          width: MediaQuery.of(context).size.width,
-          // decoration: BoxDecoration(
-          //     border: Border.all(),
-          //     borderRadius: BorderRadius.circular(12),
-          //     color: Colors.white,
-          //     boxShadow: [
-          //       BoxShadow(offset: Offset(0, 4), color: Colors.black)
-          //     ]),
-          // padding: EdgeInsets.all(10),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Icon(
-              //   Iconsax.magicpen_outline,
-              //   color: Colors.black,
-              //   size: 20,
-              // ),
-              // SizedBox(width: 5),
-
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 6),
+        Align(
+          alignment: Alignment.centerRight,
+          child: Builder(
+            builder: (context) {
+              return GestureDetector(
+                onLongPressStart: (details) async {
+                  final position = details.globalPosition;
+                  await showMenu(
+                    context: context,
+                    color: Colors.white,
+                    elevation: 6,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    position: RelativeRect.fromLTRB(
+                      position.dx,
+                      position.dy,
+                      position.dx,
+                      position.dy,
+                    ),
+                    items: [
+                      PopupMenuItem(
+                        value: "copy",
+                        child: SizedBox(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text("Copy"),
+                              Icon(Icons.copy, size: 18, color: Colors.black),
+                            ],
+                          ),
+                        ),
+                      ),
+                      // PopupMenuItem(
+                      //   value: "edit",
+                      //   child: SizedBox(
+                      //     child: Row(
+                      //       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      //       children: [
+                      //         Text("Edit"),
+                      //         Icon(Icons.edit,
+                      //             size: 18, color: Colors.black),
+                      //       ],
+                      //     ),
+                      //   ),
+                      // ),
+                    ],
+                  ).then((value) {
+                    if (value == "copy") {
+                      Clipboard.setData(ClipboardData(text: widget.query));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          backgroundColor: Color(0xFF8A2BE2),
+                          content: Text(
+                            'Copied to clipboard',
+                            style: TextStyle(
+                              color: Color(0xFFDFFF00),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    } else if (value == "edit") {
+                      widget.onEditSelected();
+                    }
+                  });
+                },
+                child: Container(
+                  margin: EdgeInsets.only(right: 8, left: 50, top: 12),
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Color(0xFFe6e7e8), // Light purple bubble
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(20),
+                      bottomLeft: Radius.circular(20),
+                      bottomRight: Radius.circular(4),
+                      topRight: Radius.circular(20),
+                    ),
+                  ),
                   child: Text(
                     widget.query,
-                    // overflow: TextOverflow.ellipsis,
-                    // maxLines: 2,
                     style: TextStyle(
                       color: Colors.black,
-                      fontSize: 22,
+                      fontSize: 14,
                       fontFamily: 'Poppins',
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ),
-              ),
-              //SizedBox(width: 5),
-              Builder(
-                builder: (iconContext) {
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 8.0),
-                    child: InkWell(
-                      onTap: () async {
-                        setState(() {
-                          _menuOpen = true;
-                        });
-                        final renderBox =
-                            iconContext.findRenderObject() as RenderBox;
-                        final position =
-                            renderBox.localToGlobal(Offset(-50, 10));
-                        final size = renderBox.size;
-
-                        await showMenu(
-                          context: iconContext,
-                          color: Colors.white,
-                          elevation: 6,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          position: RelativeRect.fromLTRB(
-                            position.dx,
-                            position.dy + size.height,
-                            position.dx + size.width,
-                            position.dy,
-                          ),
-                          items: [
-                            PopupMenuItem(
-                              value: "copy",
-                              child: SizedBox(
-                                //width: 100,
-                                child: Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text("Copy"),
-                                    Icon(Icons.copy,
-                                        size: 18, color: Colors.black),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            PopupMenuItem(
-                              value: "edit",
-                              child: SizedBox(
-                                //width: ,
-                                child: Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text("Edit"),
-                                    Icon(Icons.edit,
-                                        size: 18, color: Colors.black),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ).then((value) {
-                          setState(() {
-                            _menuOpen = false;
-                          });
-                          if (value == "copy") {
-                            Clipboard.setData(
-                                ClipboardData(text: widget.query));
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                backgroundColor:
-                                    Color(0xFF8A2BE2), // Purple background
-                                content: Text(
-                                  'Copied to clipboard',
-                                  style: TextStyle(
-                                    color: Color(0xFFDFFF00), // Neon green text
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                duration: Duration(seconds: 2),
-                              ),
-                            );
-                          } else if (value == "edit") {
-                            // Add edit logic here
-                            widget.onEditSelected();
-                          }
-                        });
-                      },
-                      child: Icon(
-                        Icons.more_vert_outlined,
-                        color: _menuOpen ? Colors.grey.shade300 : Colors.black,
-                        size: 20,
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ],
+              );
+            },
           ),
         ),
         if (widget.sourceImageUrl.isNotEmpty || widget.sourceImage != null)

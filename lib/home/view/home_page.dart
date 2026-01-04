@@ -1429,10 +1429,13 @@ class _HomePageState extends State<HomePage>
                                           height: 32,
                                           padding: EdgeInsets.symmetric(
                                             horizontal:
-                                                state.isChatModeActive ? 12 : 8,
+                                                state.isChatModeActive == false
+                                                    ? 12
+                                                    : 8,
                                           ),
                                           decoration: BoxDecoration(
-                                            color: state.isChatModeActive
+                                            color: state.isChatModeActive ==
+                                                    false
                                                 ? const Color(
                                                     0xFFE8D5FF) // Light purple
                                                 : Colors.grey.withOpacity(0.1),
@@ -1443,8 +1446,9 @@ class _HomePageState extends State<HomePage>
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
                                               Icon(
-                                                Iconsax.cpu_outline,
-                                                color: state.isChatModeActive
+                                                Iconsax.search_normal_outline,
+                                                color: state.isChatModeActive ==
+                                                        false
                                                     ? const Color(
                                                         0xFF8A2BE2) // Purple
                                                     : Colors.black,
@@ -1454,13 +1458,14 @@ class _HomePageState extends State<HomePage>
                                                 duration: const Duration(
                                                     milliseconds: 300),
                                                 curve: Curves.easeInOut,
-                                                child: state.isChatModeActive
+                                                child: state.isChatModeActive ==
+                                                        false
                                                     ? Padding(
                                                         padding:
                                                             const EdgeInsets
                                                                 .only(left: 6),
                                                         child: Text(
-                                                          "Memory",
+                                                          "Search",
                                                           style: TextStyle(
                                                             color: const Color(
                                                                 0xFF8A2BE2),
@@ -1631,6 +1636,9 @@ class _HomePageState extends State<HomePage>
                                                           curve:
                                                               Curves.easeOut);
                                                     });
+
+                                                    mixpanel
+                                                        .track("Send Message");
                                                   }
                                                 }
                                               },

@@ -145,9 +145,23 @@ class _HomePageState extends State<HomePage>
     ModalRoute.of(context)?.removeScopedWillPopCallback(_handlePop);
     _animationController.dispose();
     _linkSubscription?.cancel();
-
+    streamedText.removeListener(_scrollToBottom);
     streamedText.dispose();
     super.dispose();
+  }
+
+  void _scrollToBottom() {
+    if (_scrollController.hasClients) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 100),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    }
   }
 
   @override
@@ -176,6 +190,8 @@ class _HomePageState extends State<HomePage>
       //FocusScope.of(context).requestFocus(taskTextFieldFocusNode);
     });
     initDeepLinks();
+    // Add listener to auto-scroll when streaming text updates
+    streamedText.addListener(_scrollToBottom);
   }
 
   final ScrollController _scrollController = ScrollController();
@@ -1632,7 +1648,7 @@ class _HomePageState extends State<HomePage>
                                                       isTaskValid = false;
                                                     });
                                                     Future.delayed(Duration(
-                                                            milliseconds: 500))
+                                                            milliseconds: 200))
                                                         .then((onValue) {
                                                       _scrollController.animateTo(
                                                           _scrollController

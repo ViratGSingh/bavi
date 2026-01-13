@@ -10,34 +10,31 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:bavi/app.dart';
 import 'package:bavi/bavi_bloc_observer.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:app_links/app_links.dart';
 
 void main() async {
+  // Preserve splash screen until initialization is complete
+  WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+
   Bloc.observer = BaviBlocObserver();
-  WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: ".env");
-  if (kIsWeb) {
-    await Firebase.initializeApp(
-      options: FirebaseOptions(
-          apiKey: "AIzaSyDv-PeJzpae52nzMoaJvT5dkOX2V17V8k4",
-          authDomain: "baviblrdbc.firebaseapp.com",
-          projectId: "baviblrdbc",
-          storageBucket: "baviblrdbc.firebasestorage.app",
-          messagingSenderId: "302105442862",
-          appId: "1:302105442862:web:76bd1aef50911d82967dbf",
-          measurementId: "G-B7KWXBGKYM"),
-    );
-  } else {
-    await Firebase.initializeApp();
-  }
+  await Future.wait([
+    dotenv.load(fileName: ".env"),
+    Firebase.initializeApp(),
+  ]);
+
   FirebaseFirestore.instance.settings = const Settings(
     persistenceEnabled: true,
   );
   final bool isLoggedIn = true; //await _checkUserLogin();
   final router = AppRouter(isLoggedIn).router;
   navService.setRouter(router);
+
+  // Remove splash screen right before running the app
+  FlutterNativeSplash.remove();
 
   runApp(BaviApp(router: router));
 

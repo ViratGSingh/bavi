@@ -632,6 +632,8 @@ class ThreadSessionData extends Equatable {
   final Timestamp createdAt;
   final Timestamp updatedAt;
   final bool isIncognito;
+  final String title;
+  final String summary;
 
   const ThreadSessionData({
     required this.id,
@@ -639,6 +641,8 @@ class ThreadSessionData extends Equatable {
     required this.results,
     required this.createdAt,
     required this.updatedAt,
+    this.title = '',
+    this.summary = '',
   });
 
   factory ThreadSessionData.fromJson(Map<String, dynamic> json) {
@@ -659,6 +663,8 @@ class ThreadSessionData extends Equatable {
           : (json['updatedAt'] != null
               ? Timestamp.fromDate(DateTime.parse(json['updatedAt']))
               : Timestamp.now()),
+      title: json['title'] ?? '',
+      summary: json['summary'] ?? '',
     );
   }
 
@@ -668,10 +674,33 @@ class ThreadSessionData extends Equatable {
         'results': results.map((e) => e.toJson()).toList(),
         'createdAt': createdAt.toDate().toIso8601String(),
         'updatedAt': updatedAt.toDate().toIso8601String(),
+        'title': title,
+        'summary': summary,
       };
 
+  ThreadSessionData copyWith({
+    String? id,
+    List<ThreadResultData>? results,
+    Timestamp? createdAt,
+    Timestamp? updatedAt,
+    bool? isIncognito,
+    String? title,
+    String? summary,
+  }) {
+    return ThreadSessionData(
+      id: id ?? this.id,
+      results: results ?? this.results,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      isIncognito: isIncognito ?? this.isIncognito,
+      title: title ?? this.title,
+      summary: summary ?? this.summary,
+    );
+  }
+
   @override
-  List<Object> get props => [id, isIncognito, results, createdAt, updatedAt];
+  List<Object> get props =>
+      [id, isIncognito, results, createdAt, updatedAt, title, summary];
 }
 
 class LocalResultData extends Equatable {

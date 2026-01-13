@@ -2222,6 +2222,7 @@ Rules:
     }
     String? answer;
     List<LocalResultData> mapResults = [];
+    List<ShortVideoResultData> instagramShortVideos = [];
 
     // Search memory for relevant content to enhance the answer
     List<({String text, String sourceQuery, double score})> memoryChunks = [];
@@ -2353,258 +2354,238 @@ Rules:
         country,
       );
     } else {
-      // Check if chat mode is active - skip search and generate reply directly
-      if (state.isChatModeActive) {
-        //Understand the query
+      //Understand the query
+      emit(
+        state.copyWith(
+          status: HomePageStatus.getSearchResults,
+          imageStatus: HomeImageStatus.unselected,
+          threadData: updThreadData,
+          loadingIndex: updThreadData.results.length - 1,
+          selectedImage: null,
+        ),
+      );
+
+      //Understand query - Rewrite query with context from previous messages
+      if (state.threadData.results.isNotEmpty) {
+        searchQuery = await _rewriteQueryWithContext(
+          query,
+          state.threadData.results,
+        );
+        print("📝 Original query: $query");
+        print("📝 Rewritten query: $searchQuery");
+      }
+
+      try {
+        // Unified search API call
+
+        final drisseaApiHost = dotenv.get('API_HOST');
+        final apiSecret = dotenv.get('API_SECRET');
+        final unifiedSearchUrl =
+            Uri.parse("https://$drisseaApiHost/api/search");
+
+        final searchStartTime = DateTime.now();
+        final searchResponse = await http.post(
+          unifiedSearchUrl,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $apiSecret',
+          },
+          body: jsonEncode({
+            'query': searchQuery,
+            'country': countryCode.toLowerCase(),
+          }),
+        );
+        final searchEndTime = DateTime.now();
+        final searchDuration = searchEndTime.difference(searchStartTime);
+
+        print("");
+        print("Search duration: ${searchDuration.inMilliseconds} ms");
+        print("");
+
+        if (searchResponse.statusCode == 200) {
+          final Map<String, dynamic> respJson = jsonDecode(searchResponse.body);
+          if (respJson["success"] == true) {
+            // Parse web results -> ExtractedResultInfo
+            if (state.generalStatus == HomeGeneralStatus.enabled) {
+              final webResults = respJson['web'] is List
+                  ? List<dynamic>.from(respJson['web'])
+                  : [];
+              extractedResults.addAll(
+                webResults.map(
+                  (e) => ExtractedResultInfo(
+                    url: e['url'] ?? '',
+                    title: e['title'] ?? '',
+                    excerpts: e['excerpts'] ?? '',
+                    thumbnailUrl: '',
+                  ),
+                ),
+              );
+              print("Web results found: ${webResults.length}");
+            }
+
+            // Parse YouTube results -> YoutubeVideoData
+            if (state.youtubeStatus == HomeYoutubeStatus.enabled) {
+              final youtubeResults = respJson['youtube'] is List
+                  ? List<dynamic>.from(respJson['youtube'])
+                  : [];
+              youtubeVideos = youtubeResults
+                  .map((e) =>
+                      YoutubeVideoData.fromJson(e as Map<String, dynamic>))
+                  .toList();
+              print("YouTube results found: ${youtubeResults.length}");
+            }
+
+            // Parse map results -> LocalResultData
+            if (state.mapStatus == HomeMapStatus.enabled) {
+              final mapResultsJson = respJson['map'] is List
+                  ? List<dynamic>.from(respJson['map'])
+                  : [];
+              mapResults = mapResultsJson
+                  .map((e) =>
+                      LocalResultData.fromJson(e as Map<String, dynamic>))
+                  .toList();
+              print("Map results found: ${mapResults.length}");
+            }
+
+            // Parse Instagram results -> ExtractedResultInfo and ShortVideoResultData
+            if (state.instagramStatus == HomeInstagramStatus.enabled) {
+              final instagramResults = respJson['instagram'] is List
+                  ? List<dynamic>.from(respJson['instagram'])
+                  : [];
+
+              // Deduplicate Instagram results by permalink
+              final seenUrls = <String>{};
+              final uniqueInstagramResults = instagramResults.where((e) {
+                final url = e['permalink'] ?? '';
+                if (url.isEmpty || seenUrls.contains(url)) {
+                  return false;
+                }
+                seenUrls.add(url);
+                return true;
+              }).toList();
+
+              extractedResults.addAll(
+                uniqueInstagramResults.map(
+                  (e) => ExtractedResultInfo(
+                    url: e['permalink'] ?? '',
+                    title: 'Instagram Reel',
+                    // Combine transcription and caption for richer context
+                    excerpts:
+                        '${e['transcription'] ?? ''} ${e['caption'] ?? ''}'
+                            .trim(),
+                    thumbnailUrl: e['thumbnail_url'] ?? '',
+                  ),
+                ),
+              );
+              // Also add to shortVideos for display
+              instagramShortVideos = uniqueInstagramResults
+                  .map(
+                    (e) => ShortVideoResultData(
+                      title: (e['caption'] ?? 'Instagram Reel').toString(),
+                      link: e['permalink'] ?? '',
+                      thumbnail: e['thumbnail_url'] ?? '',
+                      clip: '',
+                      source: 'Instagram',
+                      sourceIcon: 'https://www.instagram.com/favicon.ico',
+                      channel: '',
+                      duration: '',
+                    ),
+                  )
+                  .toList();
+              print(
+                  "Instagram results found: ${uniqueInstagramResults.length} (deduplicated from ${instagramResults.length})");
+            }
+          }
+        } else {
+          print("⚠️ Unified search API failed: ${searchResponse.statusCode}");
+        }
+
+        print(
+            "Finsihed processing: ${DateTime.now().difference(searchStartTime).inMilliseconds} ms");
         emit(state.copyWith(
             status: HomePageStatus.success,
             searchType: state.searchType == HomeSearchType.extractUrl
                 ? HomeSearchType.general
                 : state.searchType,
-            imageStatus: HomeImageStatus.unselected,
-            threadData: updThreadData,
-            loadingIndex: updThreadData.results.length - 1,
-            selectedImage: null,
             replyStatus: HomeReplyStatus.loading));
+        print(
+            "Finsihed changing state: ${DateTime.now().difference(searchStartTime).inMilliseconds} ms");
+      } catch (e) {
+        print("Error in parallel search: $e");
+      }
+      if (_cancelTaskGen) {
+        //emit(state.copyWith(status: HomePageStatus.idle));
+        return;
+      }
 
-        // If there's an image, use imageVercelGenerateReply
-        if (imageBytes != null) {
-          answer = await imageVercelGenerateChatReply(
-            query,
-            [],
-            event.streamedText,
-            emit,
-            imageBytes,
-            state.threadData.results
-                .getRange(0, state.threadData.results.length - 1)
-                .toList(),
-            resultData.extractedUrlData,
-            city,
-            region,
-            country,
-          );
-        } else {
-          // Search memory for relevant content to enhance the chat reply
-          List<({String text, String sourceQuery, double score})>
-              chatMemoryChunks = [];
-          try {
-            chatMemoryChunks =
-                await AnswerMemoryService.instance.searchRelevantMemory(
-              query,
-              maxResults: 10,
-              minScore: 0.3,
-            );
-          } catch (e) {
-            print("Error searching memory for chat: $e");
-          }
+      print("Starting to get answer");
+      final formatSourceStartTime = DateTime.now();
 
-          // Format memory chunks as context
-          final List<Map<String, String>> memoryContext =
-              chatMemoryChunks.map((chunk) {
-            return {
-              "title": "[Memory] Previously learned from: ${chunk.sourceQuery}",
-              "url": "memory://local",
-              "snippet": chunk.text,
-            };
-          }).toList();
+      // Get Answer
+      //Format watchedVideos to different json structure
+      final List<Map<String, String>> formattedResults =
+          extractedResults.map((searchResult) {
+        return {
+          "title": searchResult.title,
+          "url": searchResult.url,
+          "snippet": searchResult.excerpts.trim(),
+        };
+      }).toList();
 
-          if (memoryContext.isNotEmpty) {
-            print(
-                "📚 Adding ${memoryContext.length} memory chunks to chat context");
-          }
+      formattedResults.addAll(youtubeVideos.map((video) {
+        return {
+          "title": video.title,
+          "url": "https://www.youtube.com/watch?v=${video.videoId}",
+          "snippet": "${video.snippet} ${video.description}",
+        };
+      }));
 
-          // No image, use vercelGenerateChatReply with memory context
-          answer = await vercelGenerateChatReply(
-            query,
-            memoryContext,
-            event.streamedText,
-            emit,
-            event.imageDescription,
-            state.threadData.results
-                .getRange(0, state.threadData.results.length - 1)
-                .toList(),
-            resultData.extractedUrlData,
-            city,
-            region,
-            country,
-          );
-        }
-      } else {
-        //Understand the query
-        emit(
-          state.copyWith(
-            status: HomePageStatus.getSearchResults,
-            imageStatus: HomeImageStatus.unselected,
-            threadData: updThreadData,
-            loadingIndex: updThreadData.results.length - 1,
-            selectedImage: null,
-          ),
-        );
+      formattedResults.addAll(mapResults.map((result) {
+        return {
+          "title": result.title,
+          "url":
+              "https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent("${result.title} ${result.address}")}&query_place_id=${result.placeId}",
+          "snippet":
+              "Local Place: ${result.title}. Address: ${result.address}. Rating: ${result.rating} (${result.reviews} reviews). ${result.snippet}",
+        };
+      }));
 
-        try {
-          // Unified search API call
-
-          final drisseaApiHost = dotenv.get('API_HOST');
-          final apiSecret = dotenv.get('API_SECRET');
-          final unifiedSearchUrl =
-              Uri.parse("https://$drisseaApiHost/api/search");
-
-          final searchStartTime = DateTime.now();
-          final searchResponse = await http.post(
-            unifiedSearchUrl,
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer $apiSecret',
-            },
-            body: jsonEncode({
-              'query': searchQuery,
-              'country': countryCode.toLowerCase(),
-            }),
-          );
-          final searchEndTime = DateTime.now();
-          final searchDuration = searchEndTime.difference(searchStartTime);
-
-          print("");
-          print("Search duration: ${searchDuration.inMilliseconds} ms");
-          print("");
-
-          if (searchResponse.statusCode == 200) {
-            final Map<String, dynamic> respJson =
-                jsonDecode(searchResponse.body);
-            if (respJson["success"] == true) {
-              // Parse web results -> ExtractedResultInfo
-              if (state.generalStatus == HomeGeneralStatus.enabled) {
-                final webResults = respJson['web'] is List
-                    ? List<dynamic>.from(respJson['web'])
-                    : [];
-                extractedResults.addAll(
-                  webResults.map(
-                    (e) => ExtractedResultInfo(
-                      url: e['url'] ?? '',
-                      title: e['title'] ?? '',
-                      excerpts: e['excerpts'] ?? '',
-                      thumbnailUrl: '',
-                    ),
-                  ),
-                );
-                print("Web results found: ${webResults.length}");
-              }
-
-              // Parse YouTube results -> YoutubeVideoData
-              if (state.youtubeStatus == HomeYoutubeStatus.enabled) {
-                final youtubeResults = respJson['youtube'] is List
-                    ? List<dynamic>.from(respJson['youtube'])
-                    : [];
-                youtubeVideos = youtubeResults
-                    .map((e) =>
-                        YoutubeVideoData.fromJson(e as Map<String, dynamic>))
-                    .toList();
-                print("YouTube results found: ${youtubeResults.length}");
-              }
-
-              // Parse map results -> LocalResultData
-              if (state.mapStatus == HomeMapStatus.enabled) {
-                final mapResultsJson = respJson['map'] is List
-                    ? List<dynamic>.from(respJson['map'])
-                    : [];
-                mapResults = mapResultsJson
-                    .map((e) =>
-                        LocalResultData.fromJson(e as Map<String, dynamic>))
-                    .toList();
-                print("Map results found: ${mapResults.length}");
-              }
-            }
-          } else {
-            print("⚠️ Unified search API failed: ${searchResponse.statusCode}");
-          }
-
-          print(
-              "Finsihed processing: ${DateTime.now().difference(searchStartTime).inMilliseconds} ms");
-          emit(state.copyWith(
-              status: HomePageStatus.success,
-              searchType: state.searchType == HomeSearchType.extractUrl
-                  ? HomeSearchType.general
-                  : state.searchType,
-              replyStatus: HomeReplyStatus.loading));
-          print(
-              "Finsihed changing state: ${DateTime.now().difference(searchStartTime).inMilliseconds} ms");
-        } catch (e) {
-          print("Error in parallel search: $e");
-        }
-        if (_cancelTaskGen) {
-          //emit(state.copyWith(status: HomePageStatus.idle));
-          return;
-        }
-
-        print("Starting to get answer");
-        final formatSourceStartTime = DateTime.now();
-
-        // Get Answer
-        //Format watchedVideos to different json structure
-        final List<Map<String, String>> formattedResults =
-            extractedResults.map((searchResult) {
+      // Add memory chunks as context for the AI (high priority - add first)
+      if (memoryChunks.isNotEmpty) {
+        print("📚 Adding ${memoryChunks.length} memory chunks to context");
+        final memoryResults = memoryChunks.map((chunk) {
           return {
-            "title": searchResult.title,
-            "url": searchResult.url,
-            "snippet": searchResult.excerpts.trim(),
+            "title": "[Memory] Previously learned from: ${chunk.sourceQuery}",
+            "url": "memory://local",
+            "snippet": chunk.text,
           };
         }).toList();
-
-        formattedResults.addAll(youtubeVideos.map((video) {
-          return {
-            "title": video.title,
-            "url": "https://www.youtube.com/watch?v=${video.videoId}",
-            "snippet": "${video.snippet} ${video.description}",
-          };
-        }));
-
-        formattedResults.addAll(mapResults.map((result) {
-          return {
-            "title": result.title,
-            "url":
-                "https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent("${result.title} ${result.address}")}&query_place_id=${result.placeId}",
-            "snippet":
-                "Local Place: ${result.title}. Address: ${result.address}. Rating: ${result.rating} (${result.reviews} reviews). ${result.snippet}",
-          };
-        }));
-
-        // Add memory chunks as context for the AI (high priority - add first)
-        if (memoryChunks.isNotEmpty) {
-          print("📚 Adding ${memoryChunks.length} memory chunks to context");
-          final memoryResults = memoryChunks.map((chunk) {
-            return {
-              "title": "[Memory] Previously learned from: ${chunk.sourceQuery}",
-              "url": "memory://local",
-              "snippet": chunk.text,
-            };
-          }).toList();
-          // Insert memory at beginning for higher priority
-          formattedResults.insertAll(0, memoryResults);
-        }
-
-        final formatSourceEndTime = DateTime.now();
-
-        print(
-            "Finished formatting sources: ${formatSourceEndTime.difference(formatSourceStartTime).inMilliseconds} ms");
-
-        print("");
-
-        print("Starting to generate answer");
-        answer = await vercelNewGenerateReply(
-          query,
-          formattedResults,
-          event.streamedText,
-          emit,
-          event.imageDescription,
-          state.threadData.results
-              .getRange(0, state.threadData.results.length - 1)
-              .toList(),
-          resultData.extractedUrlData,
-          city,
-          region,
-          country,
-        );
+        // Insert memory at beginning for higher priority
+        formattedResults.insertAll(0, memoryResults);
       }
+
+      final formatSourceEndTime = DateTime.now();
+
+      print(
+          "Finished formatting sources: ${formatSourceEndTime.difference(formatSourceStartTime).inMilliseconds} ms");
+
+      print("");
+
+      print("Starting to generate answer");
+      answer = await vercelNewGenerateReply(
+        query,
+        formattedResults,
+        event.streamedText,
+        emit,
+        event.imageDescription,
+        state.threadData.results
+            .getRange(0, state.threadData.results.length - 1)
+            .toList(),
+        resultData.extractedUrlData,
+        city,
+        region,
+        country,
+      );
     }
 
     //Update ThreadData
@@ -2617,7 +2598,7 @@ Rules:
       sourceImage: resultData.sourceImage,
       isSearchMode: resultData.isSearchMode,
       web: resultData.web,
-      shortVideos: resultData.shortVideos,
+      shortVideos: instagramShortVideos,
       videos: resultData.videos,
       news: resultData.news,
       images: resultData.images,
@@ -2675,6 +2656,14 @@ Rules:
         selectedImage: null,
         imageStatus: HomeImageStatus.unselected));
     event.imageDescriptionNotifier.value = "";
+
+    // Generate thread title and summary using Sarvam AI before saving
+    final titleSummary =
+        await _generateThreadTitleAndSummary(updThreadData.results);
+    updThreadData = updThreadData.copyWith(
+      title: titleSummary['title'],
+      summary: titleSummary['summary'],
+    );
 
     if (updThreadData.results.length == 1) {
       await createSession(updThreadData, threadId,
@@ -4075,6 +4064,218 @@ ${jsonEncode({
     }
   }
 
+  /// Rewrites a query to be self-contained by replacing context-dependent parts
+  /// (pronouns, references like "it", "that", "this", etc.) with actual entities
+  /// from previous messages in the thread.
+  /// Returns the rewritten query, or the original query if no rewriting is needed.
+  /// Limits conversation history to ~4k tokens (approx 16k characters).
+  Future<String> _rewriteQueryWithContext(
+      String query, List<ThreadResultData> previousResults) async {
+    if (previousResults.isEmpty) {
+      return query;
+    }
+
+    // This is a follow-up query (has previous messages), so we rewrite it
+
+    // Build conversation history from previous results (most recent first for truncation)
+    final conversationParts = previousResults.reversed.map((r) {
+      return "User: ${r.userQuery}\nAssistant: ${r.answer}";
+    }).toList();
+
+    // Limit to ~4k tokens (approximately 4 chars per token, so ~16k chars)
+    const maxChars = 16000;
+    var totalChars = 0;
+    final limitedParts = <String>[];
+
+    for (final part in conversationParts) {
+      if (totalChars + part.length > maxChars) {
+        // Truncate this part if needed to fit
+        final remaining = maxChars - totalChars;
+        if (remaining > 100) {
+          limitedParts.add(part.substring(0, remaining) + "...[truncated]");
+        }
+        break;
+      }
+      limitedParts.add(part);
+      totalChars += part.length;
+    }
+
+    // Reverse back to chronological order
+    final conversationHistory = limitedParts.reversed.join("\n\n");
+
+    final systemPrompt =
+        """You are a query rewriting assistant. Your task is to rewrite user queries to be completely self-contained.
+
+Given a conversation history and the current query, rewrite the current query so that:
+1. All pronouns (it, this, that, they, he, she, etc.) are replaced with the actual entities they refer to from the conversation
+2. All context-dependent references are replaced with explicit information
+3. The meaning and intent of the query remains exactly the same
+4. Everything else in the query stays unchanged
+5. If the query is already self-contained and doesn't need any context, return it as-is
+
+IMPORTANT: Only output the rewritten query, nothing else. No explanations, no quotes, just the query.""";
+
+    final userMessage = """Conversation history:
+$conversationHistory
+
+Current query to rewrite: $query
+
+Rewrite this query to be self-contained:""";
+
+    try {
+      final url = Uri.parse("https://api.sarvam.ai/v1/chat/completions");
+      final response = await http.post(
+        url,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer ${dotenv.get("SARVAM_API_KEY")}",
+        },
+        body: jsonEncode({
+          "model": "sarvam-m",
+          "stream": false,
+          "max_tokens": 300,
+          "temperature": 0.1,
+          "messages": [
+            {"role": "system", "content": systemPrompt},
+            {"role": "user", "content": userMessage},
+          ],
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        final content = decoded["choices"]?[0]?["message"]?["content"] ?? "";
+        final rewrittenQuery = content.toString().trim();
+
+        if (rewrittenQuery.isNotEmpty) {
+          return rewrittenQuery;
+        }
+      } else {
+        print("❌ Query rewrite API failed: ${response.statusCode}");
+      }
+    } catch (e) {
+      print("❌ Query rewrite failed: $e");
+    }
+
+    // Return original query if rewriting fails
+    return query;
+  }
+
+  /// Generates thread title and summary using Sarvam AI based on all user inputs in the thread.
+  /// Returns a map with 'title' and 'summary' keys.
+  /// Summary is limited to 150 characters.
+  Future<Map<String, String>> _generateThreadTitleAndSummary(
+      List<ThreadResultData> results) async {
+    if (results.isEmpty) {
+      return {'title': '', 'summary': ''};
+    }
+
+    // Collect all user queries from the thread
+    final userQueries =
+        results.map((r) => r.userQuery).where((q) => q.isNotEmpty).toList();
+
+    if (userQueries.isEmpty) {
+      return {'title': '', 'summary': ''};
+    }
+
+    final queriesText = userQueries.join('\n- ');
+
+    final systemPrompt =
+        """You are a helpful assistant that generates concise titles and summaries for conversation threads.
+
+Given the user's queries in a thread, generate:
+1. A short, descriptive title (max 50 characters) that captures the main topic
+2. A brief summary (max 150 characters) that describes what the conversation is about
+
+Respond ONLY in this exact JSON format, no other text:
+{"title": "your title here", "summary": "your summary here"}""";
+
+    final userMessage = """User queries in this thread:
+- $queriesText
+
+Generate a title and summary for this thread.""";
+
+    try {
+      final url = Uri.parse("https://api.sarvam.ai/v1/chat/completions");
+      final response = await http.post(
+        url,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer ${dotenv.get("SARVAM_API_KEY")}",
+        },
+        body: jsonEncode({
+          "model": "sarvam-m",
+          "stream": false,
+          "max_tokens": 200,
+          "temperature": 0.3,
+          "messages": [
+            {"role": "system", "content": systemPrompt},
+            {"role": "user", "content": userMessage},
+          ],
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        final content = decoded["choices"]?[0]?["message"]?["content"] ?? "";
+
+        // Parse the JSON response
+        try {
+          // Try to extract JSON from the response (handle potential markdown code blocks)
+          String jsonStr = content;
+          if (content.contains('```')) {
+            final match =
+                RegExp(r'```(?:json)?\s*(\{.*?\})\s*```', dotAll: true)
+                    .firstMatch(content);
+            if (match != null) {
+              jsonStr = match.group(1) ?? content;
+            }
+          }
+
+          final parsed = jsonDecode(jsonStr);
+          String title = parsed["title"] ?? "";
+          String summary = parsed["summary"] ?? "";
+
+          // Ensure summary is max 150 characters
+          if (summary.length > 150) {
+            summary = "${summary.substring(0, 147)}...";
+          }
+
+          // Ensure title is max 50 characters
+          if (title.length > 50) {
+            title = "${title.substring(0, 47)}...";
+          }
+
+          print("📝 Generated thread title: $title");
+          print("📝 Generated thread summary: $summary");
+
+          return {'title': title, 'summary': summary};
+        } catch (parseError) {
+          print("❌ Failed to parse title/summary JSON: $parseError");
+          // Fallback: use first query as title
+          final fallbackTitle = userQueries.first.length > 50
+              ? "${userQueries.first.substring(0, 47)}..."
+              : userQueries.first;
+          return {'title': fallbackTitle, 'summary': ''};
+        }
+      } else {
+        print("❌ Sarvam AI request failed: ${response.statusCode}");
+        // Fallback: use first query as title
+        final fallbackTitle = userQueries.first.length > 50
+            ? "${userQueries.first.substring(0, 47)}..."
+            : userQueries.first;
+        return {'title': fallbackTitle, 'summary': ''};
+      }
+    } catch (e) {
+      print("❌ Error generating thread title/summary: $e");
+      // Fallback: use first query as title
+      final fallbackTitle = userQueries.first.length > 50
+          ? "${userQueries.first.substring(0, 47)}..."
+          : userQueries.first;
+      return {'title': fallbackTitle, 'summary': ''};
+    }
+  }
+
   Future<String?> vercelNewGenerateReply(
     String query,
     List<Map<String, String>> results,
@@ -4115,48 +4316,69 @@ ${jsonEncode({
     }
 
     // Step 2: IP lookup and user context
-    String formattedUserContext =
-        "The user is located in $city, $region, $country. The current date and time is ${DateTime.now()}.";
+    String formattedUserContext = city == "" && region == "" && country == ""
+        ? "The current date and time is ${DateTime.now()}."
+        : "The user is located in $city, $region, $country. The current date and time is ${DateTime.now()}.";
 
     // Step 3: Build systemPrompt
+    bool isChat = formattedSources.isEmpty;
     final systemPrompt = """
-You are a helpful, concise, and insightful assistant. You answer user questions using a list of web sources, each with a title, url, and snippet.
+You are Drissea, a private, conversational, and insightful answer engine. You do not save user data and keep as much processing as possible strictly on-device. 
 
+${isChat ? "" : """
+You answer user questions using a list of web sources, each with a title, url, and snippet.
 Rules:
 - Always answer in Markdown.
 - Structure your response with clear headings and bullet points as needed.
 - Always **bold key insights** and highlight notable places, dishes, or experiences.
 - For any place, food item, or experience that was featured in a source, wrap the main word or phrase in this format: `[text to show](<link>)` (e.g., Try the **[Dum Pukht Biryani](https://example.com/food)**).
-- Write naturally as if you're recommending or informing—never say “based on search results” or “these sources say.”
+- **Be Conversational**: Write naturally, like a knowledgeable friend. Avoid robotic phrases like “based on search results” or “these sources say.”
 - Only use the sources that directly answer the query.
 - If no strong or direct matches are found, gracefully say: _“There isn’t a perfect match for that, but here are a few options that might still interest you.”_
 - Do not repeat the question or use generic filler lines.
 - Keep your language engaging, be as detailed and exhaustive as possible, ensuring no relevant detail from the sources is omitted, while still maintaining clarity and readability.
 - If the query consists primarily of a URL (e.g., youtube.com/...), use the provided content from the extracted URL to summarize what the page or video is about.
 
+"""}
 Use the following user context for additional personalization (if relevant):
 $formattedUserContext
+
+Don't reveal any personal information you have in your context unless asked about it.
 """;
 
     // Step 4: Determine Model
-    // Step 4: Determine Model
-    // Using Groq llama-3.1-8b-instant for fastest TTFT as requested
+    String modelName;
+    switch (state.selectedModel) {
+      case HomeModel.deepseek:
+        modelName = "deepseek/deepseek-v3";
+        break;
+      case HomeModel.gemini:
+        modelName = "google/gemini-2.5-flash";
+        break;
+      case HomeModel.claude:
+        modelName = "anthropic/claude-haiku-4.5";
+        break;
+      case HomeModel.openAI:
+        modelName = "openai/gpt-5-nano";
+        break;
+      case HomeModel.flashThink:
+        modelName = "google/gemini-2.0-flash-thinking-exp";
+        break;
+    }
 
     // Step 5: Make the streaming API request to Vercel AI SDK Gateway
     // Correct Vercel AI Gateway URL found via search.
-    final url = Uri.parse("https://api.groq.com/openai/v1/chat/completions");
+    final url = Uri.parse("https://ai-gateway.vercel.sh/v1/chat/completions");
 
     final request = http.Request("POST", url);
     request.headers.addAll({
       "Content-Type": "application/json",
-      "Authorization": "Bearer ${dotenv.get("GROQ_API_KEY")}",
+      "Authorization": "Bearer ${dotenv.get("AI_GATEWAY_API_KEY")}",
     });
 
     request.body = jsonEncode({
-      "model": "llama-3.1-8b-instant",
+      "model": modelName,
       "stream": true,
-      "max_tokens": 1200,
-      "stop": null,
       "messages": [
         {"role": "system", "content": systemPrompt},
         // Add previous queries and answers as context
@@ -4169,17 +4391,19 @@ $formattedUserContext
               },
               {
                 "role": "assistant",
-                "content": item.isSearchMode
-                    ? jsonEncode({
-                        "previous_web_results": item.web
-                            .map((inf) => {
-                                  "title": inf.title,
-                                  "url": inf.link,
-                                  "snippet": inf.snippet,
-                                })
-                            .toList(),
-                      })
-                    : item.answer,
+                "content":
+                    // item.isSearchMode
+                    //     ? jsonEncode({
+                    //         "previous_web_results": item.web
+                    //             .map((inf) => {
+                    //                   "title": inf.title,
+                    //                   "url": inf.link,
+                    //                   "snippet": inf.snippet,
+                    //                 })
+                    //             .toList(),
+                    //       })
+                    //     :
+                    item.answer,
               },
             ]),
 
@@ -4195,19 +4419,69 @@ $formattedUserContext
           ]
         },
 
-        {
-          "role": "user",
-          "content": jsonEncode({
-            "results": formattedSources,
-            "city": city,
-            "region": region,
-            "country": country,
-          })
-        }
+        isChat == false
+            ? {
+                "role": "user",
+                "content":
+                    jsonEncode(city == "" && region == "" && country == ""
+                        ? {
+                            "results": formattedSources,
+                            "date": DateTime.now().toIso8601String(),
+                            "day": DateTime.now().day,
+                            "month": DateTime.now().month,
+                            "year": DateTime.now().year,
+                            "hour": DateTime.now().hour,
+                            "minute": DateTime.now().minute,
+                            "second": DateTime.now().second,
+                            "timezone": DateTime.now().timeZoneName,
+                          }
+                        : {
+                            "results": formattedSources,
+                            "city": city,
+                            "region": region,
+                            "country": country,
+                            "date": DateTime.now().toIso8601String(),
+                            "day": DateTime.now().day,
+                            "month": DateTime.now().month,
+                            "year": DateTime.now().year,
+                            "hour": DateTime.now().hour,
+                            "minute": DateTime.now().minute,
+                            "second": DateTime.now().second,
+                            "timezone": DateTime.now().timeZoneName,
+                          })
+              }
+            : {
+                "role": "user",
+                "content":
+                    jsonEncode(city == "" && region == "" && country == ""
+                        ? {
+                            "date": DateTime.now().toIso8601String(),
+                            "day": DateTime.now().day,
+                            "month": DateTime.now().month,
+                            "year": DateTime.now().year,
+                            "hour": DateTime.now().hour,
+                            "minute": DateTime.now().minute,
+                            "second": DateTime.now().second,
+                            "timezone": DateTime.now().timeZoneName,
+                          }
+                        : {
+                            "city": city,
+                            "region": region,
+                            "country": country,
+                            "date": DateTime.now().toIso8601String(),
+                            "day": DateTime.now().day,
+                            "month": DateTime.now().month,
+                            "year": DateTime.now().year,
+                            "hour": DateTime.now().hour,
+                            "minute": DateTime.now().minute,
+                            "second": DateTime.now().second,
+                            "timezone": DateTime.now().timeZoneName,
+                          })
+              }
       ],
     });
     print("");
-    print("Starting streaming request to Groq (llama-3.1-8b-instant)...");
+    print("Starting streaming request to Vercel AI SDK (\$modelName)...");
     print("");
 
     try {
@@ -4217,7 +4491,15 @@ $formattedUserContext
       if (streamedResponse.statusCode != 200) {
         final body =
             await streamedResponse.stream.transform(utf8.decoder).join();
-        print("❌ Error Body: $body");
+        print("❌ Error Body: \$body");
+        if (body.contains("OIDC")) {
+          print(
+              "⚠️ Vercel AI Gateway Auth Error: The Gateway attempted OIDC verification because the provided API Key was either missing or invalid.");
+          print(
+              "   - Ensure 'AI_GATEWAY_API_KEY' in your .env file is a valid Vercel AI Gateway API Key (starts with 'vak_').");
+          print(
+              "   - Do NOT use provider keys (like 'sk-...') directly with the Vercel AI Gateway URL.");
+        }
         return null;
       }
 
@@ -4247,7 +4529,7 @@ $formattedUserContext
             emit(state.copyWith(replyStatus: HomeReplyStatus.success));
           }
         } catch (e) {
-          print("Streaming parse error: $e");
+          print("Streaming parse error: \$e");
         }
       }
 
@@ -4264,7 +4546,7 @@ $formattedUserContext
         return null;
       }
     } catch (e) {
-      print("❌ Sarvam AI Request failed: $e");
+      print("❌ Vercel AI SDK Request failed: \$e");
       return null;
     }
   }
@@ -4564,78 +4846,32 @@ $formattedUserContext
       initMixpanel();
     }
 
-    // Check if EmbeddingGemma model is already installed FIRST to update UI faster
-    try {
-      final isEmbedderInstalled = await FlutterGemma.isModelInstalled(
-          'embeddinggemma-300M_seq1024_mixed-precision.tflite');
-      if (isEmbedderInstalled &&
-          state.gemmaDownloadStatus == GemmaDownloadStatus.idle) {
-        print("DEBUG: EmbeddingGemma model detected as installed on startup");
-
-        // Emit loading state to show warm-up indicator
-        emit(state.copyWith(
-          gemmaDownloadStatus: GemmaDownloadStatus.loading,
-          gemmaDownloadMessage: "Warming up memory system...",
-        ));
-
-        try {
-          // We MUST call install() once per session to "activate" the model,
-          // even if it's already on disk. This won't redownload it.
-          final hfToken = dotenv.env['HUGGINGFACE_TOKEN'];
-          await FlutterGemma.installEmbedder()
-              .modelFromNetwork(
-                'https://huggingface.co/litert-community/embeddinggemma-300m/resolve/main/embeddinggemma-300M_seq1024_mixed-precision.tflite',
-                token: hfToken,
-              )
-              .tokenizerFromNetwork(
-                'https://huggingface.co/litert-community/Gecko-110m-en/resolve/main/sentencepiece.model',
-              )
-              .install();
-          print("DEBUG: EmbeddingGemma activated for memory feature");
-
-          emit(state.copyWith(
-            gemmaDownloadStatus: GemmaDownloadStatus.success,
-            gemmaDownloadMessage: "Memory system ready",
-          ));
-        } catch (activationError) {
-          print(
-              "DEBUG: Error activating EmbeddingGemma on startup: $activationError");
-          emit(state.copyWith(
-            gemmaDownloadStatus: GemmaDownloadStatus.failure,
-            gemmaDownloadMessage: "Failed to warm up memory system",
-          ));
-        }
-      }
-    } catch (e) {
-      print("DEBUG: Error checking EmbeddingGemma installation status: $e");
-    }
-
-    emit(state.copyWith(historyStatus: HomeHistoryStatus.loading));
-
-    // Get user location silently
-    final userLocation = await _getUserLocation();
-    emit(state.copyWith(
-      userCity: userLocation.city,
-      userRegion: userLocation.region,
-      userCountry: userLocation.country,
-      userCountryCode: userLocation.countryCode,
-    ));
-
     //Get Local History Data from Drift
     try {
-      final threads = await AppDatabase().getAllThreads();
-      final userSessionData = threads.map((thread) {
-        return ThreadSessionData.fromJson(jsonDecode(thread.sessionData));
-      }).toList();
+      await AppDatabase().getAllThreads().then((threads) {
+        final userSessionData = threads.map((thread) {
+          return ThreadSessionData.fromJson(jsonDecode(thread.sessionData));
+        }).toList();
 
-      emit(state.copyWith(
-          threadHistory: userSessionData,
-          historyStatus: HomeHistoryStatus.idle));
+        emit(state.copyWith(
+            threadHistory: userSessionData,
+            historyStatus: HomeHistoryStatus.idle));
+      });
     } catch (e) {
       print("❌ Error fetching local sessions: $e");
       emit(state
           .copyWith(threadHistory: [], historyStatus: HomeHistoryStatus.idle));
     }
+
+    // Get user location silently
+    await _getUserLocation().then((userLocation) {
+      emit(state.copyWith(
+        userCity: userLocation.city,
+        userRegion: userLocation.region,
+        userCountry: userLocation.country,
+        userCountryCode: userLocation.countryCode,
+      ));
+    });
   }
 
   Future<String?> createSession(ThreadSessionData sessionData, String sessionId,

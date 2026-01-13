@@ -11,6 +11,7 @@ import 'package:shimmer/shimmer.dart';
 class HistoryPage extends StatefulWidget {
   final List<ThreadSessionData> sessions;
   final Function(ThreadSessionData session) onSessionTap;
+  final VoidCallback? onNewThread;
   final HomeHistoryStatus historyStatus;
 
   const HistoryPage({
@@ -18,51 +19,142 @@ class HistoryPage extends StatefulWidget {
     required this.sessions,
     required this.historyStatus,
     required this.onSessionTap,
+    this.onNewThread,
   });
 
   @override
   State<HistoryPage> createState() => _HistoryPageState();
 }
 
-class _HistoryPageState extends State<HistoryPage> {
+class _HistoryPageState extends State<HistoryPage>
+    with SingleTickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
   String _searchQuery = '';
+  late AnimationController _animationController;
+  late Animation<double> _widthAnimation;
+  bool _isSearchFocused = false;
 
   List<ThreadSessionData> get filteredSessions {
     if (_searchQuery.isEmpty) {
       return widget.sessions;
     }
+    final searchLower = _searchQuery.toLowerCase();
     return widget.sessions.where((session) {
-      final query = session.results.isNotEmpty
-          ? session.results.first.userQuery.toLowerCase()
-          : '';
-      return query.contains(_searchQuery.toLowerCase());
+      // Search in title and summary
+      if (session.title.toLowerCase().contains(searchLower)) return true;
+      if (session.summary.toLowerCase().contains(searchLower)) return true;
+
+      // Search in all queries and answers in the thread
+      for (final result in session.results) {
+        if (result.userQuery.toLowerCase().contains(searchLower)) return true;
+        if (result.answer.toLowerCase().contains(searchLower)) return true;
+      }
+      return false;
     }).toList();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 250),
+      vsync: this,
+    );
+    _widthAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: Curves.easeInOutCubic,
+      ),
+    );
+    _searchFocusNode.addListener(_onFocusChange);
+  }
+
+  void _onFocusChange() {
+    setState(() {
+      _isSearchFocused = _searchFocusNode.hasFocus;
+    });
+    if (_searchFocusNode.hasFocus) {
+      _animationController.forward();
+    } else {
+      _animationController.reverse();
+    }
+  }
+
+  void _onSearchSubmitted(String value) {
+    _searchFocusNode.unfocus();
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocusNode.removeListener(_onFocusChange);
+    _searchFocusNode.dispose();
+    _animationController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Scaffold(
-        backgroundColor: Colors.white,
-        body: Column(
-          children: [
-            // App Bar
-            _buildAppBar(),
-            // Search Bar
-            _buildSearchBar(),
-            // Content
-            Expanded(
-              child: _buildContent(),
-            ),
-          ],
-        ),
+    final screenWidth = MediaQuery.of(context).size.width;
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: AnimatedBuilder(
+        animation: _widthAnimation,
+        builder: (context, child) {
+          // Animate from 85% to 100% width
+          final panelWidth =
+              screenWidth * (0.85 + (0.15 * _widthAnimation.value));
+          // Animate border radius from 16 to 0
+          final borderRadius = 16.0 * (1 - _widthAnimation.value);
+
+          return Row(
+            children: [
+              // History panel - animates from 85% to full width
+              Container(
+                width: panelWidth,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.only(
+                    topRight: Radius.circular(borderRadius),
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 10,
+                      offset: Offset(2, 0),
+                    ),
+                  ],
+                ),
+                child: SafeArea(
+                  child: Column(
+                    children: [
+                      // // App Bar
+                      // _buildAppBar(),
+                      // Search Bar
+                      _buildSearchBar(),
+                      // Content
+                      Expanded(
+                        child: _buildContent(),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // Tap to close area - shrinks as panel expands
+              if (_widthAnimation.value < 1.0)
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(
+                      color: Colors.black
+                          .withOpacity(0.3 * (1 - _widthAnimation.value)),
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -134,57 +226,115 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   Widget _buildSearchBar() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: TextField(
-        controller: _searchController,
-        onChanged: (value) {
-          setState(() {
-            _searchQuery = value;
-          });
-        },
-        style: const TextStyle(
-          fontFamily: 'Poppins',
-          fontSize: 16,
-          color: Colors.black87,
-        ),
-        decoration: InputDecoration(
-          hintText: 'Search threads',
-          hintStyle: TextStyle(
-            color: Colors.grey.shade500,
-            fontFamily: 'Poppins',
-            fontSize: 16,
-          ),
-          prefixIcon: Icon(
-            Icons.search,
-            color: Colors.grey.shade500,
-            size: 22,
-          ),
-          suffixIcon: _searchQuery.isNotEmpty
-              ? IconButton(
-                  onPressed: () {
-                    _searchController.clear();
-                    setState(() {
-                      _searchQuery = '';
-                    });
-                  },
-                  icon: Icon(
-                    Icons.close,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          // Search field
+          Expanded(
+            child: Container(
+              height: 42,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(30),
+                border: _isSearchFocused
+                    ? Border.all(color: Colors.grey.shade400, width: 1.5)
+                    : null,
+              ),
+              child: TextField(
+                controller: _searchController,
+                focusNode: _searchFocusNode,
+                textInputAction: TextInputAction.search,
+                onSubmitted: _onSearchSubmitted,
+                onChanged: (value) {
+                  setState(() {
+                    _searchQuery = value;
+                  });
+                },
+                style: const TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 14,
+                  color: Colors.black87,
+                ),
+                decoration: InputDecoration(
+                  isDense: true,
+                  hintText: 'Search',
+                  hintStyle: TextStyle(
                     color: Colors.grey.shade500,
-                    size: 20,
+                    fontFamily: 'Poppins',
+                    fontSize: 14,
                   ),
-                )
-              : null,
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 14,
+                  prefixIcon: Padding(
+                    padding: const EdgeInsets.only(left: 12, right: 8),
+                    child: Icon(
+                      Icons.search,
+                      color: _isSearchFocused
+                          ? Colors.grey.shade700
+                          : Colors.grey.shade500,
+                      size: 18,
+                    ),
+                  ),
+                  prefixIconConstraints: const BoxConstraints(
+                    minWidth: 38,
+                    minHeight: 18,
+                  ),
+                  suffixIcon: (_searchQuery.isNotEmpty || _isSearchFocused)
+                      ? GestureDetector(
+                          onTap: () {
+                            _searchController.clear();
+                            setState(() {
+                              _searchQuery = '';
+                            });
+                            _searchFocusNode.unfocus();
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.only(right: 12),
+                            child: Icon(
+                              Icons.close,
+                              color: Colors.grey.shade600,
+                              size: 18,
+                            ),
+                          ),
+                        )
+                      : null,
+                  suffixIconConstraints: const BoxConstraints(
+                    minWidth: 30,
+                    minHeight: 18,
+                  ),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 0,
+                    vertical: 10,
+                  ),
+                ),
+              ),
+            ),
           ),
-        ),
+          // Edit/New Thread button
+          const SizedBox(width: 10),
+          GestureDetector(
+            onTap: () {
+              HapticFeedback.lightImpact();
+              if (widget.onNewThread != null) {
+                widget.onNewThread!();
+              }
+              Navigator.pop(context);
+            },
+            child: Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Iconsax.edit_outline,
+                color: Colors.grey.shade700,
+                size: 18,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -253,11 +403,11 @@ class _HistoryPageState extends State<HistoryPage> {
     }
 
     return ListView.separated(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
       itemCount: sessions.length,
       separatorBuilder: (context, index) => Divider(
         height: 1,
-        color: Colors.grey.shade200,
+        color: Colors.white,
       ),
       itemBuilder: (context, index) {
         final data = sessions[index];
@@ -278,15 +428,17 @@ class _HistoryPageState extends State<HistoryPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Thread title
+            // Thread title - prefer title if available, otherwise use first query
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
                   child: Text(
-                    data.results.isNotEmpty
-                        ? data.results.first.userQuery
-                        : "New Thread",
+                    data.title.isNotEmpty
+                        ? data.title
+                        : (data.results.isNotEmpty
+                            ? data.results.first.userQuery
+                            : "New Thread"),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -306,12 +458,14 @@ class _HistoryPageState extends State<HistoryPage> {
                 // ),
               ],
             ),
-            // Thread preview (first answer snippet if available)
-            if (data.results.isNotEmpty && data.results.first.answer.isNotEmpty)
+            // Thread preview - prefer summary if available, otherwise use first answer
+            if (_hasPreviewContent(data))
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
-                  data.results.first.answer,
+                  data.summary.isNotEmpty
+                      ? data.summary
+                      : data.results.first.answer,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -373,6 +527,15 @@ class _HistoryPageState extends State<HistoryPage> {
         ),
       ),
     );
+  }
+
+  /// Returns true if the thread has preview content to display
+  bool _hasPreviewContent(ThreadSessionData data) {
+    if (data.summary.isNotEmpty) return true;
+    if (data.results.isNotEmpty && data.results.first.answer.isNotEmpty) {
+      return true;
+    }
+    return false;
   }
 
   String _formatTimeAgo(DateTime dateTime) {
@@ -462,6 +625,8 @@ class SlideFromLeftRoute<T> extends PageRouteBuilder<T> {
 
   SlideFromLeftRoute({required this.page})
       : super(
+          opaque: false,
+          barrierColor: Colors.transparent,
           pageBuilder: (context, animation, secondaryAnimation) => page,
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             const begin = Offset(-1.0, 0.0);

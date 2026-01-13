@@ -271,7 +271,7 @@ class _HomePageState extends State<HomePage>
                         shadowColor: state.status == HomePageStatus.idle
                             ? Colors.transparent
                             : Colors.black.withOpacity(0.2),
-                        centerTitle: true,
+                        centerTitle: false,
                         //state.status == HomePageStatus.idle ? true : false,
                         leading: Padding(
                           padding: const EdgeInsets.only(left: 0),
@@ -296,6 +296,16 @@ class _HomePageState extends State<HomePage>
                                         return HistoryPage(
                                           sessions: state.threadHistory,
                                           historyStatus: state.historyStatus,
+                                          onNewThread: () {
+                                            mixpanel.track("start_new_thread");
+                                            context.read<HomeBloc>().add(
+                                                  HomeStartNewThread(),
+                                                );
+                                            taskTextController.clear();
+                                            setState(() {
+                                              isTaskValid = false;
+                                            });
+                                          },
                                           onSessionTap:
                                               (ThreadSessionData session) {
                                             mixpanel.track("user_tap_thread");
@@ -331,7 +341,7 @@ class _HomePageState extends State<HomePage>
                               padding: const EdgeInsets.fromLTRB(1, 0, 2, 0),
                               child: const Center(
                                 child: Icon(
-                                  Icons.history_outlined,
+                                  Iconsax.menu_1_outline,
                                   color: Colors.black,
                                   size: 20,
                                 ),
@@ -339,7 +349,6 @@ class _HomePageState extends State<HomePage>
                             ),
                           ),
                         ),
-
                         title: Padding(
                           padding: EdgeInsets.only(
                               left:
@@ -599,8 +608,7 @@ class _HomePageState extends State<HomePage>
                                       ),
                                     )),
                           Visibility(
-                            visible:
-                                false, //state.status != HomePageStatus.idle,
+                            visible: state.status != HomePageStatus.idle,
                             child: Padding(
                                 padding: EdgeInsets.only(right: 6),
                                 child: InkWell(
@@ -1415,72 +1423,72 @@ class _HomePageState extends State<HomePage>
                                           ),
                                         ),
                                       ),
-                                      SizedBox(width: 12),
-                                      GestureDetector(
-                                        onTap: () {
-                                          final homeBloc =
-                                              context.read<HomeBloc>();
-                                          homeBloc.add(HomeToggleChatMode());
-                                        },
-                                        child: AnimatedContainer(
-                                          duration:
-                                              const Duration(milliseconds: 300),
-                                          curve: Curves.easeInOut,
-                                          height: 32,
-                                          padding: EdgeInsets.symmetric(
-                                            horizontal:
-                                                state.isChatModeActive == false
-                                                    ? 12
-                                                    : 8,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: state.isChatModeActive ==
-                                                    false
-                                                ? const Color(
-                                                    0xFFE8D5FF) // Light purple
-                                                : Colors.grey.withOpacity(0.1),
-                                            borderRadius:
-                                                BorderRadius.circular(26),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                Iconsax.search_normal_outline,
-                                                color: state.isChatModeActive ==
-                                                        false
-                                                    ? const Color(
-                                                        0xFF8A2BE2) // Purple
-                                                    : Colors.black,
-                                                size: 16,
-                                              ),
-                                              AnimatedSize(
-                                                duration: const Duration(
-                                                    milliseconds: 300),
-                                                curve: Curves.easeInOut,
-                                                child: state.isChatModeActive ==
-                                                        false
-                                                    ? Padding(
-                                                        padding:
-                                                            const EdgeInsets
-                                                                .only(left: 6),
-                                                        child: Text(
-                                                          "Search",
-                                                          style: TextStyle(
-                                                            color: const Color(
-                                                                0xFF8A2BE2),
-                                                            fontSize: 14,
-                                                            fontWeight:
-                                                                FontWeight.w600,
-                                                          ),
-                                                        ),
-                                                      )
-                                                    : const SizedBox.shrink(),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
+                                      // SizedBox(width: 12),
+                                      // GestureDetector(
+                                      //   onTap: () {
+                                      //     final homeBloc =
+                                      //         context.read<HomeBloc>();
+                                      //     homeBloc.add(HomeToggleChatMode());
+                                      //   },
+                                      //   child: AnimatedContainer(
+                                      //     duration:
+                                      //         const Duration(milliseconds: 300),
+                                      //     curve: Curves.easeInOut,
+                                      //     height: 32,
+                                      //     padding: EdgeInsets.symmetric(
+                                      //       horizontal:
+                                      //           state.isChatModeActive == false
+                                      //               ? 12
+                                      //               : 8,
+                                      //     ),
+                                      //     decoration: BoxDecoration(
+                                      //       color: state.isChatModeActive ==
+                                      //               false
+                                      //           ? const Color(
+                                      //               0xFFE8D5FF) // Light purple
+                                      //           : Colors.grey.withOpacity(0.1),
+                                      //       borderRadius:
+                                      //           BorderRadius.circular(26),
+                                      //     ),
+                                      //     child: Row(
+                                      //       mainAxisSize: MainAxisSize.min,
+                                      //       children: [
+                                      //         Icon(
+                                      //           Iconsax.search_normal_outline,
+                                      //           color: state.isChatModeActive ==
+                                      //                   false
+                                      //               ? const Color(
+                                      //                   0xFF8A2BE2) // Purple
+                                      //               : Colors.black,
+                                      //           size: 16,
+                                      //         ),
+                                      //         AnimatedSize(
+                                      //           duration: const Duration(
+                                      //               milliseconds: 300),
+                                      //           curve: Curves.easeInOut,
+                                      //           child: state.isChatModeActive ==
+                                      //                   false
+                                      //               ? Padding(
+                                      //                   padding:
+                                      //                       const EdgeInsets
+                                      //                           .only(left: 6),
+                                      //                   child: Text(
+                                      //                     "Search",
+                                      //                     style: TextStyle(
+                                      //                       color: const Color(
+                                      //                           0xFF8A2BE2),
+                                      //                       fontSize: 14,
+                                      //                       fontWeight:
+                                      //                           FontWeight.w600,
+                                      //                     ),
+                                      //                   ),
+                                      //                 )
+                                      //               : const SizedBox.shrink(),
+                                      //         ),
+                                      //       ],
+                                      //     ),
+                                      //   ),
+                                      // ),
                                     ],
                                   ),
                                   Row(
@@ -1873,6 +1881,8 @@ class _HomePageState extends State<HomePage>
                                                         return ThreadAnswerView(
                                                           youtubeVideos: result
                                                               .youtubeVideos,
+                                                          shortVideos: result
+                                                              .shortVideos,
                                                           sourceImageUrl: result
                                                               .sourceImageLink,
                                                           sourceImage: result
@@ -1970,9 +1980,9 @@ class _HomePageState extends State<HomePage>
                                                           .length -
                                                       1)
                                                 Divider(
-                                                  color: Colors.grey.shade300,
+                                                  color: Colors.white,
                                                   thickness: 0.5,
-                                                  height: 40,
+                                                  height: 25,
                                                 ),
                                             ],
                                           );

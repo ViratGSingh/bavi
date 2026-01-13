@@ -15,9 +15,11 @@ import 'package:icons_plus/icons_plus.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class ThreadAnswerView extends StatefulWidget {
   final List<YoutubeVideoData> youtubeVideos;
+  final List<ShortVideoResultData> shortVideos;
   final List<InfluenceData> answerResults;
   final String query;
   final String answer;
@@ -35,6 +37,7 @@ class ThreadAnswerView extends StatefulWidget {
   const ThreadAnswerView({
     super.key,
     required this.youtubeVideos,
+    required this.shortVideos,
     required this.answerResults,
     required this.query,
     required this.answer,
@@ -73,7 +76,9 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
   }
 
   void _initializeTab() {
-    if (widget.youtubeVideos.isNotEmpty) {
+    if (widget.shortVideos.isNotEmpty) {
+      _selectedTab = "Instagram";
+    } else if (widget.youtubeVideos.isNotEmpty) {
       _selectedTab = "YouTube";
     } else if (widget.local.isNotEmpty) {
       _selectedTab = "Map";
@@ -306,11 +311,42 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (widget.youtubeVideos.isNotEmpty ||
-                        widget.local.isNotEmpty) ...[
+                        widget.local.isNotEmpty ||
+                        widget.shortVideos.isNotEmpty) ...[
                       Padding(
                         padding: const EdgeInsets.only(bottom: 12.0),
                         child: Row(
                           children: [
+                            if (widget.shortVideos.isNotEmpty) ...[
+                              InkWell(
+                                onTap: () {
+                                  setState(() {
+                                    _selectedTab = "Instagram";
+                                  });
+                                },
+                                child: Container(
+                                  padding: EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: _selectedTab == "Instagram"
+                                        ? Color(0xFF8A2BE2)
+                                        : Colors.grey.shade200,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    "Instagram",
+                                    style: TextStyle(
+                                      color: _selectedTab == "Instagram"
+                                          ? Colors.white
+                                          : Colors.black,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              SizedBox(width: 8),
+                            ],
                             if (widget.youtubeVideos.isNotEmpty) ...[
                               InkWell(
                                 onTap: () {
@@ -372,6 +408,26 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
                               SizedBox(width: 8),
                             ],
                           ],
+                        ),
+                      ),
+                    ],
+                    if (_selectedTab == "Instagram" &&
+                        widget.shortVideos.isNotEmpty) ...[
+                      AspectRatio(
+                        aspectRatio: 1.65,
+                        child: Container(
+                          padding: EdgeInsets.only(bottom: 10),
+                          child: PageView.builder(
+                            padEnds: false,
+                            controller: PageController(viewportFraction: 0.4),
+                            itemCount: widget.shortVideos.length > 5
+                                ? 5
+                                : widget.shortVideos.length,
+                            itemBuilder: (context, index) {
+                              final video = widget.shortVideos[index];
+                              return InstagramVideoCard(video: video);
+                            },
+                          ),
                         ),
                       ),
                     ],
@@ -951,6 +1007,137 @@ class _PlaceCardState extends State<PlaceCard> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class InstagramVideoCard extends StatelessWidget {
+  final ShortVideoResultData video;
+
+  const InstagramVideoCard({
+    super.key,
+    required this.video,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () async {
+        // Open Instagram reel in external app
+        final url = Uri.parse(video.link);
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      },
+      child: Container(
+        margin: const EdgeInsets.only(right: 12),
+        decoration: BoxDecoration(
+          color: Colors.black,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.2),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Thumbnail
+            CachedNetworkImage(
+              imageUrl: video.thumbnail,
+              fit: BoxFit.cover,
+              placeholder: (context, url) => Container(
+                color: Colors.grey.shade900,
+                child: const Center(
+                  child: CircularProgressIndicator(
+                    color: Color(0xFF8A2BE2),
+                  ),
+                ),
+              ),
+              errorWidget: (context, error, stackTrace) => Container(
+                color: Colors.grey.shade900,
+                child: const Center(
+                  child: Icon(Icons.play_circle_outline,
+                      color: Colors.white54, size: 48),
+                ),
+              ),
+            ),
+
+            // Gradient overlays
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withOpacity(0.3),
+                      Colors.transparent,
+                      Colors.transparent,
+                      Colors.black.withOpacity(0.8),
+                    ],
+                    stops: const [0.0, 0.3, 0.6, 1.0],
+                  ),
+                ),
+              ),
+            ),
+
+            // Play icon overlay
+            Center(
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF8A2BE2).withOpacity(0.9),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF8A2BE2).withOpacity(0.4),
+                      blurRadius: 20,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.play_arrow_rounded,
+                  color: Colors.white,
+                  size: 28,
+                ),
+              ),
+            ),
+
+            // Title at bottom
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  video.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'Poppins',
+                    height: 1.3,
+                    shadows: [
+                      Shadow(
+                        color: Colors.black,
+                        blurRadius: 8,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -176,12 +176,12 @@ class _AnswerViewState extends State<AnswerView> {
                         );
                       },
                       child: Text(
-                        'Drissea',
+                        'Drissy',
                         style: TextStyle(
                           color: Colors.black, // Purple text
                           fontSize: 32,
 
-                          fontFamily: 'Jua',
+                          fontFamily: 'BagelFatOne',
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -307,9 +307,10 @@ class _AnswerViewState extends State<AnswerView> {
                         itemBuilder: (context, index) {
                           bool hasThumbnails = state.videoThumbnails.isNotEmpty;
                           bool hasValidThumbnail = false;
-                          if(hasThumbnails){
-                            if(state.videoThumbnails.length>index){
-                              hasValidThumbnail = state.videoThumbnails[index]!="";
+                          if (hasThumbnails) {
+                            if (state.videoThumbnails.length > index) {
+                              hasValidThumbnail =
+                                  state.videoThumbnails[index] != "";
                             }
                           }
                           print(state.videoThumbnails);
@@ -317,67 +318,76 @@ class _AnswerViewState extends State<AnswerView> {
                           return AnimatedSwitcher(
                             duration: Duration(milliseconds: 300),
                             child: hasThumbnails
-                                ? hasValidThumbnail?GestureDetector(
-                                    onTap: () async {
-                                      String href = widget.sourceUrls[index];
-                                      final uri = Uri.parse(href);
-                                      await launchUrl(uri,
-                                          mode: LaunchMode.externalApplication);
-                                    },
-                                    onLongPressStart: (_) {
-                                      _showOverlay(
-                                          context, state.videoThumbnails[index]);
-                                    },
-                                    onLongPressEnd: (_) {
-                                      _hideOverlay();
-                                    },
-                                    child: Container(
-                                      key: ValueKey(state.videoThumbnails[index]),
-                                      width: 90,
-                                      height: 160,
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: ClipRRect(
-                                        borderRadius: BorderRadius.circular(8),
-                                        child: Image.network(
-                                          state.videoThumbnails[index],
-                                          fit: BoxFit.cover,
-                                          loadingBuilder: (context, child,
-                                              loadingProgress) {
-                                            if (loadingProgress == null)
-                                              return child;
-                                            return Shimmer.fromColors(
-                                              baseColor: Colors.grey.shade300,
-                                              highlightColor:
-                                                  Colors.grey.shade100,
-                                              child: Container(
-                                                width: 100,
-                                                height: 200,
-                                                decoration: BoxDecoration(
-                                                  color: Colors.grey,
-                                                  borderRadius:
-                                                      BorderRadius.circular(8),
-                                                ),
-                                              ),
-                                            );
-                                          },
+                                ? hasValidThumbnail
+                                    ? GestureDetector(
+                                        onTap: () async {
+                                          String href =
+                                              widget.sourceUrls[index];
+                                          final uri = Uri.parse(href);
+                                          await launchUrl(uri,
+                                              mode: LaunchMode
+                                                  .externalApplication);
+                                        },
+                                        onLongPressStart: (_) {
+                                          _showOverlay(context,
+                                              state.videoThumbnails[index]);
+                                        },
+                                        onLongPressEnd: (_) {
+                                          _hideOverlay();
+                                        },
+                                        child: Container(
+                                          key: ValueKey(
+                                              state.videoThumbnails[index]),
+                                          width: 90,
+                                          height: 160,
+                                          decoration: BoxDecoration(
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                          ),
+                                          child: ClipRRect(
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                            child: Image.network(
+                                              state.videoThumbnails[index],
+                                              fit: BoxFit.cover,
+                                              loadingBuilder: (context, child,
+                                                  loadingProgress) {
+                                                if (loadingProgress == null)
+                                                  return child;
+                                                return Shimmer.fromColors(
+                                                  baseColor:
+                                                      Colors.grey.shade300,
+                                                  highlightColor:
+                                                      Colors.grey.shade100,
+                                                  child: Container(
+                                                    width: 100,
+                                                    height: 200,
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.grey,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              8),
+                                                    ),
+                                                  ),
+                                                );
+                                              },
+                                            ),
+                                          ),
                                         ),
-                                      ),
-                                    ),
-                                  ):
-                                  Shimmer.fromColors(
-                                    baseColor: Colors.grey.shade300,
-                                    highlightColor: Colors.grey.shade100,
-                                    child: Container(
-                                      width: 100,
-                                      height: 200,
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey,
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                    ),
-                                  )
+                                      )
+                                    : Shimmer.fromColors(
+                                        baseColor: Colors.grey.shade300,
+                                        highlightColor: Colors.grey.shade100,
+                                        child: Container(
+                                          width: 100,
+                                          height: 200,
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey,
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                          ),
+                                        ),
+                                      )
                                 : Shimmer.fromColors(
                                     baseColor: Colors.grey.shade300,
                                     highlightColor: Colors.grey.shade100,
@@ -395,7 +405,6 @@ class _AnswerViewState extends State<AnswerView> {
                       ),
                     ),
                     SizedBox(height: 12),
-
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       child: Container(
@@ -595,13 +604,16 @@ class _AnswerViewState extends State<AnswerView> {
                                                 : widget.answer.trim();
                                         Clipboard.setData(
                                             ClipboardData(text: textToCopy));
-                                        ScaffoldMessenger.of(context).showSnackBar(
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
                                           SnackBar(
-                                            backgroundColor: Color(0xFF8A2BE2), // Purple background
+                                            backgroundColor: Color(
+                                                0xFF8A2BE2), // Purple background
                                             content: Text(
                                               'Copied to clipboard',
                                               style: TextStyle(
-                                                color: Color(0xFFDFFF00), // Neon green text
+                                                color: Color(
+                                                    0xFFDFFF00), // Neon green text
                                                 fontWeight: FontWeight.bold,
                                               ),
                                             ),
@@ -622,16 +634,19 @@ class _AnswerViewState extends State<AnswerView> {
                                       //padding: EdgeInsets.all(5),
                                       color: Color(0xFF8A2BE2),
                                       onPressed: () {
-                                        context
-                                            .read<AnswerBloc>()
-                                            .add(AnswerSearchResultShare(widget.searchId));
-                                        ScaffoldMessenger.of(context).showSnackBar(
+                                        context.read<AnswerBloc>().add(
+                                            AnswerSearchResultShare(
+                                                widget.searchId));
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
                                           SnackBar(
-                                            backgroundColor: Color(0xFF8A2BE2), // Purple background
+                                            backgroundColor: Color(
+                                                0xFF8A2BE2), // Purple background
                                             content: Text(
                                               'Copied to clipboard',
                                               style: TextStyle(
-                                                color: Color(0xFFDFFF00), // Neon green text
+                                                color: Color(
+                                                    0xFFDFFF00), // Neon green text
                                                 fontWeight: FontWeight.bold,
                                               ),
                                             ),
@@ -650,8 +665,6 @@ class _AnswerViewState extends State<AnswerView> {
                         ),
                       ),
                     ),
-
-                   
                   ],
                 ),
               ),

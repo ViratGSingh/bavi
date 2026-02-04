@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.6.9+49 #1.0.0+4
+version: 1.6.10+50 #1.0.0+4
 
 environment:
   sdk: ^3.6.1
@@ -152,8 +152,8 @@ dev_dependencies:
 
 
 flutter_native_splash:
-  color: "#8A2BE2"                 # Purple background for older Android & iOS
-  color_dark: "#8A2BE2"       # Purple background in dark mode
+  color: "#FFFFFF"                 # Purple background for older Android & iOS
+  color_dark: "#121212"       # Purple background in dark mode
   image: assets/images/logo/icon.png          # Center logo image (must be PNG)
 
   android: true
@@ -165,8 +165,8 @@ flutter_native_splash:
 
   android_12:
     image: assets/images/logo/icon.png
-    color: "#8A2BE2"            # Purple background for Android 12+
-    color_dark: "#8A2BE2"       # Dark mode background for Android 12+
+    color: "#FFFFFF"            # Purple background for Android 12+
+    color_dark: "#121212"       # Dark mode background for Android 12+
 
 # The following section is specific to Flutter packages.
 flutter:
@@ -197,12 +197,9 @@ flutter:
   # list giving the asset and other descriptors for the font. For
   # example:
   fonts:
-    - family: Gugi
+    - family: BagelFatOne
       fonts:
-        - asset: assets/fonts/Gugi/Gugi-Regular.ttf
-    - family: Jua
-      fonts:
-        - asset: assets/fonts/Jua/Jua-Regular.ttf
+        - asset: assets/fonts/Bagel_Fat_One/BagelFatOne-Regular.ttf
     - family: Poppins
       fonts:
         - asset: assets/fonts/Poppins/Poppins-Regular.ttf

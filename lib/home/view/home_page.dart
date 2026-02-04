@@ -277,6 +277,41 @@ class _HomePageState extends State<HomePage>
                     showPrompt: Platform.isAndroid ? false : true,
                     child: Scaffold(
                       backgroundColor: Colors.white,
+                      drawerEdgeDragWidth:
+                          MediaQuery.of(context).size.width * 0.25,
+                      drawer: Drawer(
+                        width: MediaQuery.of(context).size.width * 0.85,
+                        backgroundColor: Colors.white,
+                        child: HistoryPage(
+                          sessions: state.threadHistory,
+                          historyStatus: state.historyStatus,
+                          onNewThread: () {
+                            mixpanel.track("start_new_thread");
+                            context.read<HomeBloc>().add(
+                                  HomeStartNewThread(),
+                                );
+                            taskTextController.clear();
+                            setState(() {
+                              isTaskValid = false;
+                            });
+                            Navigator.pop(context);
+                          },
+                          onSessionTap: (ThreadSessionData session) {
+                            mixpanel.track("user_tap_thread");
+                            Navigator.pop(context);
+                            context.read<HomeBloc>().add(
+                                  HomeRetrieveSearchData(session),
+                                );
+                            Future.delayed(const Duration(milliseconds: 300))
+                                .then((onValue) {
+                              _scrollController.animateTo(
+                                  _scrollController.position.maxScrollExtent,
+                                  duration: const Duration(milliseconds: 300),
+                                  curve: Curves.easeOut);
+                            });
+                          },
+                        ),
+                      ),
 
                       appBar: AppBar(
                         titleSpacing: 0,
@@ -386,11 +421,11 @@ class _HomePageState extends State<HomePage>
                               children: [
                                 state.status == HomePageStatus.idle
                                     ? Text(
-                                        'Drissea',
+                                        '',
                                         style: TextStyle(
                                           color: Colors.black,
                                           fontSize: 24,
-                                          fontFamily: 'Jua',
+                                          fontFamily: 'BagelFatOne',
                                           fontWeight: FontWeight.w500,
                                         ),
                                       )
@@ -1747,61 +1782,100 @@ class _HomePageState extends State<HomePage>
                                             : "set_normal_mode");
                                       },
                                       child: Center(
-                                        child: ClipRRect(
-                                          borderRadius:
-                                              BorderRadius.circular(40),
-                                          child: Container(
-                                            width: 80,
-                                            height: 80,
-                                            decoration: BoxDecoration(
-                                                borderRadius:
-                                                    BorderRadius.circular(40),
-                                                color: Color(0xFF8A2BE2)),
-                                            child: state.isIncognito
-                                                ? Icon(
-                                                    RemixIcons.spy_line,
-                                                    color: Color(0xFFDFFF00),
-                                                    size: 40,
-                                                  )
-                                                : Image.asset(
-                                                    "assets/images/logo/icon.png",
-                                                    fit: BoxFit.cover,
+                                        child: state.isIncognito
+                                            ? Column(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Container(
+                                                    width: 80,
+                                                    height: 80,
+                                                    decoration: BoxDecoration(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              40),
+                                                      color: Color(0xFF8A2BE2),
+                                                    ),
+                                                    child: Icon(
+                                                      RemixIcons.spy_line,
+                                                      color: Color(0xFFDFFF00),
+                                                      size: 40,
+                                                    ),
                                                   ),
-                                          ),
-                                        ),
+                                                  SizedBox(height: 8),
+                                                  Text(
+                                                    "Incognito Mode",
+                                                    style: TextStyle(
+                                                      color: Colors.black,
+                                                      fontSize: 20,
+                                                      fontFamily: 'Poppins',
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                ],
+                                              )
+                                            : Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.center,
+                                                children: [
+                                                  // D with chat icon inside
+                                                  Stack(
+                                                    clipBehavior: Clip.none,
+                                                    alignment: Alignment.center,
+                                                    children: [
+                                                      Text(
+                                                        'D',
+                                                        style: TextStyle(
+                                                          color:
+                                                              Color(0xFF8A2BE2),
+                                                          fontSize: 56,
+                                                          fontFamily:
+                                                              'BagelFatOne',
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                          height: 1,
+                                                        ),
+                                                      ),
+                                                      Container(
+                                                        color:
+                                                            Color(0xFF8A2BE2),
+                                                        width: 20,
+                                                        height: 30,
+                                                        child:
+                                                            SizedBox.shrink(),
+                                                      ),
+                                                      // Yellow chat bubble icon positioned inside D's counter
+                                                      Positioned(
+                                                        top: 24,
+                                                        left: 14,
+                                                        child: CustomPaint(
+                                                          size: Size(10, 18),
+                                                          painter:
+                                                              ChatBubblePainter(
+                                                            color: Color(
+                                                                0xFFDFFF00),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  // rissy text
+                                                  Text(
+                                                    'rissy',
+                                                    style: TextStyle(
+                                                      color: Color(0xFF8A2BE2),
+                                                      fontSize: 56,
+                                                      fontFamily: 'BagelFatOne',
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      height: 1,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
                                       ),
                                     ),
-                                    SizedBox(height: 5),
-                                    Container(
-                                      width: MediaQuery.of(context).size.width -
-                                          40,
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          state.isIncognito
-                                              ? Text(
-                                                  textAlign: TextAlign.center,
-                                                  "Incognito Mode",
-                                                  style: TextStyle(
-                                                    color: Colors.black,
-                                                    fontSize: 20,
-                                                    fontFamily: 'Poppins',
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                                )
-                                              : Text(
-                                                  "How may I help you?",
-                                                  style: TextStyle(
-                                                    color: Colors.black,
-                                                    fontSize: 20,
-                                                    fontFamily: 'Poppins',
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                                ),
-                                        ],
-                                      ),
-                                    )
                                   ],
                                 ),
                               )
@@ -2020,4 +2094,48 @@ class _HomePageState extends State<HomePage>
       ),
     );
   }
+}
+
+/// Custom painter for the chat bubble icon inside the D letter
+class ChatBubblePainter extends CustomPainter {
+  final Color color;
+
+  ChatBubblePainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    final path = Path();
+
+    // Scale factors to convert SVG viewBox (12x21) to actual size
+    final scaleX = size.width / 12;
+    final scaleY = size.height / 21;
+
+    // Tall rounded chat bubble icon with smooth curved tail
+    // Original SVG path: M3 2h6c1.7 0 3 1.3 3 3v9c0 1.7-1.3 3-3 3H5 Q3 17 1 20 Q0 21 0 19 L0 15 Q0 14 0 14 L0 5c0-1.7 1.3-3 3-3z
+    path.moveTo(3 * scaleX, 2 * scaleY);
+    path.lineTo(9 * scaleX, 2 * scaleY);
+    path.cubicTo(10.7 * scaleX, 2 * scaleY, 12 * scaleX, 3.3 * scaleY,
+        12 * scaleX, 5 * scaleY);
+    path.lineTo(12 * scaleX, 14 * scaleY);
+    path.cubicTo(12 * scaleX, 15.7 * scaleY, 10.7 * scaleX, 17 * scaleY,
+        9 * scaleX, 17 * scaleY);
+    path.lineTo(5 * scaleX, 17 * scaleY);
+    path.quadraticBezierTo(3 * scaleX, 17 * scaleY, 1 * scaleX, 20 * scaleY);
+    path.quadraticBezierTo(0, 21 * scaleY, 0, 19 * scaleY);
+    path.lineTo(0, 15 * scaleY);
+    path.quadraticBezierTo(0, 14 * scaleY, 0, 14 * scaleY);
+    path.lineTo(0, 5 * scaleY);
+    path.cubicTo(
+        0, 3.3 * scaleY, 1.3 * scaleX, 2 * scaleY, 3 * scaleX, 2 * scaleY);
+    path.close();
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

@@ -18,7 +18,7 @@ import 'package:app_links/app_links.dart';
 void main() async {
   // Preserve splash screen until initialization is complete
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
-  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+  //FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
   Bloc.observer = BaviBlocObserver();
   await Future.wait([
@@ -34,7 +34,7 @@ void main() async {
   navService.setRouter(router);
 
   // Remove splash screen right before running the app
-  FlutterNativeSplash.remove();
+  //FlutterNativeSplash.remove();
 
   runApp(BaviApp(router: router));
 

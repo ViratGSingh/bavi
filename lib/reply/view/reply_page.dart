@@ -175,12 +175,12 @@ class _ReplyViewState extends State<ReplyView> {
                         );
                       },
                       child: Text(
-                        'Drissea',
+                        'Drissy',
                         style: TextStyle(
                           color: Colors.black, // Purple text
                           fontSize: 32,
 
-                          fontFamily: 'Jua',
+                          fontFamily: 'BagelFatOne',
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -265,7 +265,7 @@ class _ReplyViewState extends State<ReplyView> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            "${widget.isGlanceMode?'Glanced':'Watched'} ${widget.similarVideos.length} Videos",
+                            "${widget.isGlanceMode ? 'Glanced' : 'Watched'} ${widget.similarVideos.length} Videos",
                             style: TextStyle(
                                 color: Colors.black,
                                 fontFamily: 'Poppins',
@@ -580,13 +580,16 @@ class _ReplyViewState extends State<ReplyView> {
                                                 : state.searchAnswer.trim();
                                         Clipboard.setData(
                                             ClipboardData(text: textToCopy));
-                                        ScaffoldMessenger.of(context).showSnackBar(
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
                                           SnackBar(
-                                            backgroundColor: Color(0xFF8A2BE2), // Purple background
+                                            backgroundColor: Color(
+                                                0xFF8A2BE2), // Purple background
                                             content: Text(
                                               'Copied to clipboard',
                                               style: TextStyle(
-                                                color: Color(0xFFDFFF00), // Neon green text
+                                                color: Color(
+                                                    0xFFDFFF00), // Neon green text
                                                 fontWeight: FontWeight.bold,
                                               ),
                                             ),
@@ -635,13 +638,16 @@ class _ReplyViewState extends State<ReplyView> {
                                         context
                                             .read<ReplyBloc>()
                                             .add(ReplySearchResultShare());
-                                        ScaffoldMessenger.of(context).showSnackBar(
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
                                           SnackBar(
-                                            backgroundColor: Color(0xFF8A2BE2), // Purple background
+                                            backgroundColor: Color(
+                                                0xFF8A2BE2), // Purple background
                                             content: Text(
                                               'Copied to clipboard',
                                               style: TextStyle(
-                                                color: Color(0xFFDFFF00), // Neon green text
+                                                color: Color(
+                                                    0xFFDFFF00), // Neon green text
                                                 fontWeight: FontWeight.bold,
                                               ),
                                             ),

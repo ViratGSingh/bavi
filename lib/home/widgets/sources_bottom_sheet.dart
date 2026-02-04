@@ -70,11 +70,11 @@ class _SourcesBottomSheetState extends State<SourcesBottomSheet> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
-                'Drissea',
+                'Drissy',
                 style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
-                    fontFamily: 'Jua'),
+                    fontFamily: 'BagelFatOne'),
               ),
               InkWell(
                 onTap: () async {

@@ -1932,7 +1932,7 @@ Rules:
           formattedResults.insertAll(0, memoryResults);
         }
 
-        answer = await vercelNewGenerateReply(
+        answer = await chowmeinGenerateReply(
           query,
           formattedResults,
           event.streamedText,
@@ -2410,16 +2410,26 @@ Rules:
               final webResults = respJson['web'] is List
                   ? List<dynamic>.from(respJson['web'])
                   : [];
-              extractedResults.addAll(
-                webResults.map(
-                  (e) => ExtractedResultInfo(
-                    url: e['url'] ?? '',
-                    title: e['title'] ?? '',
-                    excerpts: e['excerpts'] ?? '',
-                    thumbnailUrl: '',
-                  ),
-                ),
-              );
+              // Limit extractedResults to 10k characters total
+              int totalChars = 0;
+              const int charLimit = 10000;
+              for (final e in webResults) {
+                final String url = (e['url'] ?? '').toString();
+                final String title = (e['title'] ?? '').toString();
+                final String excerpts = (e['excerpts'] ?? '').toString();
+                final int resultChars =
+                    url.length + title.length + excerpts.length;
+
+                if (totalChars + resultChars > charLimit) break;
+
+                extractedResults.add(ExtractedResultInfo(
+                  url: url,
+                  title: title,
+                  excerpts: excerpts,
+                  thumbnailUrl: '',
+                ));
+                totalChars += resultChars;
+              }
               print("Web results found: ${webResults.length}");
             }
 
@@ -2572,7 +2582,7 @@ Rules:
       print("");
 
       print("Starting to generate answer");
-      answer = await vercelNewGenerateReply(
+      answer = await chowmeinGenerateReply(
         query,
         formattedResults,
         event.streamedText,
@@ -4551,6 +4561,275 @@ Don't reveal any personal information you have in your context unless asked abou
     }
   }
 
+  //Chowmein API
+  Future<String?> chowmeinGenerateReply(
+    String query,
+    List<Map<String, String>> results,
+    ValueNotifier<String> streamedText,
+    Emitter<HomeState> emit,
+    String imageDescription,
+    List<ThreadResultData> previousResults,
+    ExtractedUrlResultData? extractedUrlData,
+    String city,
+    String region,
+    String country,
+  ) async {
+    final generateAnswerStartTime = DateTime.now();
+    streamedText.value = "";
+    // Step 1: Format sources with token counting - ONLY YouTube results, limit 2k tokens.
+    int totalTokens = 0;
+    List<Map<String, String>> formattedSources = [];
+    for (final result in results) {
+      if (result["title"] == null ||
+          result["url"] == null ||
+          result["snippet"] == null) {
+        continue;
+      }
+      // Simple token estimate: 1 token ≈ 4 chars
+      int tokens = ((result["title"]!.length +
+              result["url"]!.length +
+              result["snippet"]!.length) ~/
+          4);
+      if (totalTokens + tokens > 125000) {
+        break;
+      }
+      formattedSources.add({
+        "title": result["title"]!,
+        "url": result["url"]!,
+        "snippet": result["snippet"]!,
+      });
+      totalTokens += tokens;
+    }
+
+    // Step 2: Determine if this is a chat request (no search results)
+    bool isChat = formattedSources.isEmpty;
+
+    // Step 3: Check for Cold Start & Fallback
+    final baseUrl = dotenv.get("QWEN_SARVAM_API_URL");
+
+    // Determine the URL to check (same logic as below)
+    final checkUrlStr = isChat
+        ? baseUrl.replaceFirst('.modal.run', '-chat.modal.run')
+        : baseUrl.replaceFirst('.modal.run', '-search.modal.run');
+    final checkUrl = Uri.parse(checkUrlStr);
+
+    try {
+      print("DEBUG: Checking Drissy status at $checkUrl...");
+
+      // Attempt a lightweight GET request with a short timeout.
+      // If the container is warm, it should respond instantly (405 Method Not Allowed is expected for POST endpoints).
+      // If it takes longer than 2 seconds, we assume it's cold/waking up.
+      await http.get(checkUrl).timeout(const Duration(seconds: 2));
+      print("DEBUG: Drissy is warm. Proceeding.");
+    } catch (e) {
+      print(
+          "DEBUG: Drissy is cold (or timeout: $e). Switching to Vercel fallback & warming up in background.");
+
+      // Explicit fire-and-forget warmup to ensure container boots
+      // We use a longer timeout here (or no timeout) to let it complete in background
+      http.get(checkUrl).then((_) {
+        print("DEBUG: Drissy background warmup completed");
+      }).catchError((err) {
+        print(
+            "DEBUG: Drissy background warmup completed with error (expected if just waking up): $err");
+      });
+
+      // Fallback to Vercel
+      return vercelNewGenerateReply(
+        query,
+        results,
+        streamedText,
+        emit,
+        imageDescription,
+        previousResults,
+        extractedUrlData,
+        city,
+        region,
+        country,
+      );
+    }
+
+    // Step 4: Build the full query with context
+    String fullQuery =
+        "$query ${imageDescription == "" ? "" : "| Here's the image description: $imageDescription"}  ${extractedUrlData?.snippet == "" ? "" : "| Here's the extracted url page description: ${extractedUrlData?.snippet}"}"
+            .trim();
+
+    // Step 5: Make the API request to Qwen-Sarvam vLLM server
+    // final baseUrl = dotenv.get("QWEN_SARVAM_API_URL"); // Already retrieved above
+
+    print("");
+    print("Starting request to Qwen-Sarvam vLLM API...");
+    print("");
+
+    try {
+      final Uri url;
+      final String body;
+
+      if (isChat) {
+        // Use /chat endpoint for pure chat (no search results)
+        // Modal URL format: endpoint name is in the hostname
+        // e.g., https://viratgsingh99--qwen-sarvam-vllm-v2-chat.modal.run
+        final chatUrl = baseUrl.replaceFirst('.modal.run', '-chat.modal.run');
+        url = Uri.parse(chatUrl);
+
+        // Build messages array with previous context
+        List<Map<String, String>> messages = [];
+        for (final item in previousResults) {
+          messages.add({
+            "role": "user",
+            "content": item.sourceImageDescription != ""
+                ? "${item.userQuery} | Here's the image description:${item.sourceImageDescription}"
+                : item.userQuery
+          });
+          messages.add({
+            "role": "assistant",
+            "content": item.answer,
+          });
+        }
+        messages.add({
+          "role": "user",
+          "content": fullQuery,
+        });
+
+        body = jsonEncode({
+          "messages": messages,
+          "max_tokens": 1000,
+          "thinking": false,
+          "stream": true,
+        });
+      } else {
+        // Use /search endpoint for search-augmented generation
+        // Modal URL format: endpoint name is in the hostname
+        // e.g., https://viratgsingh99--qwen-sarvam-vllm-v2-search.modal.run
+        final searchUrl =
+            baseUrl.replaceFirst('.modal.run', '-search.modal.run');
+        url = Uri.parse(searchUrl);
+
+        // Format search results in Source/Title/Snippet format
+        String searchResultsStr =
+            "User Query: $query\n\n Search Results:\nHere are search result snippets for \"$query\":\n";
+        for (final src in formattedSources) {
+          // Extract domain as source name
+          String sourceName = "Unknown";
+          try {
+            final uri = Uri.parse(src["url"] ?? "");
+            sourceName = uri.host.replaceFirst("www.", "");
+          } catch (_) {}
+
+          searchResultsStr += "\n---\n\n";
+          searchResultsStr += "**Source:** *$sourceName*\n";
+          searchResultsStr += "**Title:** **\"${src["title"]}\"**\n";
+          searchResultsStr += "**Snippet:** ${src["snippet"]}\n";
+        }
+        searchResultsStr += "\n---";
+
+        // Step 2: IP lookup and user context
+        String formattedUserContext = city == "" &&
+                region == "" &&
+                country == ""
+            ? "The current date and time is ${DateTime.now()}."
+            : "The user is located in $city, $region, $country. The current date and time is ${DateTime.now()}.";
+
+        // Step 3: Build systemPrompt
+        bool isChat = formattedSources.isEmpty;
+        final systemPrompt = """
+You are Drissy, a private, conversational, and insightful answer engine. You do not save user data and keep as much processing as possible strictly on-device. 
+
+${isChat ? "" : """
+You answer user questions using a list of web sources, each with a title, url, and snippet.
+Rules:
+- Always answer in Markdown.
+- Structure your response in mobile-friendly way.
+- Always **bold key insights** and highlight notable places, dishes, or experiences.
+- For any place, food item, or experience that was featured in a source, wrap the main word or phrase in this format: `[text to show](<link>)` (e.g., Try the **[Dum Pukht Biryani](https://example.com/food)**).
+- **Be Conversational**: Write naturally, like a knowledgeable friend. Avoid robotic phrases like “based on search results” or “these sources say.”
+- Only use the sources that directly answer the query.
+- If no strong or direct matches are found, gracefully say: _“There isn’t a perfect match for that, but here are a few options that might still interest you.”_
+- Do not repeat the question or use generic filler lines.
+- Keep your language engaging, be as detailed and exhaustive as possible, ensuring no relevant detail from the sources is omitted, while still maintaining clarity and readability.
+- If the query consists primarily of a URL (e.g., youtube.com/...), use the provided content from the extracted URL to summarize what the page or video is about.
+"""}
+Use the following user context for additional personalization (if relevant):
+$formattedUserContext
+
+Don't reveal any personal information you have in your context unless asked about it.
+""";
+
+        body = jsonEncode({
+          "query": fullQuery,
+          "search_results": searchResultsStr,
+          "system_prompt": systemPrompt,
+          "max_tokens": 8000,
+          "temperature": 0.7,
+          "thinking": false,
+          "stream": true,
+        });
+      }
+
+      print("🔗 Calling URL: $url");
+      final request = http.Request("POST", url);
+      request.headers.addAll({"Content-Type": "application/json"});
+      request.body = body;
+      print("📤 Request Body: $body");
+
+      final streamedResponse = await httpClient.send(request);
+      print("Response Status Code: ${streamedResponse.statusCode}");
+
+      if (streamedResponse.statusCode != 200) {
+        final errorBody =
+            await streamedResponse.stream.transform(utf8.decoder).join();
+        print("❌ Error Body: $errorBody");
+        return null;
+      }
+
+      final stream = streamedResponse.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter());
+
+      String finalContent = "";
+      print("Listening to stream...");
+      print(
+          "TTFT:${DateTime.now().difference(generateAnswerStartTime).inMilliseconds}");
+
+      await for (final line in stream) {
+        if (!line.startsWith("data:")) continue;
+        final chunk = line.substring(5).trim();
+        if (chunk == "[DONE]") continue;
+
+        try {
+          final decoded = jsonDecode(chunk);
+          final delta = decoded["choices"]?[0]?["delta"];
+          if (delta == null) continue;
+
+          if (delta["content"] != null) {
+            final chunkText = delta["content"];
+            streamedText.value += chunkText;
+            finalContent += chunkText;
+            emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+          }
+        } catch (e) {
+          print("Streaming parse error: \$e");
+        }
+      }
+
+      if (finalContent.isNotEmpty) {
+        if (finalContent.contains("</think>")) {
+          final parts = finalContent.split("</think>");
+          finalContent = parts.length > 1
+              ? parts.sublist(1).join("</think>").trim()
+              : parts[0].trim();
+        }
+        return finalContent;
+      } else {
+        print("❌ Streaming failed or empty content");
+        return null;
+      }
+    } catch (e) {
+      print("❌ Qwen-Sarvam API Request failed: $e");
+      return null;
+    }
+  }
+
   // Generate a reply from Drissea API given a query and search results.
   // Generate a reply from Vercel AI SDK API given a query and search results.
   Future<String?> vercelGenerateChatReply(
@@ -4908,9 +5187,9 @@ $formattedUserContext
 
       // Process and cache answers for memory system (fire-and-forget, isolated)
       // Skip if chat mode is active
-      if (!skipMemoryProcessing) {
-        _processAnswersForMemory(sessionData.results);
-      }
+      // if (!skipMemoryProcessing) {
+      //   _processAnswersForMemory(sessionData.results);
+      // }
 
       return sessionId;
     } catch (e) {
@@ -5041,10 +5320,10 @@ $formattedUserContext
 
       // Process and cache the latest answer for memory system (fire-and-forget, isolated)
       // Skip if chat mode is active
-      if (!skipMemoryProcessing && sessionData.results.isNotEmpty) {
-        final latestResult = sessionData.results.last;
-        _processAnswerForMemory(latestResult.answer, latestResult.userQuery);
-      }
+      // if (!skipMemoryProcessing && sessionData.results.isNotEmpty) {
+      //   final latestResult = sessionData.results.last;
+      //   _processAnswerForMemory(latestResult.answer, latestResult.userQuery);
+      // }
 
       return sessionId;
     } catch (e) {

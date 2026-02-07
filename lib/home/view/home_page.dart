@@ -1474,72 +1474,72 @@ class _HomePageState extends State<HomePage>
                                           ),
                                         ),
                                       ),
-                                      // SizedBox(width: 12),
-                                      // GestureDetector(
-                                      //   onTap: () {
-                                      //     final homeBloc =
-                                      //         context.read<HomeBloc>();
-                                      //     homeBloc.add(HomeToggleChatMode());
-                                      //   },
-                                      //   child: AnimatedContainer(
-                                      //     duration:
-                                      //         const Duration(milliseconds: 300),
-                                      //     curve: Curves.easeInOut,
-                                      //     height: 32,
-                                      //     padding: EdgeInsets.symmetric(
-                                      //       horizontal:
-                                      //           state.isChatModeActive == false
-                                      //               ? 12
-                                      //               : 8,
-                                      //     ),
-                                      //     decoration: BoxDecoration(
-                                      //       color: state.isChatModeActive ==
-                                      //               false
-                                      //           ? const Color(
-                                      //               0xFFE8D5FF) // Light purple
-                                      //           : Colors.grey.withOpacity(0.1),
-                                      //       borderRadius:
-                                      //           BorderRadius.circular(26),
-                                      //     ),
-                                      //     child: Row(
-                                      //       mainAxisSize: MainAxisSize.min,
-                                      //       children: [
-                                      //         Icon(
-                                      //           Iconsax.search_normal_outline,
-                                      //           color: state.isChatModeActive ==
-                                      //                   false
-                                      //               ? const Color(
-                                      //                   0xFF8A2BE2) // Purple
-                                      //               : Colors.black,
-                                      //           size: 16,
-                                      //         ),
-                                      //         AnimatedSize(
-                                      //           duration: const Duration(
-                                      //               milliseconds: 300),
-                                      //           curve: Curves.easeInOut,
-                                      //           child: state.isChatModeActive ==
-                                      //                   false
-                                      //               ? Padding(
-                                      //                   padding:
-                                      //                       const EdgeInsets
-                                      //                           .only(left: 6),
-                                      //                   child: Text(
-                                      //                     "Search",
-                                      //                     style: TextStyle(
-                                      //                       color: const Color(
-                                      //                           0xFF8A2BE2),
-                                      //                       fontSize: 14,
-                                      //                       fontWeight:
-                                      //                           FontWeight.w600,
-                                      //                     ),
-                                      //                   ),
-                                      //                 )
-                                      //               : const SizedBox.shrink(),
-                                      //         ),
-                                      //       ],
-                                      //     ),
-                                      //   ),
-                                      // ),
+                                      SizedBox(width: 12),
+                                      GestureDetector(
+                                        onTap: () {
+                                          final homeBloc =
+                                              context.read<HomeBloc>();
+                                          homeBloc.add(HomeToggleChatMode());
+                                        },
+                                        child: AnimatedContainer(
+                                          duration:
+                                              const Duration(milliseconds: 300),
+                                          curve: Curves.easeInOut,
+                                          height: 32,
+                                          padding: EdgeInsets.symmetric(
+                                            horizontal:
+                                                state.isChatModeActive == false
+                                                    ? 12
+                                                    : 8,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: state.isChatModeActive ==
+                                                    false
+                                                ? const Color(
+                                                    0xFFE8D5FF) // Light purple
+                                                : Colors.grey.withOpacity(0.1),
+                                            borderRadius:
+                                                BorderRadius.circular(26),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Iconsax.search_normal_outline,
+                                                color: state.isChatModeActive ==
+                                                        false
+                                                    ? const Color(
+                                                        0xFF8A2BE2) // Purple
+                                                    : Colors.black,
+                                                size: 16,
+                                              ),
+                                              AnimatedSize(
+                                                duration: const Duration(
+                                                    milliseconds: 300),
+                                                curve: Curves.easeInOut,
+                                                child: state.isChatModeActive ==
+                                                        false
+                                                    ? Padding(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .only(left: 6),
+                                                        child: Text(
+                                                          "Search",
+                                                          style: TextStyle(
+                                                            color: const Color(
+                                                                0xFF8A2BE2),
+                                                            fontSize: 14,
+                                                            fontWeight:
+                                                                FontWeight.w600,
+                                                          ),
+                                                        ),
+                                                      )
+                                                    : const SizedBox.shrink(),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
                                     ],
                                   ),
                                   Row(

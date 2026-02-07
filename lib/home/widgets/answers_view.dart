@@ -766,9 +766,7 @@ class AnswerLoader extends StatelessWidget {
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(40),
                     ),
-                    child: CircularProgressIndicator(
-                      color: Color(0xFFDFFF00),
-                    ),
+                    child: CircularProgressIndicator(color: Color(0xFF8A2BE2)),
                   ),
                 ],
               ),

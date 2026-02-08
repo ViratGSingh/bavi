@@ -734,7 +734,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       //Extracted Url
       else if (initialresultData.extractedUrlData?.link != "" &&
           initialresultData.extractedUrlData?.link != null) {
-        answer = await vercelGenerateReply(
+        answer = await vercelNewGenerateReply(
           initialresultData.userQuery,
           [],
           event.streamedText,
@@ -749,7 +749,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
           userData.country,
         );
       } else {
-        answer = await vercelGenerateReply(
+        answer = await vercelNewGenerateReply(
             initialresultData.userQuery,
             formattedResults,
             event.streamedText,
@@ -1932,7 +1932,7 @@ Rules:
           formattedResults.insertAll(0, memoryResults);
         }
 
-        answer = await chowmeinGenerateReply(
+        answer = await vercelNewGenerateReply(
           query,
           formattedResults,
           event.streamedText,
@@ -2582,7 +2582,7 @@ Rules:
       print("");
 
       print("Starting to generate answer");
-      answer = await chowmeinGenerateReply(
+      answer = await vercelNewGenerateReply(
         query,
         formattedResults,
         event.streamedText,

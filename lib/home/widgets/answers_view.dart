@@ -732,46 +732,46 @@ class AnswerLoader extends StatelessWidget {
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
-        padding: EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade400),
-          borderRadius: BorderRadius.circular(12),
-        ),
+        // padding: EdgeInsets.all(8),
+        // decoration: BoxDecoration(
+        //   border: Border.all(color: Colors.grey.shade400),
+        //   borderRadius: BorderRadius.circular(12),
+        // ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox(
-              width: 24,
-              height: 24,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(40),
-                    child: Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(40),
-                          color: Color(0xFF8A2BE2)),
-                      child: Image.asset(
-                        "assets/images/logo/icon.png",
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  ),
-                  Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(40),
-                    ),
-                    child: CircularProgressIndicator(color: Color(0xFF8A2BE2)),
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(width: 12),
+            // SizedBox(
+            //   width: 24,
+            //   height: 24,
+            //   child: Stack(
+            //     alignment: Alignment.center,
+            //     children: [
+            //       ClipRRect(
+            //         borderRadius: BorderRadius.circular(40),
+            //         child: Container(
+            //           width: 24,
+            //           height: 24,
+            //           decoration: BoxDecoration(
+            //               borderRadius: BorderRadius.circular(40),
+            //               color: Color(0xFF8A2BE2)),
+            //           child: Image.asset(
+            //             "assets/images/logo/icon.png",
+            //             fit: BoxFit.cover,
+            //           ),
+            //         ),
+            //       ),
+            //       Container(
+            //         width: 24,
+            //         height: 24,
+            //         decoration: BoxDecoration(
+            //           borderRadius: BorderRadius.circular(40),
+            //         ),
+            //         child: CircularProgressIndicator(color: Color(0xFF8A2BE2)),
+            //       ),
+            //     ],
+            //   ),
+            // ),
+            // SizedBox(width: 12),
             Shimmer.fromColors(
               baseColor: Colors.grey.shade600,
               highlightColor: Colors.grey.shade300,

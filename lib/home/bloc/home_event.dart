@@ -313,6 +313,11 @@ final class HomeImageUnselected extends HomeEvent {
   HomeImageUnselected(this.imageDescription);
 }
 
+final class HomeCancelOCRExtraction extends HomeEvent {
+  final ValueNotifier<String> imageDescription;
+  HomeCancelOCRExtraction(this.imageDescription);
+}
+
 final class HomeDownloadGemmaModel extends HomeEvent {}
 
 final class HomeCancelGemmaDownload extends HomeEvent {}

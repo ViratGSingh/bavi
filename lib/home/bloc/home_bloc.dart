@@ -62,6 +62,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     on<HomeRefreshReply>(_refreshReply);
     on<HomeImageSelected>(_handleImageSelected);
     on<HomeImageUnselected>(_handleImageUnselected);
+    on<HomeCancelOCRExtraction>(_handleCancelOCRExtraction);
     // on<HomeGenScreenshot>(_genScreenshot);
     //on<HomeNavToReply>(_navToReply);
 
@@ -366,7 +367,8 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     emit(state.copyWith(
         selectedImage: event.image,
         imageStatus: HomeImageStatus.selected,
-        isAnalyzingImage: true));
+        isAnalyzingImage: true,
+        ocrExtractionStatus: OCRExtractionStatus.loading));
 
     print(
         "DEBUG: HomeBloc after received HomeImageSelected: ${event.image.path}");
@@ -474,8 +476,8 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
           region: 'auto',
         ).then((_) => publicUrl),
 
-        // Get image description from Vercel AI
-        _describeImageWithAI(bytes),
+        // Extract text from image using PaddleOCR (local LLM)
+        _extractTextWithPaddleOCR(bytes),
       ]);
 
       final uploadedUrl = results[0] as String;
@@ -492,14 +494,23 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         imageStatus: state.imageStatus,
         uploadedImageUrl: uploadedUrl,
         isAnalyzingImage: false,
+        ocrExtractionStatus: OCRExtractionStatus.success,
       ));
     } catch (e) {
       print("DEBUG: Image upload/analysis error: $e");
+      // Clear image on failure
       emit(state.copyWith(
-        selectedImage: state.selectedImage,
-        imageStatus: state.imageStatus,
+        selectedImage: null,
+        imageStatus: HomeImageStatus.unselected,
+        uploadedImageUrl: "",
         isAnalyzingImage: false,
+        ocrExtractionStatus: OCRExtractionStatus.failed,
       ));
+      imageDescription.value = "";
+
+      // Reset status after a short delay
+      await Future.delayed(const Duration(milliseconds: 100));
+      emit(state.copyWith(ocrExtractionStatus: OCRExtractionStatus.idle));
     }
   }
 
@@ -546,6 +557,81 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     } catch (e) {
       print("DEBUG: Image description error: $e");
       return "Error describing image";
+    }
+  }
+
+  /// Extract text from image using PaddleOCR-VL-1.5 local model
+  /// [task] can be: ocr, table, formula, chart, spotting, seal
+  /// Falls back to Gemini if PaddleOCR server is unavailable
+  Future<String> _extractTextWithPaddleOCR(
+    List<int> imageBytes, {
+    String task = 'ocr',
+    int maxTokens = 2048,
+  }) async {
+    try {
+      // Check file size limit (5MB)
+      const int maxFileSizeBytes = 5 * 1024 * 1024;
+      if (imageBytes.length > maxFileSizeBytes) {
+        print(
+            "DEBUG: File too large for PaddleOCR: ${imageBytes.length} bytes");
+        return "Error: File too large. Maximum size is 5MB.";
+      }
+
+      final base64Image = base64Encode(imageBytes);
+
+      // Call the Modal PaddleOCR server
+      final ocrServerUrl = dotenv.maybeGet("PADDLE_OCR_SERVER_URL");
+
+      // If no server URL configured, fallback to Gemini
+      if (ocrServerUrl == null || ocrServerUrl.isEmpty) {
+        print(
+            "DEBUG: PADDLE_OCR_SERVER_URL not configured, falling back to Gemini");
+        return await _describeImageWithAI(imageBytes);
+      }
+
+      final url = Uri.parse(ocrServerUrl);
+      print("DEBUG: Calling PaddleOCR at: $url");
+
+      final response = await http
+          .post(
+            url,
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode({
+              "image": base64Image,
+              "task": task,
+              "max_tokens": maxTokens,
+            }),
+          )
+          .timeout(const Duration(seconds: 60));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        // Check for errors
+        if (data['error'] != null && data['error'].toString().isNotEmpty) {
+          print("DEBUG: PaddleOCR error: ${data['error']}");
+          return "Error: ${data['error']}";
+        }
+
+        final extractedText = data['extracted_text'] ?? "";
+        print("DEBUG: PaddleOCR extracted ${extractedText.length} characters");
+        return extractedText;
+      } else {
+        print(
+            "DEBUG: PaddleOCR request failed: ${response.statusCode} - ${response.body}");
+        // Fallback to Gemini
+        print("DEBUG: Falling back to Gemini for image description");
+        return await _describeImageWithAI(imageBytes);
+      }
+    } catch (e) {
+      print("DEBUG: PaddleOCR error: $e");
+      // Fallback to Gemini on any error
+      print("DEBUG: Falling back to Gemini for image description");
+      try {
+        return await _describeImageWithAI(imageBytes);
+      } catch (fallbackError) {
+        return "Error extracting text: $e";
+      }
     }
   }
 
@@ -646,8 +732,29 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       uploadedImageUrl: "",
       selectedImage: null,
       imageStatus: HomeImageStatus.unselected,
+      ocrExtractionStatus: OCRExtractionStatus.idle,
+      isAnalyzingImage: false,
     ));
     event.imageDescription.value = "";
+  }
+
+  Future<void> _handleCancelOCRExtraction(
+    HomeCancelOCRExtraction event,
+    Emitter<HomeState> emit,
+  ) async {
+    print("DEBUG: OCR extraction cancelled by user");
+    emit(state.copyWith(
+      uploadedImageUrl: "",
+      selectedImage: null,
+      imageStatus: HomeImageStatus.unselected,
+      ocrExtractionStatus: OCRExtractionStatus.cancelled,
+      isAnalyzingImage: false,
+    ));
+    event.imageDescription.value = "";
+
+    // Reset status after a short delay
+    await Future.delayed(const Duration(milliseconds: 100));
+    emit(state.copyWith(ocrExtractionStatus: OCRExtractionStatus.idle));
   }
 
   Future<void> _handleModelSelect(
@@ -2410,9 +2517,10 @@ Rules:
               final webResults = respJson['web'] is List
                   ? List<dynamic>.from(respJson['web'])
                   : [];
+              
               // Limit extractedResults to 10k characters total
               int totalChars = 0;
-              const int charLimit = 10000;
+              const int charLimit = 120000;
               for (final e in webResults) {
                 final String url = (e['url'] ?? '').toString();
                 final String title = (e['title'] ?? '').toString();

@@ -62,6 +62,8 @@ enum HomeProfileStatus { loading, success, failure, idle }
 
 enum HomeExtractUrlStatus { loading, success, failure, idle }
 
+enum OCRExtractionStatus { idle, loading, success, failed, cancelled }
+
 enum GemmaDownloadStatus { loading, success, failure, idle, cancelled }
 
 /// Which model is currently being downloaded for local memory
@@ -94,6 +96,7 @@ final class HomeState extends Equatable {
     this.imageStatus = HomeImageStatus.unselected,
     this.uploadedImageUrl,
     this.isAnalyzingImage = false,
+    this.ocrExtractionStatus = OCRExtractionStatus.idle,
     this.selectedModel = HomeModel.deepseek,
     this.searchType = HomeSearchType.general,
     this.actionType = HomeActionType.general,
@@ -161,6 +164,7 @@ final class HomeState extends Equatable {
   final HomeImageStatus imageStatus;
   final String? uploadedImageUrl;
   final bool isAnalyzingImage;
+  final OCRExtractionStatus ocrExtractionStatus;
   final HomeModel selectedModel;
   final HomeSearchType searchType;
   final HomeActionType actionType;
@@ -203,6 +207,7 @@ final class HomeState extends Equatable {
     HomeImageStatus? imageStatus,
     Object? uploadedImageUrl = _sentinel,
     bool? isAnalyzingImage,
+    OCRExtractionStatus? ocrExtractionStatus,
     HomeModel? selectedModel,
     HomeSearchType? searchType,
     HomeActionType? actionType,
@@ -249,6 +254,7 @@ final class HomeState extends Equatable {
           ? this.uploadedImageUrl
           : uploadedImageUrl as String?,
       isAnalyzingImage: isAnalyzingImage ?? this.isAnalyzingImage,
+      ocrExtractionStatus: ocrExtractionStatus ?? this.ocrExtractionStatus,
       selectedModel: selectedModel ?? this.selectedModel,
       searchType: searchType ?? this.searchType,
       actionType: actionType ?? this.actionType,
@@ -296,6 +302,7 @@ final class HomeState extends Equatable {
         imageStatus,
         uploadedImageUrl,
         isAnalyzingImage,
+        ocrExtractionStatus,
         selectedModel,
         searchType,
         actionType,

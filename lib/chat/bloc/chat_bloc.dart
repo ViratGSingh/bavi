@@ -1,11 +1,8 @@
 import 'dart:convert';
-import 'dart:io';
 
-import 'package:device_info_plus/device_info_plus.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_gemma/flutter_gemma.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -25,8 +22,6 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
 
   static const String _chatHistoryKey = 'offline_chat_history';
   bool _isCancelled = false;
-  InferenceModel? _activeModel;
-  InferenceChat? _activeChat;
 
   Future<void> _onLoadHistory(
     ChatLoadHistory event,
@@ -50,65 +45,9 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
 
         emit(state.copyWith(messages: messages));
       }
-
-      // Initialize Gemma model
-      await _initializeGemmaModel();
     } catch (e) {
       debugPrint('Error loading chat history: $e');
     }
-  }
-
-  Future<void> _initializeGemmaModel() async {
-    try {
-      final bool isEmulator = await _isEmulator();
-
-      // Check if the 1B model is installed (this is what the download button installs)
-      final is1BInstalled = await FlutterGemma.isModelInstalled(
-          'Gemma3-1B-IT_multi-prefill-seq_q8_ekv2048.task');
-
-      debugPrint('DEBUG Chat: 1B model installed: $is1BInstalled');
-
-      if (is1BInstalled) {
-        // Install/activate the 1B model - this sets it as the active model
-        // Even if already installed, this "activates" it for use
-        debugPrint('DEBUG Chat: Activating 1B model for chat...');
-        await FlutterGemma.installModel(
-          modelType: ModelType.gemmaIt,
-        )
-            .fromNetwork(
-              'https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/Gemma3-1B-IT_multi-prefill-seq_q8_ekv2048.task',
-            )
-            .install();
-        debugPrint('DEBUG Chat: 1B model activated');
-      } else {
-        debugPrint(
-            'DEBUG Chat: 1B model not installed, chat may not work properly');
-        // Still try to use whatever is active
-      }
-
-      _activeModel = await FlutterGemma.getActiveModel(
-        maxTokens: 2048,
-        preferredBackend:
-            isEmulator ? PreferredBackend.cpu : PreferredBackend.gpu,
-      );
-
-      _activeChat = await _activeModel?.createChat();
-      debugPrint('DEBUG Chat: Gemma chat session created');
-    } catch (e) {
-      debugPrint('Error initializing Gemma model for chat: $e');
-    }
-  }
-
-  Future<bool> _isEmulator() async {
-    final DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
-    if (Platform.isAndroid) {
-      final AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
-      return !androidInfo.isPhysicalDevice;
-    } else if (Platform.isIOS) {
-      final IosDeviceInfo iosInfo = await deviceInfo.iosInfo;
-      return !iosInfo.isPhysicalDevice;
-    }
-    return false;
   }
 
   Future<void> _saveHistory(List<ChatMessage> messages) async {
@@ -157,59 +96,6 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
     await _saveHistory(updatedMessages);
 
     try {
-      // Initialize model if not already done
-      if (_activeChat == null) {
-        await _initializeGemmaModel();
-      }
-
-      if (_activeChat == null) {
-        throw Exception(
-            'Gemma model not available. Please ensure the model is downloaded.');
-      }
-
-      // Simple prompt - just the user query for the small model
-      final prompt = event.query;
-      debugPrint('DEBUG: Sending prompt to Gemma: $prompt');
-
-      // Use Gemma for inference
-      await _activeChat!.addQueryChunk(Message.text(
-        text: prompt,
-        isUser: true,
-      ));
-
-      // Stream response token by token
-      StringBuffer responseBuffer = StringBuffer();
-      bool isComplete = false;
-      int tokenCount = 0;
-      const maxTokens = 500; // Safety limit
-
-      debugPrint('DEBUG: Starting streaming response...');
-
-      while (!isComplete && !_isCancelled && tokenCount < maxTokens) {
-        final gemmaResponse = await _activeChat!.generateChatResponse();
-        tokenCount++;
-
-        if (gemmaResponse is TextResponse) {
-          final token = gemmaResponse.token;
-
-          // Check for end of response (empty token or special end markers)
-          if (token.isEmpty) {
-            isComplete = true;
-            debugPrint(
-                'DEBUG: Stream complete (empty token) after $tokenCount tokens');
-          } else {
-            responseBuffer.write(token);
-            // Update the streamed text notifier for real-time UI updates
-            event.streamedText.value = responseBuffer.toString();
-          }
-        } else {
-          // Non-text response means we're done
-          isComplete = true;
-          debugPrint(
-              'DEBUG: Stream complete (non-text response: ${gemmaResponse.runtimeType})');
-        }
-      }
-
       if (_isCancelled) {
         emit(state.copyWith(
           status: ChatPageStatus.idle,
@@ -218,16 +104,10 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
         return;
       }
 
-      String response = responseBuffer.toString().trim();
-      debugPrint('DEBUG: Final response length: ${response.length}');
-      debugPrint('DEBUG: Final response: "$response"');
+      const response =
+          "Local AI chat is currently unavailable. Please use the main search feature instead.";
 
-      // Only show fallback if response is truly empty
-      if (response.isEmpty) {
-        debugPrint('DEBUG: Response was empty, showing fallback');
-        response =
-            "I'm processing your request. The model returned an empty response - please try again.";
-      }
+      event.streamedText.value = response;
 
       final aiMessage = ChatMessage(
         content: response,
@@ -249,8 +129,7 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
       debugPrint('Error generating response: $e');
 
       final errorMessage = ChatMessage(
-        content:
-            "I'm having trouble generating a response. Please make sure the AI model is downloaded.\n\nError: ${e.toString()}",
+        content: "I'm having trouble generating a response.\n\nError: ${e.toString()}",
         isUser: false,
         timestamp: DateTime.now(),
       );
@@ -281,9 +160,6 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_chatHistoryKey);
-
-      // Reset chat session
-      _activeChat = await _activeModel?.createChat();
     } catch (e) {
       debugPrint('Error clearing chat history: $e');
     }

@@ -9,10 +9,11 @@ import 'package:bavi/home/widgets/answers_view.dart';
 import 'package:bavi/home/widgets/search_view.dart';
 import 'package:bavi/home/widgets/sources_bottom_sheet.dart';
 import 'package:bavi/home/widgets/offline_chat_bottom_sheet.dart';
-import 'package:bavi/home/widgets/download_overlay.dart';
 import 'package:bavi/home/widgets/location_permission_sheet.dart';
 import 'package:bavi/home/widgets/tabs_view.dart';
 import 'package:bavi/home/widgets/web_view.dart';
+import 'package:bavi/home/widgets/google_search_webview.dart';
+import 'package:bavi/models/short_video.dart';
 import 'package:bavi/memory/bloc/memory_bloc.dart';
 import 'package:bavi/memory/view/memory_page.dart';
 import 'package:bavi/models/thread.dart';
@@ -338,6 +339,25 @@ class _HomePageState extends State<HomePage>
           }
         },
         child: BlocListener<HomeBloc, HomeState>(
+          listenWhen: (previous, current) =>
+              previous.webSearchQuery != current.webSearchQuery &&
+              current.webSearchQuery != null,
+          listener: (context, state) async {
+            final results = await Navigator.push<List<ExtractedResultInfo>>(
+              context,
+              MaterialPageRoute(
+                builder: (_) => GoogleSearchWebView(
+                  query: state.webSearchQuery!,
+                ),
+              ),
+            );
+            if (context.mounted) {
+              context.read<HomeBloc>().add(
+                    HomeWebSearchResultsReceived(results ?? []),
+                  );
+            }
+          },
+          child: BlocListener<HomeBloc, HomeState>(
           listenWhen: (previous, current) =>
               previous.showLocationRationale != current.showLocationRationale &&
               current.showLocationRationale == true,
@@ -2208,14 +2228,13 @@ class _HomePageState extends State<HomePage>
                         ),
                       ), // Close Scaffold
                     ), // Close UpgradeAlert
-                    // Full-screen download overlay (premium)
-                    const DownloadOverlay(),
                   ],
                 ),
               ),
             );
           }),
         ), // Close inner BlocListener for location
+      ), // Close BlocListener for webSearchQuery
       ), // Close outer BlocListener for OCR
     );
   }

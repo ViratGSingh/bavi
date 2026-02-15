@@ -166,7 +166,7 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
                 ),
               ),
               Text(
-                'Powered by Gemma',
+                'Offline Chat',
                 style: TextStyle(
                   fontSize: 11,
                   color: Colors.grey,

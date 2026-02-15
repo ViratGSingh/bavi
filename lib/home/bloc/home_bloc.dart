@@ -1,6 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:device_info_plus/device_info_plus.dart';
 import 'dart:typed_data';
 
 import 'package:geolocator/geolocator.dart';
@@ -25,18 +25,12 @@ import 'package:equatable/equatable.dart';
 import 'package:drift/drift.dart' as drift;
 import 'package:bavi/app_database.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:flutter_gemma/flutter_gemma.dart';
-import 'package:flutter_gemma/core/model_management/cancel_token.dart';
 import 'package:bavi/services/answer_memory_service.dart';
 part 'home_event.dart';
 part 'home_state.dart';
 
 class HomeBloc extends Bloc<HomeEvent, HomeState> {
   final http.Client httpClient;
-  InferenceModel? _activeGemmaModel;
-  InferenceChat?
-      _activeGemmaChat; // Cached chat session to avoid createChat() on each query
-  CancelToken? _gemmaCancelToken = CancelToken();
   // @override
   // void onTransition(Transition<HomeEvent, HomeState> transition) {
   //   super.onTransition(transition);
@@ -78,8 +72,19 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     on<HomeCheckLocationAndAnswer>(_checkLocationAndAnswer);
     on<HomeRequestLocationPermission>(_requestLocationPermission);
     on<HomeRetryPendingSearch>(_retryPendingSearch);
-    on<HomeDownloadGemmaModel>(_downloadGemmaModels);
-    on<HomeCancelGemmaDownload>(_cancelGemmaDownload);
+    on<HomeWebSearchResultsReceived>(_handleWebSearchResults);
+  }
+
+  Completer<List<ExtractedResultInfo>>? _webSearchCompleter;
+
+  void _handleWebSearchResults(
+    HomeWebSearchResultsReceived event,
+    Emitter<HomeState> emit,
+  ) {
+    if (_webSearchCompleter != null && !_webSearchCompleter!.isCompleted) {
+      _webSearchCompleter!.complete(event.results);
+    }
+    emit(state.copyWith(webSearchQuery: null));
   }
 
   HomeCheckLocationAndAnswer? _pendingCheckLocationEvent;
@@ -841,7 +846,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       //Extracted Url
       else if (initialresultData.extractedUrlData?.link != "" &&
           initialresultData.extractedUrlData?.link != null) {
-        answer = await vercelNewGenerateReply(
+        answer = await chowmeinGenerateReply(
           initialresultData.userQuery,
           [],
           event.streamedText,
@@ -856,7 +861,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
           userData.country,
         );
       } else {
-        answer = await vercelNewGenerateReply(
+        answer = await chowmeinGenerateReply(
             initialresultData.userQuery,
             formattedResults,
             event.streamedText,
@@ -1313,34 +1318,6 @@ Rules:
     // If none of the above patterns match, it's likely just random words
     // or a very short phrase that doesn't constitute a proper sentence
     return false;
-  }
-
-  // Helper to get or initialize the Gemma model instance
-  Future<InferenceModel> _getGemmaModel() async {
-    if (_activeGemmaModel != null) return _activeGemmaModel!;
-
-    print("DEBUG: Initializing new Gemma model instance");
-    final bool isEmulator = await _isEmulator();
-
-    _activeGemmaModel = await FlutterGemma.getActiveModel(
-      maxTokens: 512,
-      preferredBackend:
-          isEmulator ? PreferredBackend.cpu : PreferredBackend.gpu,
-    );
-    return _activeGemmaModel!;
-  }
-
-  // Helper to check if the app is running on an emulator
-  Future<bool> _isEmulator() async {
-    final DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
-    if (Platform.isAndroid) {
-      final AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
-      return !androidInfo.isPhysicalDevice;
-    } else if (Platform.isIOS) {
-      final IosDeviceInfo iosInfo = await deviceInfo.iosInfo;
-      return !iosInfo.isPhysicalDevice;
-    }
-    return false; // Default to false for other platforms
   }
 
   Future<String> _nsfwUnderstandQuery(List<ThreadResultData> previousResults,
@@ -2483,140 +2460,173 @@ Rules:
       }
 
       try {
-        // Unified search API call
-
-        final drisseaApiHost = dotenv.get('API_HOST');
-        final apiSecret = dotenv.get('API_SECRET');
-        final unifiedSearchUrl =
-            Uri.parse("https://$drisseaApiHost/api/search");
-
+        // --- Web search via Google WebView ---
         final searchStartTime = DateTime.now();
-        final searchResponse = await http.post(
-          unifiedSearchUrl,
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer $apiSecret',
-          },
-          body: jsonEncode({
-            'query': searchQuery,
-            'country': countryCode.toLowerCase(),
-          }),
-        );
-        final searchEndTime = DateTime.now();
-        final searchDuration = searchEndTime.difference(searchStartTime);
 
+        if (state.generalStatus == HomeGeneralStatus.enabled) {
+          _webSearchCompleter = Completer<List<ExtractedResultInfo>>();
+          emit(state.copyWith(webSearchQuery: searchQuery));
+
+          // Wait for the UI to open WebView and return results
+          final webResults = await _webSearchCompleter!.future;
+          _webSearchCompleter = null;
+
+          int totalChars = 0;
+          const int charLimit = 120000;
+          for (final result in webResults) {
+            final int resultChars = result.url.length +
+                result.title.length +
+                result.excerpts.length;
+            if (totalChars + resultChars > charLimit) break;
+            extractedResults.add(result);
+            totalChars += resultChars;
+          }
+          print(
+              "Web results found (Google WebView): ${extractedResults.length}");
+
+          // // Enrich snippets via batch extract API
+          // if (extractedResults.isNotEmpty) {
+          //   try {
+          //     final batchItems = extractedResults
+          //         .map((r) => {
+          //               'url': r.url,
+          //               'excerpt': r.excerpts,
+          //             })
+          //         .toList();
+
+          //     final batchResponse = await http.post(
+          //       Uri.parse('https://browser-api.drissea.com/extract-batch'),
+          //       headers: {
+          //         'Content-Type': 'application/json',
+          //         "Authorization": "Bearer ${dotenv.get('API_SECRET')}"
+          //       },
+          //       body: jsonEncode({'items': batchItems}),
+          //     );
+
+          //     if (batchResponse.statusCode == 200) {
+          //       final batchJson = jsonDecode(batchResponse.body);
+          //       final List<dynamic> batchResults = batchJson['results'] ?? [];
+
+          //       // Build a map of url -> extractedText for quick lookup
+          //       final Map<String, String> enrichedSnippets = {};
+          //       for (final item in batchResults) {
+          //         if (item['found'] == true && item['url'] != null) {
+          //           final text =
+          //               (item['extractedText'] ?? '').toString().trim();
+          //           if (text.isNotEmpty) {
+          //             enrichedSnippets[item['url']] = text;
+          //           }
+          //         }
+          //       }
+
+          //       // Replace excerpts with enriched text where available
+          //       extractedResults = extractedResults.map((r) {
+          //         final enriched = enrichedSnippets[r.url];
+          //         if (enriched != null && enriched.isNotEmpty) {
+          //           return ExtractedResultInfo(
+          //             url: r.url,
+          //             title: r.title,
+          //             excerpts: enriched,
+          //             thumbnailUrl: r.thumbnailUrl,
+          //           );
+          //         }
+          //         return r;
+          //       }).toList();
+
+          //       print(
+          //           "Enriched ${enrichedSnippets.length}/${extractedResults.length} results via batch extract API");
+          //     } else {
+          //       print("Batch extract API failed: ${batchResponse.statusCode}");
+          //     }
+          //   } catch (e) {
+          //     print("Error calling batch extract API: $e");
+          //   }
+          // }
+        }
+
+        final searchDuration = DateTime.now().difference(searchStartTime);
         print("");
         print("Search duration: ${searchDuration.inMilliseconds} ms");
         print("");
 
-        if (searchResponse.statusCode == 200) {
-          final Map<String, dynamic> respJson = jsonDecode(searchResponse.body);
-          if (respJson["success"] == true) {
-            // Parse web results -> ExtractedResultInfo
-            if (state.generalStatus == HomeGeneralStatus.enabled) {
-              final webResults = respJson['web'] is List
-                  ? List<dynamic>.from(respJson['web'])
-                  : [];
-              
-              // Limit extractedResults to 10k characters total
-              int totalChars = 0;
-              const int charLimit = 120000;
-              for (final e in webResults) {
-                final String url = (e['url'] ?? '').toString();
-                final String title = (e['title'] ?? '').toString();
-                final String excerpts = (e['excerpts'] ?? '').toString();
-                final int resultChars =
-                    url.length + title.length + excerpts.length;
-
-                if (totalChars + resultChars > charLimit) break;
-
-                extractedResults.add(ExtractedResultInfo(
-                  url: url,
-                  title: title,
-                  excerpts: excerpts,
-                  thumbnailUrl: '',
-                ));
-                totalChars += resultChars;
-              }
-              print("Web results found: ${webResults.length}");
-            }
-
-            // Parse YouTube results -> YoutubeVideoData
-            if (state.youtubeStatus == HomeYoutubeStatus.enabled) {
-              final youtubeResults = respJson['youtube'] is List
-                  ? List<dynamic>.from(respJson['youtube'])
-                  : [];
-              youtubeVideos = youtubeResults
-                  .map((e) =>
-                      YoutubeVideoData.fromJson(e as Map<String, dynamic>))
-                  .toList();
-              print("YouTube results found: ${youtubeResults.length}");
-            }
-
-            // Parse map results -> LocalResultData
-            if (state.mapStatus == HomeMapStatus.enabled) {
-              final mapResultsJson = respJson['map'] is List
-                  ? List<dynamic>.from(respJson['map'])
-                  : [];
-              mapResults = mapResultsJson
-                  .map((e) =>
-                      LocalResultData.fromJson(e as Map<String, dynamic>))
-                  .toList();
-              print("Map results found: ${mapResults.length}");
-            }
-
-            // Parse Instagram results -> ExtractedResultInfo and ShortVideoResultData
-            if (state.instagramStatus == HomeInstagramStatus.enabled) {
-              final instagramResults = respJson['instagram'] is List
-                  ? List<dynamic>.from(respJson['instagram'])
-                  : [];
-
-              // Deduplicate Instagram results by permalink
-              final seenUrls = <String>{};
-              final uniqueInstagramResults = instagramResults.where((e) {
-                final url = e['permalink'] ?? '';
-                if (url.isEmpty || seenUrls.contains(url)) {
-                  return false;
-                }
-                seenUrls.add(url);
-                return true;
-              }).toList();
-
-              extractedResults.addAll(
-                uniqueInstagramResults.map(
-                  (e) => ExtractedResultInfo(
-                    url: e['permalink'] ?? '',
-                    title: 'Instagram Reel',
-                    // Combine transcription and caption for richer context
-                    excerpts:
-                        '${e['transcription'] ?? ''} ${e['caption'] ?? ''}'
-                            .trim(),
-                    thumbnailUrl: e['thumbnail_url'] ?? '',
-                  ),
-                ),
-              );
-              // Also add to shortVideos for display
-              instagramShortVideos = uniqueInstagramResults
-                  .map(
-                    (e) => ShortVideoResultData(
-                      title: (e['caption'] ?? 'Instagram Reel').toString(),
-                      link: e['permalink'] ?? '',
-                      thumbnail: e['thumbnail_url'] ?? '',
-                      clip: '',
-                      source: 'Instagram',
-                      sourceIcon: 'https://www.instagram.com/favicon.ico',
-                      channel: '',
-                      duration: '',
-                    ),
-                  )
-                  .toList();
-              print(
-                  "Instagram results found: ${uniqueInstagramResults.length} (deduplicated from ${instagramResults.length})");
-            }
-          }
-        } else {
-          print("⚠️ Unified search API failed: ${searchResponse.statusCode}");
-        }
+        // COMMENTED OUT: Drissea API call
+        // final drisseaApiHost = dotenv.get('API_HOST');
+        // final apiSecret = dotenv.get('API_SECRET');
+        // final unifiedSearchUrl =
+        //     Uri.parse("https://$drisseaApiHost/api/search");
+        //
+        // final searchResponse = await http.post(
+        //   unifiedSearchUrl,
+        //   headers: {
+        //     'Content-Type': 'application/json',
+        //     'Authorization': 'Bearer $apiSecret',
+        //   },
+        //   body: jsonEncode({
+        //     'query': searchQuery,
+        //     'country': countryCode.toLowerCase(),
+        //   }),
+        // );
+        //
+        // if (searchResponse.statusCode == 200) {
+        //   final Map<String, dynamic> respJson = jsonDecode(searchResponse.body);
+        //   if (respJson["success"] == true) {
+        //     if (state.generalStatus == HomeGeneralStatus.enabled) {
+        //       final webResults = respJson['web'] is List
+        //           ? List<dynamic>.from(respJson['web'])
+        //           : [];
+        //       int totalChars = 0;
+        //       const int charLimit = 120000;
+        //       for (final e in webResults) {
+        //         final String url = (e['url'] ?? '').toString();
+        //         final String title = (e['title'] ?? '').toString();
+        //         final String excerpts = (e['excerpts'] ?? '').toString();
+        //         final int resultChars = url.length + title.length + excerpts.length;
+        //         if (totalChars + resultChars > charLimit) break;
+        //         extractedResults.add(ExtractedResultInfo(
+        //           url: url, title: title, excerpts: excerpts, thumbnailUrl: '',
+        //         ));
+        //         totalChars += resultChars;
+        //       }
+        //     }
+        //     if (state.youtubeStatus == HomeYoutubeStatus.enabled) {
+        //       final youtubeResults = respJson['youtube'] is List
+        //           ? List<dynamic>.from(respJson['youtube']) : [];
+        //       youtubeVideos = youtubeResults
+        //           .map((e) => YoutubeVideoData.fromJson(e as Map<String, dynamic>))
+        //           .toList();
+        //     }
+        //     if (state.mapStatus == HomeMapStatus.enabled) {
+        //       final mapResultsJson = respJson['map'] is List
+        //           ? List<dynamic>.from(respJson['map']) : [];
+        //       mapResults = mapResultsJson
+        //           .map((e) => LocalResultData.fromJson(e as Map<String, dynamic>))
+        //           .toList();
+        //     }
+        //     if (state.instagramStatus == HomeInstagramStatus.enabled) {
+        //       final instagramResults = respJson['instagram'] is List
+        //           ? List<dynamic>.from(respJson['instagram']) : [];
+        //       final seenUrls = <String>{};
+        //       final uniqueInstagramResults = instagramResults.where((e) {
+        //         final url = e['permalink'] ?? '';
+        //         if (url.isEmpty || seenUrls.contains(url)) return false;
+        //         seenUrls.add(url);
+        //         return true;
+        //       }).toList();
+        //       extractedResults.addAll(uniqueInstagramResults.map((e) => ExtractedResultInfo(
+        //         url: e['permalink'] ?? '', title: 'Instagram Reel',
+        //         excerpts: '${e['transcription'] ?? ''} ${e['caption'] ?? ''}'.trim(),
+        //         thumbnailUrl: e['thumbnail_url'] ?? '',
+        //       )));
+        //       instagramShortVideos = uniqueInstagramResults.map((e) => ShortVideoResultData(
+        //         title: (e['caption'] ?? 'Instagram Reel').toString(),
+        //         link: e['permalink'] ?? '', thumbnail: e['thumbnail_url'] ?? '',
+        //         clip: '', source: 'Instagram',
+        //         sourceIcon: 'https://www.instagram.com/favicon.ico',
+        //         channel: '', duration: '',
+        //       )).toList();
+        //     }
+        //   }
+        // }
 
         print(
             "Finsihed processing: ${DateTime.now().difference(searchStartTime).inMilliseconds} ms");
@@ -5441,87 +5451,6 @@ $formattedUserContext
   }
 
   //Sign in
-
-  // Gemma Model Download Handlers
-  Future<void> _downloadGemmaModels(
-    HomeDownloadGemmaModel event,
-    Emitter<HomeState> emit,
-  ) async {
-    print("DEBUG: _downloadGemmaModels handler called");
-    // Create a new cancel token for this download session
-    _gemmaCancelToken = CancelToken();
-
-    final hfToken = dotenv.env['HUGGINGFACE_TOKEN'];
-
-    try {
-      // ========== Download EmbeddingGemma-300M Embedding Model (~183 MB) ==========
-      print("DEBUG: Starting EmbeddingGemma-300M embedding model download");
-      emit(state.copyWith(
-        gemmaDownloadStatus: GemmaDownloadStatus.loading,
-        gemmaDownloadProgress: 0.0,
-        gemmaDownloadMessage: "Downloading memory model...",
-        currentDownloadingModel: LocalMemoryModelType.embedding,
-      ));
-
-      // Download EmbeddingGemma-300M model (.tflite) and tokenizer
-      // Using seq1024 variant for good balance of context length and performance
-      await FlutterGemma.installEmbedder()
-          .modelFromNetwork(
-            'https://huggingface.co/litert-community/embeddinggemma-300m/resolve/main/embeddinggemma-300M_seq1024_mixed-precision.tflite',
-            token: hfToken,
-          )
-          .tokenizerFromNetwork(
-            // Using Gecko's sentencepiece tokenizer which is compatible
-            'https://huggingface.co/litert-community/Gecko-110m-en/resolve/main/sentencepiece.model',
-          )
-          .withModelProgress((progress) {
-        emit(state.copyWith(
-          gemmaDownloadProgress: progress / 100,
-          gemmaDownloadMessage:
-              "Downloading memory model: ${progress.toStringAsFixed(1)}%",
-        ));
-      }).install();
-
-      print("DEBUG: EmbeddingGemma-300M model downloaded successfully");
-
-      // ========== Download Complete ==========
-      emit(state.copyWith(
-        gemmaDownloadStatus: GemmaDownloadStatus.success,
-        gemmaDownloadProgress: 1.0,
-        gemmaDownloadMessage: "Download complete!",
-        currentDownloadingModel: null,
-      ));
-    } catch (e) {
-      if (CancelToken.isCancel(e)) {
-        emit(state.copyWith(
-          gemmaDownloadStatus: GemmaDownloadStatus.cancelled,
-          gemmaDownloadProgress: 0.0,
-          gemmaDownloadMessage: "",
-          currentDownloadingModel: null,
-        ));
-      } else {
-        print("DEBUG: Model download error: $e");
-        emit(state.copyWith(
-          gemmaDownloadStatus: GemmaDownloadStatus.failure,
-          gemmaDownloadProgress: 0.0,
-          gemmaDownloadMessage: "Download failed: ${e.toString()}",
-          currentDownloadingModel: null,
-        ));
-      }
-    }
-  }
-
-  Future<void> _cancelGemmaDownload(
-    HomeCancelGemmaDownload event,
-    Emitter<HomeState> emit,
-  ) async {
-    _gemmaCancelToken?.cancel('User cancelled download');
-    emit(state.copyWith(
-      gemmaDownloadStatus: GemmaDownloadStatus.cancelled,
-      gemmaDownloadProgress: 0.0,
-      gemmaDownloadMessage: "",
-    ));
-  }
 
   // ============================================
   // ANSWER MEMORY HELPERS (Isolated, fire-and-forget)

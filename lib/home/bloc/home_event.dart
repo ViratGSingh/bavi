@@ -104,6 +104,12 @@ final class HomeGenScreenshot extends HomeEvent {
   HomeGenScreenshot(this.globalKey);
 }
 
+// Web search results received from GoogleSearchWebView
+final class HomeWebSearchResultsReceived extends HomeEvent {
+  final List<ExtractedResultInfo> results;
+  HomeWebSearchResultsReceived(this.results);
+}
+
 //Watch Google Search
 final class HomeGetAnswer extends HomeEvent {
   final String query;
@@ -317,10 +323,6 @@ final class HomeCancelOCRExtraction extends HomeEvent {
   final ValueNotifier<String> imageDescription;
   HomeCancelOCRExtraction(this.imageDescription);
 }
-
-final class HomeDownloadGemmaModel extends HomeEvent {}
-
-final class HomeCancelGemmaDownload extends HomeEvent {}
 
 final class HomeCheckLocationPermission extends HomeEvent {}
 

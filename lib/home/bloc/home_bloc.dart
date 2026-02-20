@@ -26,6 +26,7 @@ import 'package:drift/drift.dart' as drift;
 import 'package:bavi/app_database.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:bavi/services/answer_memory_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 part 'home_event.dart';
 part 'home_state.dart';
 
@@ -5243,32 +5244,64 @@ $formattedUserContext
       initMixpanel();
     }
 
-    //Get Local History Data from Drift
+    // 1. Load local data first for instant display
     try {
-      await AppDatabase().getAllThreads().then((threads) {
-        final userSessionData = threads.map((thread) {
-          return ThreadSessionData.fromJson(jsonDecode(thread.sessionData));
-        }).toList();
+      final threads = await AppDatabase().getAllThreads();
+      final localSessionData = threads.map((thread) {
+        return ThreadSessionData.fromJson(jsonDecode(thread.sessionData));
+      }).toList();
 
-        emit(state.copyWith(
-            threadHistory: userSessionData,
-            historyStatus: HomeHistoryStatus.idle));
-      });
+      emit(state.copyWith(
+          threadHistory: localSessionData,
+          historyStatus: HomeHistoryStatus.idle));
     } catch (e) {
       print("❌ Error fetching local sessions: $e");
-      emit(state
-          .copyWith(threadHistory: [], historyStatus: HomeHistoryStatus.idle));
+      emit(state.copyWith(
+          threadHistory: [], historyStatus: HomeHistoryStatus.idle));
     }
 
-    // Get user location silently
-    await _getUserLocation().then((userLocation) {
-      emit(state.copyWith(
-        userCity: userLocation.city,
-        userRegion: userLocation.region,
-        userCountry: userLocation.country,
-        userCountryCode: userLocation.countryCode,
-      ));
-    });
+    // 2. Then sync from Firestore in background if logged in
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+      final email = prefs.getString('email') ?? '';
+
+      if (isLoggedIn && email.isNotEmpty) {
+        final db = FirebaseFirestore.instance;
+        final userQuery = await db
+            .collection('users')
+            .where('email', isEqualTo: email)
+            .limit(1)
+            .get();
+
+        if (userQuery.docs.isNotEmpty) {
+          final userDocId = userQuery.docs.first.id;
+          final threadQuery = await db
+              .collection('threads')
+              .where('userId', isEqualTo: userDocId)
+              .orderBy('updatedAt', descending: true)
+              .get();
+
+          final firestoreSessionData = threadQuery.docs.map((doc) {
+            return ThreadSessionData.fromJson(doc.data());
+          }).toList();
+
+          emit(state.copyWith(threadHistory: firestoreSessionData));
+        }
+      }
+    } catch (e) {
+      print("❌ Error fetching Firestore threads: $e");
+    }
+
+    // // Get user location silently
+    // await _getUserLocation().then((userLocation) {
+    //   emit(state.copyWith(
+    //     userCity: userLocation.city,
+    //     userRegion: userLocation.region,
+    //     userCountry: userLocation.country,
+    //     userCountryCode: userLocation.countryCode,
+    //   ));
+    // });
   }
 
   Future<String?> createSession(ThreadSessionData sessionData, String sessionId,
@@ -5300,14 +5333,23 @@ $formattedUserContext
         return data;
       }).toList();
 
+      // Tag thread with userId if logged in
+      final prefs = await SharedPreferences.getInstance();
+      final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+      final email = prefs.getString('email') ?? '';
+      if (isLoggedIn && email.isNotEmpty) {
+        final userQuery = await firestore
+            .collection('users')
+            .where('email', isEqualTo: email)
+            .limit(1)
+            .get();
+        if (userQuery.docs.isNotEmpty) {
+          firestoreData['userId'] = userQuery.docs.first.id;
+        }
+      }
+
       await firestore.collection("threads").doc(sessionId).set(firestoreData);
       print("✅ Session created/updated in Firestore with ID: $sessionId");
-
-      // Process and cache answers for memory system (fire-and-forget, isolated)
-      // Skip if chat mode is active
-      // if (!skipMemoryProcessing) {
-      //   _processAnswersForMemory(sessionData.results);
-      // }
 
       return sessionId;
     } catch (e) {
@@ -5427,6 +5469,21 @@ $formattedUserContext
         data['updatedAt'] = e.updatedAt;
         return data;
       }).toList();
+
+      // Tag thread with userId if logged in
+      final prefs = await SharedPreferences.getInstance();
+      final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+      final email = prefs.getString('email') ?? '';
+      if (isLoggedIn && email.isNotEmpty) {
+        final userQuery = await firestore
+            .collection('users')
+            .where('email', isEqualTo: email)
+            .limit(1)
+            .get();
+        if (userQuery.docs.isNotEmpty) {
+          firestoreData['userId'] = userQuery.docs.first.id;
+        }
+      }
 
       if (docSnapshot.exists) {
         await docRef.update(firestoreData);

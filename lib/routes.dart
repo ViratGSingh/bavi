@@ -1,31 +1,18 @@
-import 'package:bavi/answer/view/answer_page.dart';
 import 'package:bavi/home/view/home_page.dart';
-import 'package:bavi/memory/bloc/memory_bloc.dart';
-import 'package:bavi/memory/view/memory_page.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:bavi/home/widgets/answers_view.dart';
-import 'package:bavi/home/widgets/video_grid.dart';
 import 'package:bavi/home/widgets/video_scroll.dart';
 import 'package:bavi/home/widgets/web_view.dart';
 import 'package:bavi/login/view/login_page.dart';
 import 'package:bavi/login/widgets/onboarding.dart';
-import 'package:bavi/models/question_answer.dart';
 import 'package:bavi/models/short_video.dart';
-import 'package:bavi/models/user.dart';
 import 'package:bavi/navigation_service.dart';
-import 'package:bavi/profile/view/profile_page.dart';
-import 'package:bavi/reply/view/reply_page.dart';
-import 'package:bavi/settings/view/settings_page.dart';
 import 'package:bavi/widgets/loading.screen.dart';
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class AppRouter {
   final bool isLoggedIn;
   AppRouter(this.isLoggedIn);
   late final GoRouter router = GoRouter(
-    initialLocation: isLoggedIn == true ? '/home' : '/login',
+    initialLocation: '/home',
     redirect: (context, state) {
       final uriString = state.uri.toString();
       if (uriString.startsWith('http') || uriString.startsWith('https')) {
@@ -64,74 +51,6 @@ class AppRouter {
           } else {
             return HomePage();
           }
-        },
-      ),
-      GoRoute(
-        path: '/profile',
-        builder: (context, state) => const ProfilePage(),
-      ),
-      GoRoute(
-        path: '/reply',
-        builder: (context, state) {
-          final extra = state.extra as Map<String, dynamic>;
-          final query = extra['query'] as String;
-          final searchTime = extra['searchTime'] as int;
-          final isGlanceMode = extra['isGlanceMode'] as bool;
-          String? searchId;
-          if (extra.containsKey("searchId") == true) {
-            searchId = extra['searchId'] as String;
-          }
-          final videos = extra["videos"] as List<ExtractedVideoInfo>;
-
-          return WillPopScope(
-            onWillPop: () async {
-              Navigator.push(
-                context,
-                MaterialPageRoute<void>(
-                  builder: (BuildContext context) => const HomePage(),
-                ),
-              );
-              return false;
-            },
-            child: ReplyView(
-              isGlanceMode: isGlanceMode,
-              similarVideos: videos,
-              query: query,
-              searchId: searchId,
-              searchTime: searchTime,
-            ),
-          );
-        },
-      ),
-      GoRoute(
-        path: '/answer',
-        builder: (context, state) {
-          final extra = state.extra as Map<String, dynamic>;
-          final query = extra['query'] as String;
-          final process = extra['process'] as String;
-          final answer = extra['answer'] as String;
-          final videos = extra["videos"] as List<String>;
-          final searchTime = extra['searchTime'] as int;
-          final searchId = extra['searchId'] as String;
-
-          return WillPopScope(
-            onWillPop: () async {
-              Navigator.push(
-                context,
-                MaterialPageRoute<void>(
-                  builder: (BuildContext context) => const HomePage(),
-                ),
-              );
-              return false;
-            },
-            child: AnswerView(
-                sourceUrls: videos,
-                query: query,
-                process: process,
-                answer: answer,
-                searchTime: searchTime,
-                searchId: searchId),
-          );
         },
       ),
       // GoRoute(
@@ -182,17 +101,7 @@ class AppRouter {
       //     // );
       //   },
       // ),
-      GoRoute(
-        path: '/settings',
-        builder: (context, state) => const SettingsPage(),
-      ),
-      GoRoute(
-        path: '/memory',
-        builder: (context, state) => BlocProvider(
-          create: (context) => MemoryBloc(),
-          child: const MemoryPage(),
-        ),
-      ),
+      
       GoRoute(
         path: '/onboarding',
         builder: (context, state) {

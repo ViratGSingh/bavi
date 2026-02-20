@@ -20,3 +20,6 @@ final class LoginInitialize extends LoginEvent {
 final class LoginInitiateMixpanel extends LoginEvent {
 }
 
+final class LoginSignOut extends LoginEvent {
+}
+

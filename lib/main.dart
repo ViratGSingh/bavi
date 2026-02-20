@@ -11,7 +11,6 @@ import 'package:bavi/app.dart';
 import 'package:bavi/bavi_bloc_observer.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:app_links/app_links.dart';
 
@@ -21,16 +20,13 @@ void main() async {
   //FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
   Bloc.observer = BaviBlocObserver();
-  await Future.wait([
-    dotenv.load(fileName: ".env"),
-    Firebase.initializeApp(),
-  ]);
+  await dotenv.load(fileName: ".env");
+  await Firebase.initializeApp();
 
   FirebaseFirestore.instance.settings = const Settings(
     persistenceEnabled: true,
   );
-  final bool isLoggedIn = true; //await _checkUserLogin();
-  final router = AppRouter(isLoggedIn).router;
+  final router = AppRouter(true).router;
   navService.setRouter(router);
 
   // Remove splash screen right before running the app
@@ -42,11 +38,6 @@ void main() async {
   //_initAppLinks();
 }
 
-// Load user data from SharedPreferences
-Future<bool> _checkUserLogin() async {
-  final prefs = await SharedPreferences.getInstance();
-  return prefs.getBool('isLoggedIn') ?? false;
-}
 
 // Future<bool> _checkUserOnboard() async {
 //   final prefs = await SharedPreferences.getInstance();

@@ -119,6 +119,9 @@ dependencies:
 
   groq_sdk: ^1.0.2
   flutter_inappwebview: ^6.1.5
+  #charts
+  fl_chart: ^0.70.2
+
   drift: ^2.29.0
   drift_flutter: ^0.2.7
   app_links: ^6.4.1

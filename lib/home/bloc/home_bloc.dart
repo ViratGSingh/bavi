@@ -26,6 +26,7 @@ import 'package:drift/drift.dart' as drift;
 import 'package:bavi/app_database.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:bavi/services/answer_memory_service.dart';
+import 'package:bavi/services/profile_stats_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 part 'home_event.dart';
 part 'home_state.dart';
@@ -5351,6 +5352,9 @@ $formattedUserContext
       await firestore.collection("threads").doc(sessionId).set(firestoreData);
       print("✅ Session created/updated in Firestore with ID: $sessionId");
 
+      // Fire-and-forget: update profile stats in background
+      ProfileStatsService.updateStatsInBackground();
+
       return sessionId;
     } catch (e) {
       print("Error creating session: $e");
@@ -5492,6 +5496,9 @@ $formattedUserContext
         await docRef.set(firestoreData);
         print("🆕 Session created with ID: $sessionId");
       }
+
+      // Fire-and-forget: update profile stats in background
+      ProfileStatsService.updateStatsInBackground();
 
       // Process and cache the latest answer for memory system (fire-and-forget, isolated)
       // Skip if chat mode is active

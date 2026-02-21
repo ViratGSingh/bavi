@@ -97,64 +97,66 @@ class _HistoryPageState extends State<HistoryPage>
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: AnimatedBuilder(
-        animation: _widthAnimation,
-        builder: (context, child) {
-          // Animate from 85% to 100% width
-          final panelWidth =
-              screenWidth * (0.85 + (0.15 * _widthAnimation.value));
-          // Animate border radius from 16 to 0
-          final borderRadius = 16.0 * (1 - _widthAnimation.value);
-
-          return Row(
-            children: [
-              // History panel - animates from 85% to full width
-              Container(
-                width: panelWidth,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.only(
-                    topRight: Radius.circular(borderRadius),
-                  ),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Colors.black12,
-                      blurRadius: 10,
-                      offset: Offset(2, 0),
+    return SafeArea(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: AnimatedBuilder(
+          animation: _widthAnimation,
+          builder: (context, child) {
+            // Animate from 85% to 100% width
+            final panelWidth =
+                screenWidth * (0.85 + (0.15 * _widthAnimation.value));
+            // Animate border radius from 16 to 0
+            final borderRadius = 16.0 * (1 - _widthAnimation.value);
+      
+            return Row(
+              children: [
+                // History panel - animates from 85% to full width
+                Container(
+                  width: panelWidth,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.only(
+                      topRight: Radius.circular(borderRadius),
                     ),
-                  ],
-                ),
-                child: SafeArea(
-                  child: Column(
-                    children: [
-                      // // App Bar
-                      // _buildAppBar(),
-                      // Search Bar
-                      _buildSearchBar(),
-                      // Content
-                      Expanded(
-                        child: _buildContent(),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Colors.black12,
+                        blurRadius: 10,
+                        offset: Offset(2, 0),
                       ),
                     ],
                   ),
-                ),
-              ),
-              // Tap to close area - shrinks as panel expands
-              if (_widthAnimation.value < 1.0)
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: Container(
-                      color: Colors.black
-                          .withOpacity(0.3 * (1 - _widthAnimation.value)),
+                  child: SafeArea(
+                    child: Column(
+                      children: [
+                        // // App Bar
+                        // _buildAppBar(),
+                        // Search Bar
+                        _buildSearchBar(),
+                        // Content
+                        Expanded(
+                          child: _buildContent(),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-            ],
-          );
-        },
+                // Tap to close area - shrinks as panel expands
+                if (_widthAnimation.value < 1.0)
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        color: Colors.black
+                            .withOpacity(0.3 * (1 - _widthAnimation.value)),
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }

@@ -1564,80 +1564,80 @@ class _HomePageState extends State<HomePage>
                                     children: [
                                       Row(
                                         children: [
-                                          GestureDetector(
-                                            onTap: () {
-                                              final homeBloc =
-                                                  context.read<HomeBloc>();
-                                              showModalBottomSheet(
-                                                context: context,
-                                                backgroundColor:
-                                                    Colors.transparent,
-                                                isScrollControlled: true,
-                                                builder: (_) =>
-                                                    BlocProvider.value(
-                                                  value: homeBloc,
-                                                  child: BlocBuilder<HomeBloc,
-                                                      HomeState>(
-                                                    builder: (context, state) {
-                                                      return SourcesBottomSheet(
-                                                        onImageSelected:
-                                                            (image) {
-                                                          print(
-                                                              "DEBUG: Callback received image (bottom): ${image.path}");
-                                                          homeBloc.add(
-                                                              HomeImageSelected(
-                                                                  image,
-                                                                  imageDescriptionNotifier));
-                                                        },
-                                                        onToggleMap: () {
-                                                          homeBloc.add(
-                                                              HomeToggleMapStatus());
-                                                        },
-                                                        onToggleYoutube: () {
-                                                          homeBloc.add(
-                                                              HomeToggleYoutubeStatus());
-                                                        },
-                                                        onToggleInstagram: () {
-                                                          homeBloc.add(
-                                                              HomeToggleInstagramStatus());
-                                                        },
-                                                        isInstagramEnabled: state
-                                                                .instagramStatus ==
-                                                            HomeInstagramStatus
-                                                                .enabled,
-                                                        isYoutubeEnabled: state
-                                                                .youtubeStatus ==
-                                                            HomeYoutubeStatus
-                                                                .enabled,
-                                                        isMapEnabled:
-                                                            state.mapStatus ==
-                                                                HomeMapStatus
-                                                                    .enabled,
-                                                      );
-                                                    },
-                                                  ),
-                                                ),
-                                              );
-                                            },
-                                            child: Container(
-                                              width: 32,
-                                              height: 32,
-                                              decoration: BoxDecoration(
-                                                color: Colors.grey
-                                                    .withOpacity(0.1),
-                                                borderRadius:
-                                                    BorderRadius.circular(
-                                                  26,
-                                                ),
-                                                //border: Border.all(color: Color(0xFFB3B4B9)),
-                                              ),
-                                              child: Icon(
-                                                Icons.add,
-                                                color: Colors.black,
-                                                size: 16,
-                                              ),
-                                            ),
-                                          ),
+                                          // GestureDetector(
+                                          //   onTap: () {
+                                          //     final homeBloc =
+                                          //         context.read<HomeBloc>();
+                                          //     showModalBottomSheet(
+                                          //       context: context,
+                                          //       backgroundColor:
+                                          //           Colors.transparent,
+                                          //       isScrollControlled: true,
+                                          //       builder: (_) =>
+                                          //           BlocProvider.value(
+                                          //         value: homeBloc,
+                                          //         child: BlocBuilder<HomeBloc,
+                                          //             HomeState>(
+                                          //           builder: (context, state) {
+                                          //             return SourcesBottomSheet(
+                                          //               onImageSelected:
+                                          //                   (image) {
+                                          //                 print(
+                                          //                     "DEBUG: Callback received image (bottom): ${image.path}");
+                                          //                 homeBloc.add(
+                                          //                     HomeImageSelected(
+                                          //                         image,
+                                          //                         imageDescriptionNotifier));
+                                          //               },
+                                          //               onToggleMap: () {
+                                          //                 homeBloc.add(
+                                          //                     HomeToggleMapStatus());
+                                          //               },
+                                          //               onToggleYoutube: () {
+                                          //                 homeBloc.add(
+                                          //                     HomeToggleYoutubeStatus());
+                                          //               },
+                                          //               onToggleInstagram: () {
+                                          //                 homeBloc.add(
+                                          //                     HomeToggleInstagramStatus());
+                                          //               },
+                                          //               isInstagramEnabled: state
+                                          //                       .instagramStatus ==
+                                          //                   HomeInstagramStatus
+                                          //                       .enabled,
+                                          //               isYoutubeEnabled: state
+                                          //                       .youtubeStatus ==
+                                          //                   HomeYoutubeStatus
+                                          //                       .enabled,
+                                          //               isMapEnabled:
+                                          //                   state.mapStatus ==
+                                          //                       HomeMapStatus
+                                          //                           .enabled,
+                                          //             );
+                                          //           },
+                                          //         ),
+                                          //       ),
+                                          //     );
+                                          //   },
+                                          //   child: Container(
+                                          //     width: 32,
+                                          //     height: 32,
+                                          //     decoration: BoxDecoration(
+                                          //       color: Colors.grey
+                                          //           .withOpacity(0.1),
+                                          //       borderRadius:
+                                          //           BorderRadius.circular(
+                                          //         26,
+                                          //       ),
+                                          //       //border: Border.all(color: Color(0xFFB3B4B9)),
+                                          //     ),
+                                          //     child: Icon(
+                                          //       Icons.add,
+                                          //       color: Colors.black,
+                                          //       size: 16,
+                                          //     ),
+                                          //   ),
+                                          // ),
                                           // SizedBox(width: 12),
                                           // GestureDetector(
                                           //   onTap: () {

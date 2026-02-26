@@ -25,7 +25,7 @@ enum HomePageStatus {
   newsSearch
 }
 
-enum HomeReplyStatus { loading, success, failure, idle }
+enum HomeReplyStatus { loading, success, failure, idle, warmingUp }
 
 enum HomeSearchType {
   nsfw,

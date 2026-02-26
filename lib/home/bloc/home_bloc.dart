@@ -848,7 +848,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       //Extracted Url
       else if (initialresultData.extractedUrlData?.link != "" &&
           initialresultData.extractedUrlData?.link != null) {
-        answer = await chowmeinGenerateReply(
+        answer = await vercelNewGenerateReply(
           initialresultData.userQuery,
           [],
           event.streamedText,
@@ -863,7 +863,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
           userData.country,
         );
       } else {
-        answer = await chowmeinGenerateReply(
+        answer = await vercelNewGenerateReply(
             initialresultData.userQuery,
             formattedResults,
             event.streamedText,
@@ -2059,7 +2059,8 @@ Rules:
             url: searchResult.url,
             snippet: searchResult.excerpts,
             title: searchResult.title,
-            similarity: 0);
+            similarity: 0,
+            isVerified: searchResult.isVerified);
       }).toList()
         ..addAll(mapResults.map((searchResult) {
           final locationQuery = Uri.encodeComponent(
@@ -2486,64 +2487,74 @@ Rules:
           print(
               "Web results found (Google WebView): ${extractedResults.length}");
 
-          // // Enrich snippets via batch extract API
-          // if (extractedResults.isNotEmpty) {
-          //   try {
-          //     final batchItems = extractedResults
-          //         .map((r) => {
-          //               'url': r.url,
-          //               'excerpt': r.excerpts,
-          //             })
-          //         .toList();
+          // Enrich snippets via batch extract API
+          if (extractedResults.isNotEmpty) {
+            try {
+              final batchItems = extractedResults
+                  .map((r) => {
+                        'url': r.url,
+                        'excerpt': r.excerpts,
+                      })
+                  .toList();
 
-          //     final batchResponse = await http.post(
-          //       Uri.parse('https://browser-api.drissea.com/extract-batch'),
-          //       headers: {
-          //         'Content-Type': 'application/json',
-          //         "Authorization": "Bearer ${dotenv.get('API_SECRET')}"
-          //       },
-          //       body: jsonEncode({'items': batchItems}),
-          //     );
+              final batchResponse = await http.post(
+                Uri.parse('https://browser-api.drissea.com/extract-batch'),
+                headers: {
+                  'Content-Type': 'application/json',
+                  "Authorization": "Bearer ${dotenv.get('API_SECRET')}"
+                },
+                body: jsonEncode({'items': batchItems}),
+              );
 
-          //     if (batchResponse.statusCode == 200) {
-          //       final batchJson = jsonDecode(batchResponse.body);
-          //       final List<dynamic> batchResults = batchJson['results'] ?? [];
+              if (batchResponse.statusCode == 200) {
+                final batchJson = jsonDecode(batchResponse.body);
+                final List<dynamic> batchResults = batchJson['results'] ?? [];
 
-          //       // Build a map of url -> extractedText for quick lookup
-          //       final Map<String, String> enrichedSnippets = {};
-          //       for (final item in batchResults) {
-          //         if (item['found'] == true && item['url'] != null) {
-          //           final text =
-          //               (item['extractedText'] ?? '').toString().trim();
-          //           if (text.isNotEmpty) {
-          //             enrichedSnippets[item['url']] = text;
-          //           }
-          //         }
-          //       }
+                // Build a map of url -> extractedText and set of verified urls
+                final Map<String, String> enrichedSnippets = {};
+                final Set<String> verifiedUrls = {};
+                for (final item in batchResults) {
+                  if (item['found'] == true && item['url'] != null) {
+                    verifiedUrls.add(item['url'] as String);
+                    final text =
+                        (item['extractedText'] ?? '').toString().trim();
+                    if (text.isNotEmpty) {
+                      enrichedSnippets[item['url']] = text;
+                    }
+                  }
+                }
 
-          //       // Replace excerpts with enriched text where available
-          //       extractedResults = extractedResults.map((r) {
-          //         final enriched = enrichedSnippets[r.url];
-          //         if (enriched != null && enriched.isNotEmpty) {
-          //           return ExtractedResultInfo(
-          //             url: r.url,
-          //             title: r.title,
-          //             excerpts: enriched,
-          //             thumbnailUrl: r.thumbnailUrl,
-          //           );
-          //         }
-          //         return r;
-          //       }).toList();
+                // Replace excerpts with enriched text where available
+                extractedResults = extractedResults.map((r) {
+                  final enriched = enrichedSnippets[r.url];
+                  final isVerified = verifiedUrls.contains(r.url);
+                  if (enriched != null && enriched.isNotEmpty) {
+                    return ExtractedResultInfo(
+                      url: r.url,
+                      title: r.title,
+                      excerpts: enriched,
+                      thumbnailUrl: r.thumbnailUrl,
+                      isVerified: true,
+                    );
+                  }
+                  return ExtractedResultInfo(
+                    url: r.url,
+                    title: r.title,
+                    excerpts: r.excerpts,
+                    thumbnailUrl: r.thumbnailUrl,
+                    isVerified: isVerified,
+                  );
+                }).toList();
 
-          //       print(
-          //           "Enriched ${enrichedSnippets.length}/${extractedResults.length} results via batch extract API");
-          //     } else {
-          //       print("Batch extract API failed: ${batchResponse.statusCode}");
-          //     }
-          //   } catch (e) {
-          //     print("Error calling batch extract API: $e");
-          //   }
-          // }
+                print(
+                    "Enriched ${enrichedSnippets.length}/${extractedResults.length} results via batch extract API");
+              } else {
+                print("Batch extract API failed: ${batchResponse.statusCode}");
+              }
+            } catch (e) {
+              print("Error calling batch extract API: $e");
+            }
+          }
         }
 
         final searchDuration = DateTime.now().difference(searchStartTime);
@@ -2742,7 +2753,8 @@ Rules:
             url: searchResult.url,
             snippet: searchResult.excerpts,
             title: searchResult.title,
-            similarity: 0);
+            similarity: 0,
+            isVerified: searchResult.isVerified);
       }).toList()
         ..addAll(mapResults.map((searchResult) {
           final locationQuery = Uri.encodeComponent(
@@ -3200,7 +3212,8 @@ Rules:
           url: searchResult.url,
           snippet: searchResult.excerpts,
           title: searchResult.title,
-          similarity: 0);
+          similarity: 0,
+          isVerified: searchResult.isVerified);
     }).toList();
 
     influenceList.addAll(mapResults.map((searchResult) {

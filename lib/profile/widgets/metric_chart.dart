@@ -309,6 +309,7 @@ class MetricChart extends StatelessWidget {
           spots: spots,
           isCurved: true,
           curveSmoothness: 0.35,
+          preventCurveOverShooting: true,
           color: const Color(0xFF8A2BE2),
           barWidth: 2.5,
           isStrokeCapRound: true,

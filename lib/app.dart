@@ -28,9 +28,10 @@ class _BaviAppState extends State<BaviApp> {
           create: (_) => LoginBloc(httpClient: http.Client()),
         ),
         BlocProvider(
-          create: (_) => HomeBloc(httpClient: http.Client()),
+          create: (_) => HomeBloc(
+            httpClient: http.Client(),
+          ),
         ),
-        
       ],
       child: MaterialApp.router(
         routerConfig: widget.router,

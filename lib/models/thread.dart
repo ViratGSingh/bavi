@@ -598,12 +598,14 @@ class InfluenceData extends Equatable {
   final String snippet;
   final String title;
   final double similarity;
+  final bool isVerified;
 
   const InfluenceData({
     required this.url,
     required this.snippet,
     required this.title,
     required this.similarity,
+    this.isVerified = false,
   });
 
   factory InfluenceData.fromJson(Map<String, dynamic> json) => InfluenceData(
@@ -613,6 +615,7 @@ class InfluenceData extends Equatable {
         similarity: (json['similarity'] is int)
             ? (json['similarity'] as int).toDouble()
             : (json['similarity'] ?? 0.0),
+        isVerified: json['isVerified'] as bool? ?? false,
       );
 
   Map<String, dynamic> toJson() => {
@@ -620,10 +623,11 @@ class InfluenceData extends Equatable {
         'snippet': snippet,
         'title': title,
         'similarity': similarity,
+        'isVerified': isVerified,
       };
 
   @override
-  List<Object> get props => [url, snippet, title, similarity];
+  List<Object> get props => [url, snippet, title, similarity, isVerified];
 }
 
 class ThreadSessionData extends Equatable {
@@ -703,6 +707,39 @@ class ThreadSessionData extends Equatable {
       [id, isIncognito, results, createdAt, updatedAt, title, summary];
 }
 
+class FeaturedReview extends Equatable {
+  final String text;
+  final double rating;
+  final String author;
+  final String date;
+
+  const FeaturedReview({
+    required this.text,
+    required this.rating,
+    required this.author,
+    required this.date,
+  });
+
+  factory FeaturedReview.fromJson(Map<String, dynamic> json) => FeaturedReview(
+        text: json['text'] ?? '',
+        rating: (json['rating'] is int)
+            ? (json['rating'] as int).toDouble()
+            : (json['rating'] ?? 0.0),
+        author: json['author'] ?? '',
+        date: json['date'] ?? '',
+      );
+
+  Map<String, dynamic> toJson() => {
+        'text': text,
+        'rating': rating,
+        'author': author,
+        'date': date,
+      };
+
+  @override
+  List<Object> get props => [text, rating, author, date];
+}
+
 class LocalResultData extends Equatable {
   final int position;
   final String title;
@@ -727,6 +764,7 @@ class LocalResultData extends Equatable {
   final String phone;
   final String website;
   final String snippet;
+  final List<FeaturedReview> featuredReviews;
 
   const LocalResultData({
     required this.position,
@@ -752,6 +790,7 @@ class LocalResultData extends Equatable {
     required this.website,
     required this.snippet,
     required this.images,
+    this.featuredReviews = const [],
   });
 
   factory LocalResultData.fromJson(Map<String, dynamic> json) =>
@@ -808,6 +847,7 @@ class LocalResultData extends Equatable {
         'phone': phone,
         'website': website,
         'snippet': snippet,
+        'featured_reviews': featuredReviews.map((r) => r.toJson()).toList(),
       };
 
   @override
@@ -835,6 +875,7 @@ class LocalResultData extends Equatable {
         phone,
         website,
         snippet,
+        featuredReviews,
       ];
 }
 

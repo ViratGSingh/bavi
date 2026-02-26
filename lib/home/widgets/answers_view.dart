@@ -295,10 +295,10 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
                 children: [
                   AnswerLoader(
                     loaderText: widget.status == HomePageStatus.generateQuery
-                        ? "Understanding your query"
-                        : widget.status == HomePageStatus.getSearchResults
-                            ? "Searching the web"
-                            : "Thinking of a reply",
+                            ? "Understanding"
+                            : widget.status == HomePageStatus.getSearchResults
+                                ? "Reading"
+                                : "Thinking",
                   ),
                   SizedBox(
                     height: MediaQuery.of(context).size.height / 3,
@@ -470,43 +470,45 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
                         ),
                       ),
                     ],
-                    MarkdownBody(
-                      data: widget.answer,
-                      onTapLink: (text, href, title) async {
-                        if (href != null) {
-                          widget.onLinkTap(href);
-                        }
-                      },
-                      styleSheet:
-                          MarkdownStyleSheet.fromTheme(Theme.of(context))
-                              .copyWith(
-                        h1: const TextStyle(
-                            color: Colors.black,
+                    SelectionArea(
+                      child: MarkdownBody(
+                        data: widget.answer,
+                        onTapLink: (text, href, title) async {
+                          if (href != null) {
+                            widget.onLinkTap(href);
+                          }
+                        },
+                        styleSheet:
+                            MarkdownStyleSheet.fromTheme(Theme.of(context))
+                                .copyWith(
+                          h1: const TextStyle(
+                              color: Colors.black,
+                              fontFamily: 'Poppins',
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold),
+                          h2: const TextStyle(
+                              color: Colors.black,
+                              fontFamily: 'Poppins',
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold),
+                          h3: const TextStyle(
+                              color: Colors.black,
+                              fontFamily: 'Poppins',
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600),
+                          p: const TextStyle(
+                              color: Colors.black,
+                              fontFamily: 'Poppins',
+                              fontSize: 14,
+                              height: 1.5),
+                          a: const TextStyle(
                             fontFamily: 'Poppins',
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold),
-                        h2: const TextStyle(
-                            color: Colors.black,
-                            fontFamily: 'Poppins',
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold),
-                        h3: const TextStyle(
-                            color: Colors.black,
-                            fontFamily: 'Poppins',
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600),
-                        p: const TextStyle(
-                            color: Colors.black,
-                            fontFamily: 'Poppins',
-                            fontSize: 14,
-                            height: 1.5),
-                        a: const TextStyle(
-                          fontFamily: 'Poppins',
-                          color: Color(0xFF8A2BE2),
-                          decoration: TextDecoration.underline,
-                          decorationColor: Color(0xFF8A2BE2),
+                            color: Color(0xFF8A2BE2),
+                            decoration: TextDecoration.underline,
+                            decorationColor: Color(0xFF8A2BE2),
+                          ),
+                          listBullet: const TextStyle(fontSize: 16),
                         ),
-                        listBullet: const TextStyle(fontSize: 16),
                       ),
                     ),
                   ],
@@ -597,93 +599,311 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
                       //     .add(ReplySearchResultShare());
                       showModalBottomSheet(
                         context: context,
+                        isScrollControlled: true,
                         shape: RoundedRectangleBorder(
                           borderRadius:
-                              BorderRadius.vertical(top: Radius.circular(16)),
+                              BorderRadius.vertical(top: Radius.circular(24)),
                         ),
-                        backgroundColor: Color(0xFF8A2BE2),
+                        backgroundColor: Colors.white,
                         builder: (context) {
+                          final sortedResults = [
+                            ...widget.answerResults
+                                .where((r) => r.isVerified),
+                            ...widget.answerResults
+                                .where((r) => !r.isVerified),
+                          ];
+                          final verifiedCount =
+                              sortedResults.where((r) => r.isVerified).length;
                           return Container(
-                            padding: EdgeInsets.all(16),
-                            height: MediaQuery.of(context).size.height / 2,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.vertical(
+                                  top: Radius.circular(24)),
+                            ),
                             child: Column(
+                              mainAxisSize: MainAxisSize.min,
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      "Sources",
-                                      style: TextStyle(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
-                                      ),
+                                // Handle bar
+                                Center(
+                                  child: Container(
+                                    margin: EdgeInsets.only(top: 12),
+                                    width: 40,
+                                    height: 4,
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade300,
+                                      borderRadius: BorderRadius.circular(2),
                                     ),
-                                    InkWell(
-                                      onTap: () => Navigator.pop(context),
-                                      child: Container(
-                                        width: 32,
-                                        height: 32,
-                                        decoration: BoxDecoration(
-                                          color: Colors.white24,
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: Icon(Icons.close,
-                                            size: 18, color: Colors.white),
-                                      ),
-                                    ),
-                                  ],
+                                  ),
                                 ),
-                                SizedBox(height: 12),
-                                Expanded(
-                                  child: ListView.separated(
-                                    itemCount: widget.answerResults.length,
-                                    separatorBuilder: (_, __) =>
-                                        Divider(color: Colors.purple),
-                                    itemBuilder: (context, index) {
-                                      final item = widget.answerResults[index];
-                                      return GestureDetector(
-                                        onTap: () async {
-                                          if (item.url.isNotEmpty) {
-                                            Navigator.pop(context);
-                                            // Open in external browser
-                                            final uri = Uri.parse(item.url);
-                                            if (!await launchUrl(uri,
-                                                mode: LaunchMode
-                                                    .externalApplication)) {
-                                              launchUrl(uri);
-                                            }
-                                          }
-                                        },
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              item.title,
-                                              maxLines: 3,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 16,
-                                                  color: Colors.white),
+                                Padding(
+                                  padding: EdgeInsets.fromLTRB(20, 16, 20, 0),
+                                  child: Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            "Sources",
+                                            style: TextStyle(
+                                              fontSize: 22,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.black,
+                                              fontFamily: 'Poppins',
                                             ),
-                                            SizedBox(height: 4),
+                                          ),
+                                          if (verifiedCount > 0)
                                             Text(
-                                              item.url,
+                                              "$verifiedCount verified",
                                               style: TextStyle(
-                                                color: Color(0xFFDFFF00),
-                                                decoration:
-                                                    TextDecoration.underline,
+                                                fontSize: 12,
+                                                color: Colors.green.shade600,
+                                                fontWeight: FontWeight.w500,
                                               ),
                                             ),
-                                          ],
+                                        ],
+                                      ),
+                                      InkWell(
+                                        onTap: () => Navigator.pop(context),
+                                        borderRadius:
+                                            BorderRadius.circular(20),
+                                        child: Container(
+                                          width: 36,
+                                          height: 36,
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey.shade100,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Icon(Icons.close,
+                                              size: 18,
+                                              color: Colors.black87),
                                         ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                SizedBox(height: 12),
+                                Divider(
+                                    height: 1,
+                                    color: Colors.grey.shade200),
+                                ConstrainedBox(
+                                  constraints: BoxConstraints(
+                                    maxHeight:
+                                        MediaQuery.of(context).size.height *
+                                            0.52,
+                                  ),
+                                  child: ListView.builder(
+                                    shrinkWrap: true,
+                                    padding:
+                                        EdgeInsets.symmetric(vertical: 8),
+                                    itemCount: sortedResults.length,
+                                    itemBuilder: (context, index) {
+                                      final item = sortedResults[index];
+                                      final isLast = index ==
+                                          sortedResults.length - 1;
+                                      return Column(
+                                        children: [
+                                          InkWell(
+                                            onTap: () async {
+                                              if (item.url.isNotEmpty) {
+                                                Navigator.pop(context);
+                                                final uri =
+                                                    Uri.parse(item.url);
+                                                if (!await launchUrl(uri,
+                                                    mode: LaunchMode
+                                                        .externalApplication)) {
+                                                  launchUrl(uri);
+                                                }
+                                              }
+                                            },
+                                            child: Padding(
+                                              padding:
+                                                  EdgeInsets.symmetric(
+                                                      horizontal: 20,
+                                                      vertical: 14),
+                                              child: Row(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  // Source number badge
+                                                  Container(
+                                                    width: 28,
+                                                    height: 28,
+                                                    margin: EdgeInsets.only(
+                                                        right: 12, top: 1),
+                                                    decoration: BoxDecoration(
+                                                      color: item.isVerified
+                                                          ? Colors.green
+                                                              .shade50
+                                                          : Color(0xFF8A2BE2)
+                                                              .withValues(
+                                                                  alpha:
+                                                                      0.08),
+                                                      borderRadius:
+                                                          BorderRadius
+                                                              .circular(8),
+                                                    ),
+                                                    child: Center(
+                                                      child: Text(
+                                                        "${index + 1}",
+                                                        style: TextStyle(
+                                                          fontSize: 12,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          color:
+                                                              item.isVerified
+                                                                  ? Colors.green
+                                                                      .shade700
+                                                                  : Color(
+                                                                      0xFF8A2BE2),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  Expanded(
+                                                    child: Column(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .start,
+                                                      children: [
+                                                        Row(
+                                                          crossAxisAlignment:
+                                                              CrossAxisAlignment
+                                                                  .center,
+                                                          children: [
+                                                            Expanded(
+                                                              child: Text(
+                                                                item.title,
+                                                                maxLines: 2,
+                                                                overflow:
+                                                                    TextOverflow
+                                                                        .ellipsis,
+                                                                style:
+                                                                    TextStyle(
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w600,
+                                                                  fontSize: 14,
+                                                                  color: Colors
+                                                                      .black87,
+                                                                  height: 1.3,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                            if (item
+                                                                .isVerified) ...[
+                                                              SizedBox(
+                                                                  width: 8),
+                                                              Container(
+                                                                padding: EdgeInsets
+                                                                    .symmetric(
+                                                                        horizontal:
+                                                                            6,
+                                                                        vertical:
+                                                                            2),
+                                                                decoration:
+                                                                    BoxDecoration(
+                                                                  color: Colors
+                                                                      .green
+                                                                      .shade50,
+                                                                  borderRadius:
+                                                                      BorderRadius
+                                                                          .circular(
+                                                                              6),
+                                                                  border: Border.all(
+                                                                      color: Colors
+                                                                          .green
+                                                                          .shade300,
+                                                                      width:
+                                                                          1),
+                                                                ),
+                                                                child: Row(
+                                                                  mainAxisSize:
+                                                                      MainAxisSize
+                                                                          .min,
+                                                                  children: [
+                                                                    Icon(
+                                                                      Icons
+                                                                          .verified_rounded,
+                                                                      size: 11,
+                                                                      color: Colors
+                                                                          .green
+                                                                          .shade600,
+                                                                    ),
+                                                                    SizedBox(
+                                                                        width:
+                                                                            3),
+                                                                    Text(
+                                                                      'Verified',
+                                                                      style:
+                                                                          TextStyle(
+                                                                        color: Colors
+                                                                            .green
+                                                                            .shade600,
+                                                                        fontSize:
+                                                                            10,
+                                                                        fontWeight:
+                                                                            FontWeight.w600,
+                                                                      ),
+                                                                    ),
+                                                                  ],
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ],
+                                                        ),
+                                                        SizedBox(height: 4),
+                                                        Text(
+                                                          item.url,
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                          style: TextStyle(
+                                                            color: Color(
+                                                                0xFF8A2BE2),
+                                                            fontSize: 12,
+                                                            decoration:
+                                                                TextDecoration
+                                                                    .underline,
+                                                            decorationColor:
+                                                                Color(
+                                                                    0xFF8A2BE2),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  SizedBox(width: 8),
+                                                  Icon(
+                                                    Icons
+                                                        .arrow_outward_rounded,
+                                                    size: 16,
+                                                    color:
+                                                        Colors.grey.shade400,
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                          if (!isLast)
+                                            Divider(
+                                              height: 1,
+                                              indent: 60,
+                                              endIndent: 20,
+                                              color: Colors.grey.shade100,
+                                            ),
+                                        ],
                                       );
                                     },
                                   ),
+                                ),
+                                SizedBox(
+                                  height:
+                                      MediaQuery.of(context).padding.bottom +
+                                          12,
                                 ),
                               ],
                             ),

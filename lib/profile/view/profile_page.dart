@@ -1,7 +1,6 @@
 import 'package:bavi/login/bloc/login_bloc.dart';
 import 'package:bavi/profile/bloc/profile_bloc.dart';
 import 'package:bavi/profile/widgets/metric_chart.dart';
-import 'package:bavi/profile/widgets/stat_card.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -98,8 +97,6 @@ class _ProfileView extends StatelessWidget {
               slivers: [
                 const SliverToBoxAdapter(child: SizedBox(height: 20)),
                   SliverToBoxAdapter(child: _buildProfileHeader(state)),
-                  const SliverToBoxAdapter(child: SizedBox(height: 28)),
-                  SliverToBoxAdapter(child: _buildStatsRow(state)),
                   const SliverToBoxAdapter(child: SizedBox(height: 24)),
                   SliverToBoxAdapter(
                     child: Padding(
@@ -134,114 +131,137 @@ class _ProfileView extends StatelessWidget {
   }
 
   Widget _buildProfileHeader(ProfileState state) {
-    return Column(
-      children: [
-        // Avatar with shadow ring
-        Container(
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF8A2BE2).withValues(alpha: 0.20),
-                blurRadius: 24,
-                spreadRadius: 4,
-              ),
-            ],
-          ),
-          child: Container(
-            padding: const EdgeInsets.all(3),
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.white,
-            ),
-            child: _buildAvatar(state),
-          ),
-        ),
-        const SizedBox(height: 16),
-        Text(
-          state.displayName.isNotEmpty ? state.displayName : 'User',
-          style: const TextStyle(
-            fontSize: 24,
-            fontFamily: 'Poppins',
-            fontWeight: FontWeight.w700,
-            color: Color(0xFF111827),
-          ),
-        ),
-        const SizedBox(height: 6),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-          decoration: BoxDecoration(
-            color: const Color(0xFF8A2BE2).withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Text(
-            state.stats?.levelLabel ?? 'Beginner',
-            style: const TextStyle(
-              fontSize: 12,
-              fontFamily: 'Poppins',
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF8A2BE2),
-              letterSpacing: 0.3,
-            ),
-          ),
-        ),
-        const SizedBox(height: 20),
-        // Level progress
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 48),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Row: avatar on left, name + stats column on right
+          Row(
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Level ${state.stats?.userLevel ?? 0}',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontFamily: 'Poppins',
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF111827),
-                    ),
-                  ),
-                  Text(
-                    '${((state.stats?.levelProgress ?? 0) * 100).toInt()}%',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontFamily: 'Poppins',
-                      fontWeight: FontWeight.w500,
-                      color: Color(0xFF9CA3AF),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
               Container(
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(6),
+                  shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF22C55E).withValues(alpha: 0.15),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
+                      color: const Color(0xFF8A2BE2).withValues(alpha: 0.20),
+                      blurRadius: 24,
+                      spreadRadius: 4,
                     ),
                   ],
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: LinearProgressIndicator(
-                    value: state.stats?.levelProgress ?? 0,
-                    backgroundColor: const Color(0xFFF3F4F6),
-                    valueColor: const AlwaysStoppedAnimation<Color>(
-                        Color(0xFF22C55E)),
-                    minHeight: 8,
+                child: Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white,
                   ),
+                  child: _buildAvatar(state),
+                ),
+              ),
+              const SizedBox(width: 24),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      state.displayName.isNotEmpty
+                          ? state.displayName
+                          : 'User',
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontFamily: 'Poppins',
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF111827),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      children: [
+                        _buildStatColumn(
+                            state.stats?.threadCount ?? 0, 'Threads'),
+                        const SizedBox(width: 42),
+                        _buildStatColumn(
+                            state.stats?.messageCount ?? 0, 'Messages'),
+                        const SizedBox(width: 42),
+                        _buildStatColumn(
+                            state.stats?.queryCount ?? 0, 'Queries'),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-        ),
-      ],
+          // const SizedBox(height: 6),
+          // Container(
+          //   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+          //   decoration: BoxDecoration(
+          //     color: const Color(0xFF8A2BE2).withValues(alpha: 0.08),
+          //     borderRadius: BorderRadius.circular(20),
+          //   ),
+          //   child: Text(
+          //     state.stats?.levelLabel ?? 'Beginner',
+          //     style: const TextStyle(
+          //       fontSize: 12,
+          //       fontFamily: 'Poppins',
+          //       fontWeight: FontWeight.w600,
+          //       color: Color(0xFF8A2BE2),
+          //       letterSpacing: 0.3,
+          //     ),
+          //   ),
+          // ),
+          // const SizedBox(height: 20),
+          // // Level progress
+          // Row(
+          //   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          //   children: [
+          //     Text(
+          //       'Level ${state.stats?.userLevel ?? 0}',
+          //       style: const TextStyle(
+          //         fontSize: 13,
+          //         fontFamily: 'Poppins',
+          //         fontWeight: FontWeight.w600,
+          //         color: Color(0xFF111827),
+          //       ),
+          //     ),
+          //     Text(
+          //       '${((state.stats?.levelProgress ?? 0) * 100).toInt()}%',
+          //       style: const TextStyle(
+          //         fontSize: 12,
+          //         fontFamily: 'Poppins',
+          //         fontWeight: FontWeight.w500,
+          //         color: Color(0xFF9CA3AF),
+          //       ),
+          //     ),
+          //   ],
+          // ),
+          // const SizedBox(height: 8),
+          // Container(
+          //   decoration: BoxDecoration(
+          //     borderRadius: BorderRadius.circular(6),
+          //     boxShadow: [
+          //       BoxShadow(
+          //         color: const Color(0xFF22C55E).withValues(alpha: 0.15),
+          //         blurRadius: 8,
+          //         offset: const Offset(0, 2),
+          //       ),
+          //     ],
+          //   ),
+          //   child: ClipRRect(
+          //     borderRadius: BorderRadius.circular(6),
+          //     child: LinearProgressIndicator(
+          //       value: state.stats?.levelProgress ?? 0,
+          //       backgroundColor: const Color(0xFFF3F4F6),
+          //       valueColor:
+          //           const AlwaysStoppedAnimation<Color>(Color(0xFF22C55E)),
+          //       minHeight: 8,
+          //     ),
+          //   ),
+          // ),
+        ],
+      ),
     );
   }
 
@@ -286,74 +306,31 @@ class _ProfileView extends StatelessWidget {
     );
   }
 
-  Widget _buildStatsRow(ProfileState state) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 16,
-              spreadRadius: 0,
-              offset: const Offset(0, 4),
-            ),
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.02),
-              blurRadius: 4,
-              spreadRadius: 0,
-              offset: const Offset(0, 1),
-            ),
-          ],
+  Widget _buildStatColumn(int value, String label) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '$value',
+          style: const TextStyle(
+            fontSize: 20,
+            fontFamily: 'Poppins',
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF111827),
+          ),
         ),
-        padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 16),
-        child: Row(
-          children: [
-            Expanded(
-                child: StatCard(
-                    value: state.stats?.threadCount ?? 0, label: 'Threads')),
-            Container(
-              width: 1,
-              height: 36,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    const Color(0xFFE5E7EB).withValues(alpha: 0.0),
-                    const Color(0xFFE5E7EB),
-                    const Color(0xFFE5E7EB).withValues(alpha: 0.0),
-                  ],
-                ),
-              ),
-            ),
-            Expanded(
-                child: StatCard(
-                    value: state.stats?.messageCount ?? 0,
-                    label: 'Messages')),
-            Container(
-              width: 1,
-              height: 36,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    const Color(0xFFE5E7EB).withValues(alpha: 0.0),
-                    const Color(0xFFE5E7EB),
-                    const Color(0xFFE5E7EB).withValues(alpha: 0.0),
-                  ],
-                ),
-              ),
-            ),
-            Expanded(
-                child: StatCard(
-                    value: state.stats?.queryCount ?? 0, label: 'Queries')),
-          ],
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            fontFamily: 'Poppins',
+            fontWeight: FontWeight.w400,
+            color: Color(0xFF9CA3AF),
+          ),
         ),
-      ),
+      ],
     );
   }
 

@@ -56,16 +56,18 @@ class ExtractedResultInfo extends Equatable {
     required this.url,
     required this.title,
     required this.excerpts,
-    required this.thumbnailUrl
+    required this.thumbnailUrl,
+    this.isVerified = false,
   });
 
   final String url;
   final String title;
   final String excerpts;
   final String thumbnailUrl;
+  final bool isVerified;
 
   @override
-  List<Object> get props => [url, title, excerpts, thumbnailUrl];
+  List<Object> get props => [url, title, excerpts, thumbnailUrl, isVerified];
 
   factory ExtractedResultInfo.fromJson(Map<String, dynamic> json) {
     return ExtractedResultInfo(
@@ -73,15 +75,17 @@ class ExtractedResultInfo extends Equatable {
       title: json["title"] as String,
       excerpts: json['excerpts'] as String,
       thumbnailUrl: json['thumbnailUrl'] != null ? json['thumbnailUrl'] as String : '',
+      isVerified: json['isVerified'] as bool? ?? false,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'url':url,
+      'url': url,
       'title': title,
       'excerpts': excerpts,
-      'thumbnailUrl':thumbnailUrl
+      'thumbnailUrl': thumbnailUrl,
+      'isVerified': isVerified,
     };
   }
 }

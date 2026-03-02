@@ -366,3 +366,31 @@ final class HomeCheckLocationAndAnswer extends HomeEvent {
 }
 
 final class HomeToggleChatMode extends HomeEvent {}
+
+final class HomeToggleDeepDrissy extends HomeEvent {}
+
+final class HomeDeepDrissyGetAnswer extends HomeEvent {
+  final String query;
+  final ValueNotifier<String> streamedText;
+  final ValueNotifier<String> extractedUrlDescription;
+  final ValueNotifier<String> extractedUrlTitle;
+  final ValueNotifier<String> extractedUrl;
+  final ValueNotifier<String> extractedImageUrl;
+  final String imageDescription;
+  final ValueNotifier<String> imageDescriptionNotifier;
+
+  HomeDeepDrissyGetAnswer(
+      this.query,
+      this.streamedText,
+      this.extractedUrlDescription,
+      this.extractedUrlTitle,
+      this.extractedUrl,
+      this.extractedImageUrl,
+      this.imageDescription,
+      this.imageDescriptionNotifier);
+}
+
+final class HomeDeepDrissyWebSearchResultsReceived extends HomeEvent {
+  final List<ExtractedResultInfo> results;
+  HomeDeepDrissyWebSearchResultsReceived(this.results);
+}

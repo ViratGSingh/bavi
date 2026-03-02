@@ -75,9 +75,14 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     on<HomeRequestLocationPermission>(_requestLocationPermission);
     on<HomeRetryPendingSearch>(_retryPendingSearch);
     on<HomeWebSearchResultsReceived>(_handleWebSearchResults);
+    on<HomeToggleDeepDrissy>(_toggleDeepDrissy);
+    on<HomeDeepDrissyGetAnswer>(_getDeepDrissyAnswer);
+    on<HomeDeepDrissyWebSearchResultsReceived>(
+        _handleDeepDrissyWebSearchResults);
   }
 
   Completer<List<ExtractedResultInfo>>? _webSearchCompleter;
+  Completer<List<ExtractedResultInfo>>? _deepDrissyWebSearchCompleter;
 
   void _handleWebSearchResults(
     HomeWebSearchResultsReceived event,
@@ -87,6 +92,17 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       _webSearchCompleter!.complete(event.results);
     }
     emit(state.copyWith(webSearchQuery: null));
+  }
+
+  void _handleDeepDrissyWebSearchResults(
+    HomeDeepDrissyWebSearchResultsReceived event,
+    Emitter<HomeState> emit,
+  ) {
+    if (_deepDrissyWebSearchCompleter != null &&
+        !_deepDrissyWebSearchCompleter!.isCompleted) {
+      _deepDrissyWebSearchCompleter!.complete(event.results);
+    }
+    emit(state.copyWith(deepDrissyWebSearchQueries: null));
   }
 
   HomeCheckLocationAndAnswer? _pendingCheckLocationEvent;
@@ -351,6 +367,25 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     emit(state.copyWith(
       isChatModeActive: !state.isChatModeActive,
     ));
+  }
+
+  Future<void> _toggleDeepDrissy(
+    HomeToggleDeepDrissy event,
+    Emitter<HomeState> emit,
+  ) async {
+    final newStatus =
+        state.deepDrissyStatus == HomeDeepDrissyStatus.enabled
+            ? HomeDeepDrissyStatus.disabled
+            : HomeDeepDrissyStatus.enabled;
+    // When Deep Drissy is enabled, ensure web search is also enabled
+    if (newStatus == HomeDeepDrissyStatus.enabled) {
+      emit(state.copyWith(
+        deepDrissyStatus: newStatus,
+        generalStatus: HomeGeneralStatus.enabled,
+      ));
+    } else {
+      emit(state.copyWith(deepDrissyStatus: newStatus));
+    }
   }
 
   Future<void> _switchActionType(
@@ -2817,6 +2852,840 @@ Rules:
 
     // Refresh history
     add(HomeInitialUserData());
+  }
+
+  /// Generate multiple search queries from user input for Deep Drissy mode
+  Future<List<String>> _generateMultipleSearchQueries(String query) async {
+    try {
+      String modelName;
+      switch (state.selectedModel) {
+        case HomeModel.deepseek:
+          modelName = "deepseek/deepseek-v3";
+          break;
+        case HomeModel.gemini:
+          modelName = "google/gemini-2.5-flash";
+          break;
+        case HomeModel.claude:
+          modelName = "anthropic/claude-haiku-4.5";
+          break;
+        case HomeModel.openAI:
+          modelName = "openai/gpt-5-nano";
+          break;
+        case HomeModel.flashThink:
+          modelName = "google/gemini-2.0-flash-thinking-exp";
+          break;
+      }
+
+      final url =
+          Uri.parse("https://ai-gateway.vercel.sh/v1/chat/completions");
+      final response = await http.post(
+        url,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer ${dotenv.get("AI_GATEWAY_API_KEY")}",
+        },
+        body: jsonEncode({
+          "model": modelName,
+          "stream": false,
+          "max_tokens": 300,
+          "temperature": 0.3,
+          "messages": [
+            {
+              "role": "system",
+              "content":
+                  "You are a search query generator. Given a user question, generate 3-5 diverse Google search queries that together comprehensively address different aspects of the question. Return ONLY a JSON array of strings, nothing else. Example: [\"query 1\", \"query 2\", \"query 3\"]"
+            },
+            {
+              "role": "user",
+              "content": query,
+            },
+          ],
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        final content =
+            decoded["choices"]?[0]?["message"]?["content"] ?? "";
+        final contentStr = content.toString().trim();
+
+        // Parse JSON array from response
+        // Handle potential markdown code blocks
+        String jsonStr = contentStr;
+        if (jsonStr.contains("```")) {
+          jsonStr = jsonStr
+              .replaceAll(RegExp(r'```json\s*'), '')
+              .replaceAll(RegExp(r'```\s*'), '')
+              .trim();
+        }
+
+        final List<dynamic> queries = jsonDecode(jsonStr);
+        final result =
+            queries.map((q) => q.toString().trim()).toList();
+        print(
+            "Deep Drissy: Generated ${result.length} search queries: $result");
+        return result;
+      }
+    } catch (e) {
+      print("Error generating multiple search queries: $e");
+    }
+    // Fallback: return the original query
+    return [query];
+  }
+
+  /// Deep Drissy answer flow - multi-query deep research
+  Future<void> _getDeepDrissyAnswer(
+      HomeDeepDrissyGetAnswer event, Emitter<HomeState> emit) async {
+    print("=== DEBUG _getDeepDrissyAnswer ENTRY: query='${event.query}' ===");
+
+    String query = event.query;
+    String searchQuery = event.query;
+    String city = state.userCity;
+    String region = state.userRegion;
+    String country = state.userCountry;
+    String countryCode = state.userCountryCode;
+
+    String threadId = Uuid().v4().substring(0, 8);
+    _cancelTaskGen = false;
+    List<YoutubeVideoData> youtubeVideos = [];
+
+    Uint8List? imageBytes;
+    if (state.selectedImage != null) {
+      try {
+        imageBytes = await File(state.selectedImage!.path).readAsBytes();
+      } catch (e) {
+        print("Error reading image bytes: $e");
+      }
+    }
+
+    ThreadResultData resultData = ThreadResultData(
+      youtubeVideos: [],
+      searchType: state.searchType,
+      sourceImageDescription: event.imageDescription,
+      sourceImageLink: state.uploadedImageUrl ?? "",
+      sourceImage: imageBytes,
+      isSearchMode: false,
+      extractedUrlData: ExtractedUrlResultData(
+        snippet: event.extractedUrlDescription.value,
+        title: event.extractedUrlTitle.value,
+        link: event.extractedUrl.value,
+        thumbnail: event.extractedImageUrl.value,
+      ),
+      web: [],
+      shortVideos: [],
+      videos: [],
+      news: [],
+      images: [],
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+      userQuery: query,
+      searchQuery: searchQuery,
+      answer: "",
+      influence: [],
+      local: [],
+    );
+    List<ExtractedResultInfo> extractedResults = [];
+
+    ThreadSessionData updThreadData = state.threadData;
+
+    event.extractedUrlTitle.value = "";
+    event.extractedUrlDescription.value = "";
+    event.extractedImageUrl.value = "";
+    event.extractedUrl.value = "";
+
+    List<ThreadResultData> tempUpdatedResults =
+        List<ThreadResultData>.from(state.threadData.results)
+          ..add(resultData);
+    if (state.threadData.id != "") {
+      updThreadData = ThreadSessionData(
+          id: state.threadData.id,
+          isIncognito: state.threadData.isIncognito,
+          results: tempUpdatedResults,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now());
+    } else {
+      updThreadData = ThreadSessionData(
+          id: threadId,
+          isIncognito: state.isIncognito,
+          results: tempUpdatedResults,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now());
+    }
+    String? answer;
+    List<LocalResultData> mapResults = [];
+    List<ShortVideoResultData> instagramShortVideos = [];
+    List<({String text, String sourceQuery, double score})> memoryChunks = [];
+
+    // Location processing
+    if (_queryNeedsLocation(query)) {
+      final shouldProceed =
+          await _checkLocationPermissionForQuery(
+        HomeGetAnswer(
+          event.query,
+          event.streamedText,
+          event.extractedUrlDescription,
+          event.extractedUrlTitle,
+          event.extractedUrl,
+          event.extractedImageUrl,
+          event.imageDescription,
+          event.imageDescriptionNotifier,
+        ),
+        emit,
+      );
+      if (!shouldProceed) return;
+
+      if (city.isEmpty) {
+        emit(state.copyWith(
+          status: HomePageStatus.generateQuery,
+          imageStatus: HomeImageStatus.unselected,
+          threadData: updThreadData,
+          loadingIndex: updThreadData.results.length - 1,
+        ));
+        final userData = await _getUserLocation();
+        city = userData.city;
+        region = userData.region;
+        country = userData.country;
+        countryCode = userData.countryCode;
+      }
+
+      if (city.isNotEmpty) {
+        final replaceWithIn = [
+          'near me', 'nearby', 'close to me', 'around me',
+          'in my area', 'around here', 'this area', 'my location',
+          'where i am'
+        ];
+        final appendIn = ['local', 'closest', 'nearest'];
+        final appendCity = [
+          'places near', 'restaurants near', 'shops near', 'bars near',
+          'cafes near', 'hotels near', 'stores near'
+        ];
+
+        String lowerQuery = searchQuery.toLowerCase();
+        bool modified = false;
+
+        for (final keyword in replaceWithIn) {
+          if (lowerQuery.contains(keyword)) {
+            final pattern =
+                RegExp(RegExp.escape(keyword), caseSensitive: false);
+            searchQuery =
+                searchQuery.replaceAll(pattern, "in $city");
+            modified = true;
+            break;
+          }
+        }
+        if (!modified) {
+          for (final keyword in appendIn) {
+            if (lowerQuery.contains(keyword)) {
+              searchQuery = "$searchQuery in $city";
+              modified = true;
+              break;
+            }
+          }
+        }
+        if (!modified) {
+          for (final keyword in appendCity) {
+            if (lowerQuery.contains(keyword)) {
+              searchQuery = "$searchQuery $city";
+              modified = true;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // Image handling - same as getFastAnswer
+    if (state.selectedImage != null) {
+      emit(state.copyWith(
+          status: HomePageStatus.success,
+          threadData: updThreadData,
+          loadingIndex: updThreadData.results.length - 1,
+          searchType: state.searchType == HomeSearchType.extractUrl
+              ? HomeSearchType.general
+              : state.searchType,
+          replyStatus: HomeReplyStatus.loading,
+          selectedImage: null,
+          imageStatus: HomeImageStatus.unselected));
+
+      event.imageDescriptionNotifier.value = "";
+
+      answer = await imageVercelGenerateReply(
+        query,
+        [],
+        event.streamedText,
+        emit,
+        resultData.sourceImage!,
+        state.threadData.results
+            .getRange(0, state.threadData.results.length - 1)
+            .toList(),
+        resultData.extractedUrlData,
+        city,
+        region,
+        country,
+      );
+    } else {
+      emit(state.copyWith(
+        status: HomePageStatus.getSearchResults,
+        imageStatus: HomeImageStatus.unselected,
+        threadData: updThreadData,
+        loadingIndex: updThreadData.results.length - 1,
+        selectedImage: null,
+      ));
+
+      // Rewrite query with context
+      if (state.threadData.results.isNotEmpty) {
+        searchQuery = await _rewriteQueryWithContext(
+          query,
+          state.threadData.results,
+        );
+        print("Deep Drissy - Original query: $query");
+        print("Deep Drissy - Rewritten query: $searchQuery");
+      }
+
+      try {
+        final searchStartTime = DateTime.now();
+
+        // Generate multiple search queries
+        final searchQueries =
+            await _generateMultipleSearchQueries(searchQuery);
+
+        // Trigger Deep Drissy multi-query webview
+        _deepDrissyWebSearchCompleter =
+            Completer<List<ExtractedResultInfo>>();
+        emit(state.copyWith(
+            deepDrissyWebSearchQueries: searchQueries));
+
+        final webResults =
+            await _deepDrissyWebSearchCompleter!.future;
+        _deepDrissyWebSearchCompleter = null;
+
+        int totalChars = 0;
+        const int charLimit = 200000; // Higher limit for deep drissy
+        for (final result in webResults) {
+          final int resultChars = result.url.length +
+              result.title.length +
+              result.excerpts.length;
+          if (totalChars + resultChars > charLimit) break;
+          extractedResults.add(result);
+          totalChars += resultChars;
+        }
+        print(
+            "Deep Drissy web results: ${extractedResults.length}");
+
+        // Enrich snippets via batch extract API, grouped by source query
+        if (extractedResults.isNotEmpty) {
+          // Group results by sourceQuery
+          final Map<String, List<int>> queryGroupIndices = {};
+          for (int i = 0; i < extractedResults.length; i++) {
+            final key = extractedResults[i].sourceQuery.isNotEmpty
+                ? extractedResults[i].sourceQuery
+                : 'general';
+            queryGroupIndices.putIfAbsent(key, () => []).add(i);
+          }
+
+          final queryKeys = queryGroupIndices.keys.toList();
+          final Map<String, String> allEnrichedSnippets = {};
+          final Set<String> allVerifiedUrls = {};
+
+          for (int qi = 0; qi < queryKeys.length; qi++) {
+            final queryKey = queryKeys[qi];
+            final indices = queryGroupIndices[queryKey]!;
+
+            emit(state.copyWith(
+              deepDrissyReadingStatus:
+                  'Reading ${qi + 1}/${queryKeys.length}: $queryKey',
+            ));
+
+            try {
+              final batchItems = indices
+                  .map((i) => {
+                        'url': extractedResults[i].url,
+                        'excerpt': extractedResults[i].excerpts,
+                      })
+                  .toList();
+
+              final batchResponse = await http.post(
+                Uri.parse(
+                    'https://browser-api.drissea.com/extract-batch'),
+                headers: {
+                  'Content-Type': 'application/json',
+                  "Authorization":
+                      "Bearer ${dotenv.get('API_SECRET')}"
+                },
+                body: jsonEncode({'items': batchItems}),
+              );
+
+              if (batchResponse.statusCode == 200) {
+                final batchJson = jsonDecode(batchResponse.body);
+                final List<dynamic> batchResults =
+                    batchJson['results'] ?? [];
+
+                for (final item in batchResults) {
+                  if (item['found'] == true && item['url'] != null) {
+                    allVerifiedUrls.add(item['url'] as String);
+                    final text = (item['extractedText'] ?? '')
+                        .toString()
+                        .trim();
+                    if (text.isNotEmpty) {
+                      allEnrichedSnippets[item['url']] = text;
+                    }
+                  }
+                }
+              }
+
+              print(
+                  "Deep Drissy batch ${qi + 1}/${queryKeys.length} ('$queryKey'): enriched ${indices.length} results");
+            } catch (e) {
+              print(
+                  "Deep Drissy batch extract error for '$queryKey': $e");
+            }
+          }
+
+          // Apply all enrichments
+          extractedResults = extractedResults.map((r) {
+            final enriched = allEnrichedSnippets[r.url];
+            final isVerified = allVerifiedUrls.contains(r.url);
+            if (enriched != null && enriched.isNotEmpty) {
+              return ExtractedResultInfo(
+                url: r.url,
+                title: r.title,
+                excerpts: enriched,
+                thumbnailUrl: r.thumbnailUrl,
+                isVerified: true,
+                sourceQuery: r.sourceQuery,
+              );
+            }
+            return ExtractedResultInfo(
+              url: r.url,
+              title: r.title,
+              excerpts: r.excerpts,
+              thumbnailUrl: r.thumbnailUrl,
+              isVerified: isVerified,
+              sourceQuery: r.sourceQuery,
+            );
+          }).toList();
+
+          emit(state.copyWith(deepDrissyReadingStatus: null));
+
+          print(
+              "Deep Drissy enriched ${allEnrichedSnippets.length}/${extractedResults.length} results across ${queryKeys.length} batches");
+        }
+
+        final searchDuration =
+            DateTime.now().difference(searchStartTime);
+        print(
+            "Deep Drissy search duration: ${searchDuration.inMilliseconds} ms");
+
+        emit(state.copyWith(
+            status: HomePageStatus.success,
+            searchType: state.searchType == HomeSearchType.extractUrl
+                ? HomeSearchType.general
+                : state.searchType,
+            replyStatus: HomeReplyStatus.loading));
+      } catch (e) {
+        print("Deep Drissy search error: $e");
+      }
+
+      if (_cancelTaskGen) return;
+
+      // Format sources
+      final List<Map<String, String>> formattedResults =
+          extractedResults.map((searchResult) {
+        return {
+          "title": searchResult.title,
+          "url": searchResult.url,
+          "snippet": searchResult.excerpts.trim(),
+        };
+      }).toList();
+
+      formattedResults.addAll(youtubeVideos.map((video) {
+        return {
+          "title": video.title,
+          "url":
+              "https://www.youtube.com/watch?v=${video.videoId}",
+          "snippet": "${video.snippet} ${video.description}",
+        };
+      }));
+
+      formattedResults.addAll(mapResults.map((result) {
+        return {
+          "title": result.title,
+          "url":
+              "https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent("${result.title} ${result.address}")}&query_place_id=${result.placeId}",
+          "snippet":
+              "Local Place: ${result.title}. Address: ${result.address}. Rating: ${result.rating} (${result.reviews} reviews). ${result.snippet}",
+        };
+      }));
+
+      if (memoryChunks.isNotEmpty) {
+        final memoryResults = memoryChunks.map((chunk) {
+          return {
+            "title":
+                "[Memory] Previously learned from: ${chunk.sourceQuery}",
+            "url": "memory://local",
+            "snippet": chunk.text,
+          };
+        }).toList();
+        formattedResults.insertAll(0, memoryResults);
+      }
+
+      print("Deep Drissy: Starting answer generation");
+      answer = await vercelDeepDrissyGenerateReply(
+        query,
+        formattedResults,
+        event.streamedText,
+        emit,
+        event.imageDescription,
+        state.threadData.results
+            .getRange(0, state.threadData.results.length - 1)
+            .toList(),
+        resultData.extractedUrlData,
+        city,
+        region,
+        country,
+      );
+    }
+
+    // Update ThreadData (Deep Drissy)
+    ThreadResultData updResultData = ThreadResultData(
+      youtubeVideos: youtubeVideos,
+      searchType: resultData.searchType,
+      extractedUrlData: resultData.extractedUrlData,
+      sourceImageDescription: resultData.sourceImageDescription,
+      sourceImageLink: resultData.sourceImageLink,
+      sourceImage: resultData.sourceImage,
+      isSearchMode: resultData.isSearchMode,
+      web: resultData.web,
+      shortVideos: instagramShortVideos,
+      videos: resultData.videos,
+      news: resultData.news,
+      images: resultData.images,
+      createdAt: resultData.createdAt,
+      updatedAt: resultData.updatedAt,
+      userQuery: query,
+      searchQuery: searchQuery,
+      answer: answer ?? "",
+      influence: extractedResults.map((searchResult) {
+        return InfluenceData(
+            url: searchResult.url,
+            snippet: searchResult.excerpts,
+            title: searchResult.title,
+            similarity: 0,
+            isVerified: searchResult.isVerified,
+            sourceQuery: searchResult.sourceQuery);
+      }).toList()
+        ..addAll(mapResults.map((searchResult) {
+          final locationQuery = Uri.encodeComponent(
+              "${searchResult.title} ${searchResult.address}");
+          return InfluenceData(
+              url:
+                  "https://www.google.com/maps/search/?api=1&query=$locationQuery&query_place_id=${searchResult.placeId}",
+              snippet: searchResult.snippet,
+              title: searchResult.title,
+              similarity: 0);
+        })),
+      local: mapResults,
+    );
+
+    final updatedResults =
+        List<ThreadResultData>.from(state.threadData.results)
+          ..removeLast()
+          ..add(updResultData);
+
+    if (state.threadData.id != "") {
+      updThreadData = ThreadSessionData(
+          id: state.threadData.id,
+          isIncognito: state.threadData.isIncognito,
+          results: updatedResults,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now());
+    } else {
+      updThreadData = ThreadSessionData(
+          id: threadId,
+          isIncognito: state.isIncognito,
+          results: updatedResults,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now());
+    }
+    if (_cancelTaskGen) return;
+
+    emit(state.copyWith(
+        replyStatus: HomeReplyStatus.success,
+        threadData: updThreadData,
+        uploadedImageUrl: "",
+        selectedImage: null,
+        imageStatus: HomeImageStatus.unselected));
+    event.imageDescriptionNotifier.value = "";
+
+    final titleSummary =
+        await _generateThreadTitleAndSummary(updThreadData.results);
+    updThreadData = updThreadData.copyWith(
+      title: titleSummary['title'],
+      summary: titleSummary['summary'],
+    );
+
+    if (updThreadData.results.length == 1) {
+      await createSession(updThreadData, threadId,
+          skipMemoryProcessing: state.isChatModeActive);
+    } else {
+      await updateSession(updThreadData, state.threadData.id,
+          skipMemoryProcessing: state.isChatModeActive);
+    }
+
+    add(HomeInitialUserData());
+  }
+
+  /// Deep Drissy answer generation with higher token limit and enhanced prompt
+  Future<String?> vercelDeepDrissyGenerateReply(
+    String query,
+    List<Map<String, String>> results,
+    ValueNotifier<String> streamedText,
+    Emitter<HomeState> emit,
+    String imageDescription,
+    List<ThreadResultData> previousResults,
+    ExtractedUrlResultData? extractedUrlData,
+    String city,
+    String region,
+    String country,
+  ) async {
+    final generateAnswerStartTime = DateTime.now();
+    streamedText.value = "";
+
+    int totalTokens = 0;
+    List<Map<String, String>> formattedSources = [];
+    for (final result in results) {
+      if (result["title"] == null ||
+          result["url"] == null ||
+          result["snippet"] == null) {
+        continue;
+      }
+      int tokens = ((result["title"]!.length +
+              result["url"]!.length +
+              result["snippet"]!.length) ~/
+          4);
+      if (totalTokens + tokens > 200000) {
+        break;
+      }
+      formattedSources.add({
+        "title": result["title"]!,
+        "url": result["url"]!,
+        "snippet": result["snippet"]!,
+      });
+      totalTokens += tokens;
+    }
+
+    String formattedUserContext = city == "" && region == "" && country == ""
+        ? "The current date and time is ${DateTime.now()}."
+        : "The user is located in $city, $region, $country. The current date and time is ${DateTime.now()}.";
+
+    bool isChat = formattedSources.isEmpty;
+    final systemPrompt = """
+You are Drissea, a private, conversational, and insightful answer engine operating in Deep Research mode. You do not save user data and keep as much processing as possible strictly on-device.
+
+${isChat ? "" : """
+You are in DEEP RESEARCH mode. You have been provided with results from multiple diverse search queries to comprehensively address the user's question.
+
+Rules:
+- Always answer in Markdown.
+- Provide a comprehensive, detailed analysis structured by the different aspects of the query.
+- Structure your response with clear headings, subheadings, and bullet points.
+- Always **bold key insights** and highlight notable places, dishes, or experiences.
+- For any place, food item, or experience that was featured in a source, wrap the main word or phrase in this format: `[text to show](<link>)` (e.g., Try the **[Dum Pukht Biryani](https://example.com/food)**).
+- **Be Conversational**: Write naturally, like a knowledgeable friend. Avoid robotic phrases like "based on search results" or "these sources say."
+- Only use the sources that directly answer the query.
+- If no strong or direct matches are found, gracefully say: _"There isn't a perfect match for that, but here are a few options that might still interest you."_
+- Do not repeat the question or use generic filler lines.
+- Keep your language engaging, be as detailed and exhaustive as possible, ensuring no relevant detail from the sources is omitted, while still maintaining clarity and readability.
+- Since this is deep research mode, provide more depth, cover multiple angles, compare perspectives, and give a thorough analysis.
+- If the query consists primarily of a URL (e.g., youtube.com/...), use the provided content from the extracted URL to summarize what the page or video is about.
+
+"""}
+Use the following user context for additional personalization (if relevant):
+$formattedUserContext
+
+Don't reveal any personal information you have in your context unless asked about it.
+""";
+
+    String modelName;
+    switch (state.selectedModel) {
+      case HomeModel.deepseek:
+        modelName = "deepseek/deepseek-v3";
+        break;
+      case HomeModel.gemini:
+        modelName = "google/gemini-2.5-flash";
+        break;
+      case HomeModel.claude:
+        modelName = "anthropic/claude-haiku-4.5";
+        break;
+      case HomeModel.openAI:
+        modelName = "openai/gpt-5-nano";
+        break;
+      case HomeModel.flashThink:
+        modelName = "google/gemini-2.0-flash-thinking-exp";
+        break;
+    }
+
+    final url =
+        Uri.parse("https://ai-gateway.vercel.sh/v1/chat/completions");
+
+    final request = http.Request("POST", url);
+    request.headers.addAll({
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${dotenv.get("AI_GATEWAY_API_KEY")}",
+    });
+
+    request.body = jsonEncode({
+      "model": modelName,
+      "stream": true,
+      "max_tokens": 16384,
+      "messages": [
+        {"role": "system", "content": systemPrompt},
+        ...previousResults.expand((item) => [
+              {
+                "role": "user",
+                "content": item.sourceImageDescription != ""
+                    ? "${item.userQuery} | Here's the image description:${item.sourceImageDescription}"
+                    : item.userQuery
+              },
+              {
+                "role": "assistant",
+                "content": item.answer,
+              },
+            ]),
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text":
+                  "$query ${imageDescription == "" ? "" : "| Here's the image description: $imageDescription"}  ${extractedUrlData?.snippet == "" ? "" : "| Here's the extracted url page description: ${extractedUrlData?.snippet}"}"
+                      .trim()
+            },
+          ]
+        },
+        isChat == false
+            ? {
+                "role": "user",
+                "content":
+                    jsonEncode(city == "" && region == "" && country == ""
+                        ? {
+                            "results": formattedSources,
+                            "date": DateTime.now().toIso8601String(),
+                            "day": DateTime.now().day,
+                            "month": DateTime.now().month,
+                            "year": DateTime.now().year,
+                            "hour": DateTime.now().hour,
+                            "minute": DateTime.now().minute,
+                            "second": DateTime.now().second,
+                            "timezone": DateTime.now().timeZoneName,
+                          }
+                        : {
+                            "results": formattedSources,
+                            "city": city,
+                            "region": region,
+                            "country": country,
+                            "date": DateTime.now().toIso8601String(),
+                            "day": DateTime.now().day,
+                            "month": DateTime.now().month,
+                            "year": DateTime.now().year,
+                            "hour": DateTime.now().hour,
+                            "minute": DateTime.now().minute,
+                            "second": DateTime.now().second,
+                            "timezone": DateTime.now().timeZoneName,
+                          })
+              }
+            : {
+                "role": "user",
+                "content":
+                    jsonEncode(city == "" && region == "" && country == ""
+                        ? {
+                            "date": DateTime.now().toIso8601String(),
+                            "day": DateTime.now().day,
+                            "month": DateTime.now().month,
+                            "year": DateTime.now().year,
+                            "hour": DateTime.now().hour,
+                            "minute": DateTime.now().minute,
+                            "second": DateTime.now().second,
+                            "timezone": DateTime.now().timeZoneName,
+                          }
+                        : {
+                            "city": city,
+                            "region": region,
+                            "country": country,
+                            "date": DateTime.now().toIso8601String(),
+                            "day": DateTime.now().day,
+                            "month": DateTime.now().month,
+                            "year": DateTime.now().year,
+                            "hour": DateTime.now().hour,
+                            "minute": DateTime.now().minute,
+                            "second": DateTime.now().second,
+                            "timezone": DateTime.now().timeZoneName,
+                          })
+              }
+      ],
+    });
+
+    print("Deep Drissy: Starting streaming request ($modelName)...");
+
+    try {
+      final streamedResponse = await httpClient.send(request);
+      print(
+          "Deep Drissy Response Status: ${streamedResponse.statusCode}");
+
+      if (streamedResponse.statusCode != 200) {
+        final body = await streamedResponse.stream
+            .transform(utf8.decoder)
+            .join();
+        print("Deep Drissy Error: $body");
+        return null;
+      }
+
+      final stream = streamedResponse.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter());
+
+      String finalContent = "";
+      print(
+          "Deep Drissy TTFT:${DateTime.now().difference(generateAnswerStartTime).inMilliseconds}");
+
+      await for (final line in stream) {
+        if (!line.startsWith("data:")) continue;
+        final chunk = line.substring(5).trim();
+        if (chunk == "[DONE]") continue;
+
+        try {
+          final decoded = jsonDecode(chunk);
+          final delta = decoded["choices"]?[0]?["delta"];
+          if (delta == null) continue;
+
+          if (delta["content"] != null) {
+            final chunkText = delta["content"];
+            streamedText.value += chunkText;
+            finalContent += chunkText;
+            emit(state.copyWith(
+                replyStatus: HomeReplyStatus.success));
+          }
+        } catch (e) {
+          print("Deep Drissy streaming parse error: $e");
+        }
+      }
+
+      if (finalContent.isNotEmpty) {
+        if (finalContent.contains("</think>")) {
+          final parts = finalContent.split("</think>");
+          finalContent = parts.length > 1
+              ? parts.sublist(1).join("</think>").trim()
+              : parts[0].trim();
+        }
+        return finalContent;
+      } else {
+        print("Deep Drissy: Streaming failed or empty content");
+        return null;
+      }
+    } catch (e) {
+      print("Deep Drissy request failed: $e");
+      return null;
+    }
   }
 
   /// Function to search using SerpAPI Google results for Instagram Reels

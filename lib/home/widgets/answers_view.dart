@@ -33,6 +33,7 @@ class ThreadAnswerView extends StatefulWidget {
   final List<LocalResultData> local;
   final Function(String url) onLinkTap;
   final ExtractedUrlResultData? extractedUrlData;
+  final String? deepDrissyReadingStatus;
 
   const ThreadAnswerView({
     super.key,
@@ -51,6 +52,7 @@ class ThreadAnswerView extends StatefulWidget {
     required this.local,
     required this.onLinkTap,
     this.extractedUrlData,
+    this.deepDrissyReadingStatus,
   });
 
   @override
@@ -294,11 +296,13 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
             ? Column(
                 children: [
                   AnswerLoader(
-                    loaderText: widget.status == HomePageStatus.generateQuery
-                            ? "Understanding"
-                            : widget.status == HomePageStatus.getSearchResults
-                                ? "Reading"
-                                : "Thinking",
+                    loaderText: widget.deepDrissyReadingStatus != null
+                            ? widget.deepDrissyReadingStatus!
+                            : widget.status == HomePageStatus.generateQuery
+                                ? "Understanding"
+                                : widget.status == HomePageStatus.getSearchResults
+                                    ? "Reading"
+                                    : "Thinking",
                   ),
                   SizedBox(
                     height: MediaQuery.of(context).size.height / 3,
@@ -614,6 +618,25 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
                           ];
                           final verifiedCount =
                               sortedResults.where((r) => r.isVerified).length;
+
+                          // Check if sources are grouped by query (Deep Drissy)
+                          final hasGroups = sortedResults
+                              .any((r) => r.sourceQuery.isNotEmpty);
+
+                          // Build grouped map preserving insertion order
+                          final Map<String, List<InfluenceData>>
+                              groupedSources = {};
+                          if (hasGroups) {
+                            for (final item in sortedResults) {
+                              final key = item.sourceQuery.isNotEmpty
+                                  ? item.sourceQuery
+                                  : 'Other';
+                              groupedSources
+                                  .putIfAbsent(key, () => [])
+                                  .add(item);
+                            }
+                          }
+
                           return Container(
                             decoration: BoxDecoration(
                               color: Colors.white,
@@ -646,14 +669,56 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          Text(
-                                            "Sources",
-                                            style: TextStyle(
-                                              fontSize: 22,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.black,
-                                              fontFamily: 'Poppins',
-                                            ),
+                                          Row(
+                                            children: [
+                                              Text(
+                                                "Sources",
+                                                style: TextStyle(
+                                                  fontSize: 22,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.black,
+                                                  fontFamily: 'Poppins',
+                                                ),
+                                              ),
+                                              if (hasGroups) ...[
+                                                SizedBox(width: 8),
+                                                Container(
+                                                  padding: EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 3),
+                                                  decoration: BoxDecoration(
+                                                    color:
+                                                        const Color(0xFFE8D5FF),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            12),
+                                                  ),
+                                                  child: Row(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      Icon(
+                                                        Icons.auto_awesome,
+                                                        size: 12,
+                                                        color: const Color(
+                                                            0xFF8A2BE2),
+                                                      ),
+                                                      SizedBox(width: 4),
+                                                      Text(
+                                                        "Deep Drissy",
+                                                        style: TextStyle(
+                                                          fontSize: 11,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                          color: const Color(
+                                                              0xFF8A2BE2),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+                                            ],
                                           ),
                                           if (verifiedCount > 0)
                                             Text(
@@ -693,212 +758,13 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
                                   constraints: BoxConstraints(
                                     maxHeight:
                                         MediaQuery.of(context).size.height *
-                                            0.52,
+                                            0.60,
                                   ),
-                                  child: ListView.builder(
-                                    shrinkWrap: true,
-                                    padding:
-                                        EdgeInsets.symmetric(vertical: 8),
-                                    itemCount: sortedResults.length,
-                                    itemBuilder: (context, index) {
-                                      final item = sortedResults[index];
-                                      final isLast = index ==
-                                          sortedResults.length - 1;
-                                      return Column(
-                                        children: [
-                                          InkWell(
-                                            onTap: () async {
-                                              if (item.url.isNotEmpty) {
-                                                Navigator.pop(context);
-                                                final uri =
-                                                    Uri.parse(item.url);
-                                                if (!await launchUrl(uri,
-                                                    mode: LaunchMode
-                                                        .externalApplication)) {
-                                                  launchUrl(uri);
-                                                }
-                                              }
-                                            },
-                                            child: Padding(
-                                              padding:
-                                                  EdgeInsets.symmetric(
-                                                      horizontal: 20,
-                                                      vertical: 14),
-                                              child: Row(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  // Source number badge
-                                                  Container(
-                                                    width: 28,
-                                                    height: 28,
-                                                    margin: EdgeInsets.only(
-                                                        right: 12, top: 1),
-                                                    decoration: BoxDecoration(
-                                                      color: item.isVerified
-                                                          ? Colors.green
-                                                              .shade50
-                                                          : Color(0xFF8A2BE2)
-                                                              .withValues(
-                                                                  alpha:
-                                                                      0.08),
-                                                      borderRadius:
-                                                          BorderRadius
-                                                              .circular(8),
-                                                    ),
-                                                    child: Center(
-                                                      child: Text(
-                                                        "${index + 1}",
-                                                        style: TextStyle(
-                                                          fontSize: 12,
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                          color:
-                                                              item.isVerified
-                                                                  ? Colors.green
-                                                                      .shade700
-                                                                  : Color(
-                                                                      0xFF8A2BE2),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  Expanded(
-                                                    child: Column(
-                                                      crossAxisAlignment:
-                                                          CrossAxisAlignment
-                                                              .start,
-                                                      children: [
-                                                        Row(
-                                                          crossAxisAlignment:
-                                                              CrossAxisAlignment
-                                                                  .center,
-                                                          children: [
-                                                            Expanded(
-                                                              child: Text(
-                                                                item.title,
-                                                                maxLines: 2,
-                                                                overflow:
-                                                                    TextOverflow
-                                                                        .ellipsis,
-                                                                style:
-                                                                    TextStyle(
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w600,
-                                                                  fontSize: 14,
-                                                                  color: Colors
-                                                                      .black87,
-                                                                  height: 1.3,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                            if (item
-                                                                .isVerified) ...[
-                                                              SizedBox(
-                                                                  width: 8),
-                                                              Container(
-                                                                padding: EdgeInsets
-                                                                    .symmetric(
-                                                                        horizontal:
-                                                                            6,
-                                                                        vertical:
-                                                                            2),
-                                                                decoration:
-                                                                    BoxDecoration(
-                                                                  color: Colors
-                                                                      .green
-                                                                      .shade50,
-                                                                  borderRadius:
-                                                                      BorderRadius
-                                                                          .circular(
-                                                                              6),
-                                                                  border: Border.all(
-                                                                      color: Colors
-                                                                          .green
-                                                                          .shade300,
-                                                                      width:
-                                                                          1),
-                                                                ),
-                                                                child: Row(
-                                                                  mainAxisSize:
-                                                                      MainAxisSize
-                                                                          .min,
-                                                                  children: [
-                                                                    Icon(
-                                                                      Icons
-                                                                          .verified_rounded,
-                                                                      size: 11,
-                                                                      color: Colors
-                                                                          .green
-                                                                          .shade600,
-                                                                    ),
-                                                                    SizedBox(
-                                                                        width:
-                                                                            3),
-                                                                    Text(
-                                                                      'Verified',
-                                                                      style:
-                                                                          TextStyle(
-                                                                        color: Colors
-                                                                            .green
-                                                                            .shade600,
-                                                                        fontSize:
-                                                                            10,
-                                                                        fontWeight:
-                                                                            FontWeight.w600,
-                                                                      ),
-                                                                    ),
-                                                                  ],
-                                                                ),
-                                                              ),
-                                                            ],
-                                                          ],
-                                                        ),
-                                                        SizedBox(height: 4),
-                                                        Text(
-                                                          item.url,
-                                                          maxLines: 1,
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                          style: TextStyle(
-                                                            color: Color(
-                                                                0xFF8A2BE2),
-                                                            fontSize: 12,
-                                                            decoration:
-                                                                TextDecoration
-                                                                    .underline,
-                                                            decorationColor:
-                                                                Color(
-                                                                    0xFF8A2BE2),
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                  SizedBox(width: 8),
-                                                  Icon(
-                                                    Icons
-                                                        .arrow_outward_rounded,
-                                                    size: 16,
-                                                    color:
-                                                        Colors.grey.shade400,
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                          if (!isLast)
-                                            Divider(
-                                              height: 1,
-                                              indent: 60,
-                                              endIndent: 20,
-                                              color: Colors.grey.shade100,
-                                            ),
-                                        ],
-                                      );
-                                    },
-                                  ),
+                                  child: hasGroups
+                                      ? _buildGroupedSourcesList(
+                                          context, groupedSources)
+                                      : _buildFlatSourcesList(
+                                          context, sortedResults),
                                 ),
                                 SizedBox(
                                   height:
@@ -938,6 +804,277 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
             ],
           ),
         ),
+      ],
+    );
+  }
+
+  /// Builds the flat (non-grouped) sources list - original behavior
+  Widget _buildFlatSourcesList(
+      BuildContext context, List<InfluenceData> sortedResults) {
+    return ListView.builder(
+      shrinkWrap: true,
+      padding: EdgeInsets.symmetric(vertical: 8),
+      itemCount: sortedResults.length,
+      itemBuilder: (context, index) {
+        final item = sortedResults[index];
+        final isLast = index == sortedResults.length - 1;
+        return Column(
+          children: [
+            _buildSourceItem(context, item, index, isLast),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Builds grouped sources list for Deep Drissy mode
+  Widget _buildGroupedSourcesList(
+      BuildContext context, Map<String, List<InfluenceData>> groupedSources) {
+    final queryKeys = groupedSources.keys.toList();
+    int globalIndex = 0;
+
+    return SingleChildScrollView(
+      padding: EdgeInsets.only(top: 4, bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: queryKeys.asMap().entries.map((entry) {
+          final queryIndex = entry.key;
+          final queryText = entry.value;
+          final sources = groupedSources[queryText]!;
+          final isLastGroup = queryIndex == queryKeys.length - 1;
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Query section header
+              Padding(
+                padding: EdgeInsets.fromLTRB(20, queryIndex == 0 ? 12 : 20, 20, 8),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            const Color(0xFF8A2BE2),
+                            const Color(0xFFAB47BC),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(7),
+                      ),
+                      child: Center(
+                        child: Text(
+                          "${queryIndex + 1}",
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        queryText,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                          height: 1.3,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        "${sources.length}",
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Sources for this query
+              ...sources.asMap().entries.map((sourceEntry) {
+                final localIndex = sourceEntry.key;
+                final item = sourceEntry.value;
+                final currentGlobal = globalIndex;
+                globalIndex++;
+                final isLastInGroup = localIndex == sources.length - 1;
+                return Column(
+                  children: [
+                    _buildSourceItem(
+                        context, item, currentGlobal, false),
+                    if (!isLastInGroup)
+                      Divider(
+                        height: 1,
+                        indent: 60,
+                        endIndent: 20,
+                        color: Colors.grey.shade100,
+                      ),
+                  ],
+                );
+              }),
+              // Group separator
+              if (!isLastGroup)
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  child: Divider(
+                    height: 1,
+                    color: Colors.grey.shade200,
+                  ),
+                ),
+            ],
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  /// Builds a single source item row (shared between flat and grouped lists)
+  Widget _buildSourceItem(
+      BuildContext context, InfluenceData item, int index, bool isLast) {
+    return Column(
+      children: [
+        InkWell(
+          onTap: () async {
+            if (item.url.isNotEmpty) {
+              Navigator.pop(context);
+              final uri = Uri.parse(item.url);
+              if (!await launchUrl(uri,
+                  mode: LaunchMode.externalApplication)) {
+                launchUrl(uri);
+              }
+            }
+          },
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Source number badge
+                Container(
+                  width: 28,
+                  height: 28,
+                  margin: EdgeInsets.only(right: 12, top: 1),
+                  decoration: BoxDecoration(
+                    color: item.isVerified
+                        ? Colors.green.shade50
+                        : const Color(0xFF8A2BE2).withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Center(
+                    child: Text(
+                      "${index + 1}",
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: item.isVerified
+                            ? Colors.green.shade700
+                            : const Color(0xFF8A2BE2),
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              item.title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                                color: Colors.black87,
+                                height: 1.3,
+                              ),
+                            ),
+                          ),
+                          if (item.isVerified) ...[
+                            SizedBox(width: 8),
+                            Container(
+                              padding: EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.green.shade50,
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                    color: Colors.green.shade300, width: 1),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.verified_rounded,
+                                    size: 11,
+                                    color: Colors.green.shade600,
+                                  ),
+                                  SizedBox(width: 3),
+                                  Text(
+                                    'Verified',
+                                    style: TextStyle(
+                                      color: Colors.green.shade600,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        item.url,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: const Color(0xFF8A2BE2),
+                          fontSize: 12,
+                          decoration: TextDecoration.underline,
+                          decorationColor: const Color(0xFF8A2BE2),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(width: 8),
+                Icon(
+                  Icons.arrow_outward_rounded,
+                  size: 16,
+                  color: Colors.grey.shade400,
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (!isLast)
+          Divider(
+            height: 1,
+            indent: 60,
+            endIndent: 20,
+            color: Colors.grey.shade100,
+          ),
       ],
     );
   }

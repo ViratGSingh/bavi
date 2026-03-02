@@ -7,6 +7,7 @@ import 'package:bavi/home/widgets/sources_bottom_sheet.dart';
 import 'package:bavi/home/widgets/location_permission_sheet.dart';
 import 'package:bavi/home/widgets/web_view.dart';
 import 'package:bavi/home/widgets/google_search_webview.dart';
+import 'package:bavi/home/widgets/deep_drissy_search_webview.dart';
 import 'package:bavi/models/short_video.dart';
 import 'package:bavi/models/thread.dart';
 import 'package:flutter/services.dart';
@@ -370,6 +371,28 @@ class _HomePageState extends State<HomePage>
             }
           },
           child: BlocListener<HomeBloc, HomeState>(
+            listenWhen: (previous, current) =>
+                previous.deepDrissyWebSearchQueries !=
+                    current.deepDrissyWebSearchQueries &&
+                current.deepDrissyWebSearchQueries != null,
+            listener: (context, state) async {
+              final results =
+                  await Navigator.push<List<ExtractedResultInfo>>(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => DeepDrissySearchWebView(
+                    queries: state.deepDrissyWebSearchQueries!,
+                  ),
+                ),
+              );
+              if (context.mounted) {
+                context.read<HomeBloc>().add(
+                      HomeDeepDrissyWebSearchResultsReceived(
+                          results ?? []),
+                    );
+              }
+            },
+            child: BlocListener<HomeBloc, HomeState>(
             listenWhen: (previous, current) =>
                 previous.showLocationRationale !=
                     current.showLocationRationale &&
@@ -1564,141 +1587,139 @@ class _HomePageState extends State<HomePage>
                                     children: [
                                       Row(
                                         children: [
+                                          // Deep Drissy toggle chip
+                                          GestureDetector(
+                                            onTap: () {
+                                              context
+                                                  .read<HomeBloc>()
+                                                  .add(HomeToggleDeepDrissy());
+                                            },
+                                            child: AnimatedContainer(
+                                              duration: const Duration(
+                                                  milliseconds: 300),
+                                              curve: Curves.easeInOut,
+                                              height: 32,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 12),
+                                              decoration: BoxDecoration(
+                                                color: state.deepDrissyStatus ==
+                                                        HomeDeepDrissyStatus
+                                                            .enabled
+                                                    ? const Color(0xFFE8D5FF)
+                                                    : Colors.grey
+                                                        .withOpacity(0.1),
+                                                borderRadius:
+                                                    BorderRadius.circular(26),
+                                                border: state
+                                                            .deepDrissyStatus ==
+                                                        HomeDeepDrissyStatus
+                                                            .enabled
+                                                    ? Border.all(
+                                                        color: const Color(
+                                                                0xFF8A2BE2)
+                                                            .withOpacity(0.3))
+                                                    : null,
+                                              ),
+                                              child: Row(
+                                                mainAxisSize:
+                                                    MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    Icons.auto_awesome,
+                                                    size: 16,
+                                                    color: state
+                                                                .deepDrissyStatus ==
+                                                            HomeDeepDrissyStatus
+                                                                .enabled
+                                                        ? const Color(
+                                                            0xFF8A2BE2)
+                                                        : Colors.black54,
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  Text(
+                                                    "Deep Drissy",
+                                                    style: TextStyle(
+                                                      color: state
+                                                                  .deepDrissyStatus ==
+                                                              HomeDeepDrissyStatus
+                                                                  .enabled
+                                                          ? const Color(
+                                                              0xFF8A2BE2)
+                                                          : Colors.black54,
+                                                      fontSize: 13,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                          // const SizedBox(width: 8),
+                                          // // Search toggle chip
                                           // GestureDetector(
                                           //   onTap: () {
-                                          //     final homeBloc =
-                                          //         context.read<HomeBloc>();
-                                          //     showModalBottomSheet(
-                                          //       context: context,
-                                          //       backgroundColor:
-                                          //           Colors.transparent,
-                                          //       isScrollControlled: true,
-                                          //       builder: (_) =>
-                                          //           BlocProvider.value(
-                                          //         value: homeBloc,
-                                          //         child: BlocBuilder<HomeBloc,
-                                          //             HomeState>(
-                                          //           builder: (context, state) {
-                                          //             return SourcesBottomSheet(
-                                          //               onImageSelected:
-                                          //                   (image) {
-                                          //                 print(
-                                          //                     "DEBUG: Callback received image (bottom): ${image.path}");
-                                          //                 homeBloc.add(
-                                          //                     HomeImageSelected(
-                                          //                         image,
-                                          //                         imageDescriptionNotifier));
-                                          //               },
-                                          //               onToggleMap: () {
-                                          //                 homeBloc.add(
-                                          //                     HomeToggleMapStatus());
-                                          //               },
-                                          //               onToggleYoutube: () {
-                                          //                 homeBloc.add(
-                                          //                     HomeToggleYoutubeStatus());
-                                          //               },
-                                          //               onToggleInstagram: () {
-                                          //                 homeBloc.add(
-                                          //                     HomeToggleInstagramStatus());
-                                          //               },
-                                          //               isInstagramEnabled: state
-                                          //                       .instagramStatus ==
-                                          //                   HomeInstagramStatus
-                                          //                       .enabled,
-                                          //               isYoutubeEnabled: state
-                                          //                       .youtubeStatus ==
-                                          //                   HomeYoutubeStatus
-                                          //                       .enabled,
-                                          //               isMapEnabled:
-                                          //                   state.mapStatus ==
-                                          //                       HomeMapStatus
-                                          //                           .enabled,
-                                          //             );
-                                          //           },
-                                          //         ),
-                                          //       ),
-                                          //     );
-                                          //   },
-                                          //   child: Container(
-                                          //     width: 32,
-                                          //     height: 32,
-                                          //     decoration: BoxDecoration(
-                                          //       color: Colors.grey
-                                          //           .withOpacity(0.1),
-                                          //       borderRadius:
-                                          //           BorderRadius.circular(
-                                          //         26,
-                                          //       ),
-                                          //       //border: Border.all(color: Color(0xFFB3B4B9)),
-                                          //     ),
-                                          //     child: Icon(
-                                          //       Icons.add,
-                                          //       color: Colors.black,
-                                          //       size: 16,
-                                          //     ),
-                                          //   ),
-                                          // ),
-                                          // SizedBox(width: 12),
-                                          // GestureDetector(
-                                          //   onTap: () {
-                                          //     final homeBloc =
-                                          //         context.read<HomeBloc>();
-                                          //     homeBloc.add(HomeToggleChatMode());
+                                          //     context
+                                          //         .read<HomeBloc>()
+                                          //         .add(
+                                          //             HomeToggleGeneralStatus());
                                           //   },
                                           //   child: AnimatedContainer(
-                                          //     duration:
-                                          //         const Duration(milliseconds: 300),
+                                          //     duration: const Duration(
+                                          //         milliseconds: 300),
                                           //     curve: Curves.easeInOut,
                                           //     height: 32,
-                                          //     padding: EdgeInsets.symmetric(
-                                          //       horizontal:
-                                          //           state.isChatModeActive == false
-                                          //               ? 12
-                                          //               : 8,
-                                          //     ),
+                                          //     padding:
+                                          //         const EdgeInsets.symmetric(
+                                          //             horizontal: 12),
                                           //     decoration: BoxDecoration(
-                                          //       color: state.isChatModeActive ==
-                                          //               false
-                                          //           ? const Color(
-                                          //               0xFFE8D5FF) // Light purple
-                                          //           : Colors.grey.withOpacity(0.1),
+                                          //       color: state.generalStatus ==
+                                          //               HomeGeneralStatus
+                                          //                   .enabled
+                                          //           ? Colors.grey
+                                          //               .withOpacity(0.1)
+                                          //           : Colors.grey
+                                          //               .withOpacity(0.05),
                                           //       borderRadius:
                                           //           BorderRadius.circular(26),
+                                          //       border: state
+                                          //                   .generalStatus ==
+                                          //               HomeGeneralStatus
+                                          //                   .enabled
+                                          //           ? Border.all(
+                                          //               color: Colors.grey
+                                          //                   .withOpacity(0.3))
+                                          //           : null,
                                           //     ),
                                           //     child: Row(
-                                          //       mainAxisSize: MainAxisSize.min,
+                                          //       mainAxisSize:
+                                          //           MainAxisSize.min,
                                           //       children: [
                                           //         Icon(
-                                          //           Iconsax.search_normal_outline,
-                                          //           color: state.isChatModeActive ==
-                                          //                   false
-                                          //               ? const Color(
-                                          //                   0xFF8A2BE2) // Purple
-                                          //               : Colors.black,
+                                          //           Icons.language,
                                           //           size: 16,
+                                          //           color:
+                                          //               state.generalStatus ==
+                                          //                       HomeGeneralStatus
+                                          //                           .enabled
+                                          //                   ? Colors.black
+                                          //                   : Colors.black38,
                                           //         ),
-                                          //         AnimatedSize(
-                                          //           duration: const Duration(
-                                          //               milliseconds: 300),
-                                          //           curve: Curves.easeInOut,
-                                          //           child: state.isChatModeActive ==
-                                          //                   false
-                                          //               ? Padding(
-                                          //                   padding:
-                                          //                       const EdgeInsets
-                                          //                           .only(left: 6),
-                                          //                   child: Text(
-                                          //                     "Search",
-                                          //                     style: TextStyle(
-                                          //                       color: const Color(
-                                          //                           0xFF8A2BE2),
-                                          //                       fontSize: 14,
-                                          //                       fontWeight:
-                                          //                           FontWeight.w600,
-                                          //                     ),
-                                          //                   ),
-                                          //                 )
-                                          //               : const SizedBox.shrink(),
+                                          //         const SizedBox(width: 6),
+                                          //         Text(
+                                          //           "Search",
+                                          //           style: TextStyle(
+                                          //             color: state
+                                          //                         .generalStatus ==
+                                          //                     HomeGeneralStatus
+                                          //                         .enabled
+                                          //                 ? Colors.black
+                                          //                 : Colors.black38,
+                                          //             fontSize: 13,
+                                          //             fontWeight:
+                                          //                 FontWeight.w600,
+                                          //           ),
                                           //         ),
                                           //       ],
                                           //     ),
@@ -1833,21 +1854,43 @@ class _HomePageState extends State<HomePage>
                                                         } else {
                                                           taskTextController
                                                               .text = "";
-                                                          context
-                                                              .read<HomeBloc>()
-                                                              .add(
-                                                                HomeGetAnswer(
-                                                                  taskText,
-                                                                  streamedText,
-                                                                  extractedUrlDescription,
-                                                                  extractedUrlTitle,
-                                                                  extractedUrl,
-                                                                  extractedImageUrl,
-                                                                  imageDescriptionNotifier
-                                                                      .value,
-                                                                  imageDescriptionNotifier,
-                                                                ),
-                                                              );
+                                                          if (state.deepDrissyStatus ==
+                                                              HomeDeepDrissyStatus
+                                                                  .enabled) {
+                                                            context
+                                                                .read<
+                                                                    HomeBloc>()
+                                                                .add(
+                                                                  HomeDeepDrissyGetAnswer(
+                                                                    taskText,
+                                                                    streamedText,
+                                                                    extractedUrlDescription,
+                                                                    extractedUrlTitle,
+                                                                    extractedUrl,
+                                                                    extractedImageUrl,
+                                                                    imageDescriptionNotifier
+                                                                        .value,
+                                                                    imageDescriptionNotifier,
+                                                                  ),
+                                                                );
+                                                          } else {
+                                                            context
+                                                                .read<
+                                                                    HomeBloc>()
+                                                                .add(
+                                                                  HomeGetAnswer(
+                                                                    taskText,
+                                                                    streamedText,
+                                                                    extractedUrlDescription,
+                                                                    extractedUrlTitle,
+                                                                    extractedUrl,
+                                                                    extractedImageUrl,
+                                                                    imageDescriptionNotifier
+                                                                        .value,
+                                                                    imageDescriptionNotifier,
+                                                                  ),
+                                                                );
+                                                          }
                                                         }
                                                         setState(() {
                                                           isTaskValid = false;
@@ -2266,6 +2309,12 @@ class _HomePageState extends State<HomePage>
                                                               extractedUrlData:
                                                                   result
                                                                       .extractedUrlData,
+                                                              deepDrissyReadingStatus:
+                                                                  state.loadingIndex ==
+                                                                          index
+                                                                      ? state
+                                                                          .deepDrissyReadingStatus
+                                                                      : null,
                                                             );
                                                           }),
                                                   if (index <
@@ -2293,6 +2342,7 @@ class _HomePageState extends State<HomePage>
               );
             }),
           ), // Close inner BlocListener for location
+        ), // Close BlocListener for deepDrissyWebSearchQueries
         ), // Close BlocListener for webSearchQuery
       ), // Close outer BlocListener for OCR
     );

@@ -599,6 +599,7 @@ class InfluenceData extends Equatable {
   final String title;
   final double similarity;
   final bool isVerified;
+  final String sourceQuery;
 
   const InfluenceData({
     required this.url,
@@ -606,6 +607,7 @@ class InfluenceData extends Equatable {
     required this.title,
     required this.similarity,
     this.isVerified = false,
+    this.sourceQuery = '',
   });
 
   factory InfluenceData.fromJson(Map<String, dynamic> json) => InfluenceData(
@@ -616,6 +618,7 @@ class InfluenceData extends Equatable {
             ? (json['similarity'] as int).toDouble()
             : (json['similarity'] ?? 0.0),
         isVerified: json['isVerified'] as bool? ?? false,
+        sourceQuery: json['sourceQuery'] ?? '',
       );
 
   Map<String, dynamic> toJson() => {
@@ -624,10 +627,12 @@ class InfluenceData extends Equatable {
         'title': title,
         'similarity': similarity,
         'isVerified': isVerified,
+        'sourceQuery': sourceQuery,
       };
 
   @override
-  List<Object> get props => [url, snippet, title, similarity, isVerified];
+  List<Object> get props =>
+      [url, snippet, title, similarity, isVerified, sourceQuery];
 }
 
 class ThreadSessionData extends Equatable {

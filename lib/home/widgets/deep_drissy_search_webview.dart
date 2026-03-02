@@ -5,16 +5,17 @@ import 'package:bavi/models/short_video.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
-class GoogleSearchWebView extends StatefulWidget {
-  final String query;
+class DeepDrissySearchWebView extends StatefulWidget {
+  final List<String> queries;
 
-  const GoogleSearchWebView({required this.query, super.key});
+  const DeepDrissySearchWebView({required this.queries, super.key});
 
   @override
-  State<GoogleSearchWebView> createState() => _GoogleSearchWebViewState();
+  State<DeepDrissySearchWebView> createState() =>
+      _DeepDrissySearchWebViewState();
 }
 
-class _GoogleSearchWebViewState extends State<GoogleSearchWebView>
+class _DeepDrissySearchWebViewState extends State<DeepDrissySearchWebView>
     with TickerProviderStateMixin {
   InAppWebViewController? _controller;
   bool _isExtracting = false;
@@ -25,14 +26,20 @@ class _GoogleSearchWebViewState extends State<GoogleSearchWebView>
   String _statusText = 'Searching...';
   int _resultCount = 0;
 
+  int _currentQueryIndex = 0;
+  final List<ExtractedResultInfo> _allResults = [];
+  final Set<String> _seenUrls = {};
+
   late AnimationController _gradientController;
   late Animation<double> _gradientAnimation;
 
   @override
   void initState() {
     super.initState();
-    _timeoutTimer = Timer(const Duration(seconds: 30), () {
-      _popWithResults([]);
+    // Longer timeout for multiple queries
+    _timeoutTimer = Timer(
+        Duration(seconds: 30 + (widget.queries.length * 15)), () {
+      _popWithResults(_allResults);
     });
 
     _gradientController = AnimationController(
@@ -67,7 +74,6 @@ class _GoogleSearchWebViewState extends State<GoogleSearchWebView>
     Navigator.pop(context, results);
   }
 
-  /// Detect if the current page is a CAPTCHA/consent page rather than results.
   Future<bool> _isCaptchaOrConsentPage() async {
     if (_controller == null) return false;
     final check = await _controller!.evaluateJavascript(source: '''
@@ -85,20 +91,16 @@ class _GoogleSearchWebViewState extends State<GoogleSearchWebView>
     return result == 'captcha' || result == 'consent';
   }
 
-  /// Scroll down to find and reveal the last organic result, then stop
   Future<void> _scrollToLastOrganicResult() async {
     if (_controller == null) return;
 
-    // First find how many organic results exist and scroll to the last one
-    // Use smooth scrollBy in steps until we reach the bottom of organic results
-    _updateStatus('Scanning results...');
+    _updateStatus(
+        'Scanning results... (${_currentQueryIndex + 1}/${widget.queries.length})');
 
-    // Scroll down step by step, checking for organic results along the way
     int lastKnownCount = 0;
     int stableRounds = 0;
 
     for (int step = 0; step < 12; step++) {
-      // Count organic results currently visible
       final countResult = await _controller!.evaluateJavascript(source: '''
 (function() {
   var items = document.querySelectorAll('#rso .g h3, #search .g h3');
@@ -109,13 +111,13 @@ class _GoogleSearchWebViewState extends State<GoogleSearchWebView>
           int.tryParse(countResult?.toString() ?? '0') ?? 0;
 
       if (currentCount > 0) {
-        _updateStatus('Found $currentCount results...');
+        _updateStatus(
+            'Found $currentCount results (${_currentQueryIndex + 1}/${widget.queries.length})');
         setState(() {
-          _resultCount = currentCount;
+          _resultCount = _allResults.length + currentCount;
         });
       }
 
-      // If count stopped growing, we've seen all organic results
       if (currentCount == lastKnownCount && currentCount > 0) {
         stableRounds++;
         if (stableRounds >= 2) break;
@@ -124,7 +126,6 @@ class _GoogleSearchWebViewState extends State<GoogleSearchWebView>
       }
       lastKnownCount = currentCount;
 
-      // Scroll to the last organic result found so far
       await _controller!.evaluateJavascript(source: '''
 (function() {
   var items = document.querySelectorAll('#rso .g h3, #search .g h3');
@@ -333,80 +334,130 @@ class _GoogleSearchWebViewState extends State<GoogleSearchWebView>
     if (_isExtracting || _controller == null) return;
     _isExtracting = true;
 
-    // Small random delay to appear more natural
     await Future.delayed(
         Duration(milliseconds: 1500 + Random().nextInt(1000)));
 
-    // Check if we landed on a CAPTCHA page
     if (await _isCaptchaOrConsentPage()) {
-      print('GoogleSearchWebView: CAPTCHA detected, letting user solve it');
+      print(
+          'DeepDrissySearchWebView: CAPTCHA detected, letting user solve it');
       _isExtracting = false;
       setState(() {
         _showCaptchaPrompt = true;
       });
-      // Extend timeout to give user time to solve CAPTCHA
       _timeoutTimer?.cancel();
       _timeoutTimer = Timer(const Duration(seconds: 60), () {
-        _popWithResults([]);
+        _popWithResults(_allResults);
       });
       return;
     }
 
     try {
-      _updateStatus('Reading page...');
+      _updateStatus(
+          'Reading page... (${_currentQueryIndex + 1}/${widget.queries.length})');
 
-      // First extraction pass
       var allResults = await _extractResultsFromPage();
-      setState(() {
-        _resultCount = allResults.length;
-      });
-      _updateStatus('Found ${allResults.length} results');
+      _updateStatus(
+          'Found ${allResults.length} results (${_currentQueryIndex + 1}/${widget.queries.length})');
 
-      // Scroll through organic results so user sees them loading
       await _scrollToLastOrganicResult();
 
-      // Re-extract after scrolling to pick up any lazy-loaded results
       await Future.delayed(const Duration(milliseconds: 500));
-      _updateStatus('Extracting results...');
+      _updateStatus(
+          'Extracting results... (${_currentQueryIndex + 1}/${widget.queries.length})');
 
       final moreResults = await _extractResultsFromPage();
 
-      // Merge results, dedup by URL
-      final seenUrls = <String>{};
+      // Merge results from this page, dedup by URL
       final mergedResults = <ExtractedResultInfo>[];
+      final localSeen = <String>{};
       for (final r in [...allResults, ...moreResults]) {
-        if (!seenUrls.contains(r.url)) {
-          seenUrls.add(r.url);
+        if (!localSeen.contains(r.url)) {
+          localSeen.add(r.url);
           mergedResults.add(r);
         }
       }
       allResults = mergedResults;
 
-      // Take up to 15
       if (allResults.length > 15) {
         allResults = allResults.sublist(0, 15);
       }
 
+      // Add to global results, dedup across queries, tag with source query
+      final currentQuery = widget.queries[_currentQueryIndex];
+      for (final r in allResults) {
+        if (!_seenUrls.contains(r.url)) {
+          _seenUrls.add(r.url);
+          _allResults.add(ExtractedResultInfo(
+            url: r.url,
+            title: r.title,
+            excerpts: r.excerpts,
+            thumbnailUrl: r.thumbnailUrl,
+            isVerified: r.isVerified,
+            sourceQuery: currentQuery,
+          ));
+        }
+      }
+
       setState(() {
-        _resultCount = allResults.length;
+        _resultCount = _allResults.length;
       });
-      _updateStatus('Got ${allResults.length} results');
 
       print(
-          'GoogleSearchWebView: Extracted ${allResults.length} results');
+          'DeepDrissySearchWebView: Query ${_currentQueryIndex + 1}/${widget.queries.length} extracted ${allResults.length} results, total: ${_allResults.length}');
 
-      await Future.delayed(const Duration(milliseconds: 400));
-      _popWithResults(allResults);
+      // Move to next query or finish
+      _currentQueryIndex++;
+      if (_currentQueryIndex < widget.queries.length) {
+        _isExtracting = false;
+        _updateStatus(
+            'Searching ${_currentQueryIndex + 1}/${widget.queries.length}...');
+        await Future.delayed(
+            Duration(milliseconds: 1000 + Random().nextInt(500)));
+        _loadNextQuery();
+      } else {
+        _updateStatus('Got ${_allResults.length} total results');
+        await Future.delayed(const Duration(milliseconds: 400));
+        _popWithResults(_allResults);
+      }
     } catch (e) {
-      print('GoogleSearchWebView: Error extracting results: $e');
-      _popWithResults([]);
+      print('DeepDrissySearchWebView: Error extracting results: $e');
+      // On error, try next query or return what we have
+      _currentQueryIndex++;
+      if (_currentQueryIndex < widget.queries.length) {
+        _isExtracting = false;
+        _loadNextQuery();
+      } else {
+        _popWithResults(_allResults);
+      }
     }
+  }
+
+  void _loadNextQuery() {
+    if (_controller == null || _currentQueryIndex >= widget.queries.length) {
+      return;
+    }
+    final encodedQuery =
+        Uri.encodeComponent(widget.queries[_currentQueryIndex]);
+    final searchUrl =
+        'https://www.google.com/search?q=$encodedQuery&num=15';
+    _controller!.loadUrl(
+      urlRequest: URLRequest(
+        url: WebUri(searchUrl),
+        headers: {
+          'Accept':
+              'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final encodedQuery = Uri.encodeComponent(widget.query);
-    final searchUrl = 'https://www.google.com/search?q=$encodedQuery&num=15';
+    final encodedQuery =
+        Uri.encodeComponent(widget.queries.first);
+    final searchUrl =
+        'https://www.google.com/search?q=$encodedQuery&num=15';
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
 
@@ -418,7 +469,7 @@ class _GoogleSearchWebViewState extends State<GoogleSearchWebView>
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.close, color: Colors.white70),
-          onPressed: () => _popWithResults([]),
+          onPressed: () => _popWithResults(_allResults),
         ),
         title: Column(
           children: [
@@ -449,8 +500,8 @@ class _GoogleSearchWebViewState extends State<GoogleSearchWebView>
                 child: LinearProgressIndicator(
                   value: _progress,
                   backgroundColor: Colors.white.withValues(alpha: 0.15),
-                  valueColor: const AlwaysStoppedAnimation<Color>(
-                      Colors.white),
+                  valueColor:
+                      const AlwaysStoppedAnimation<Color>(Colors.white),
                 ),
               )
             : null,
@@ -459,7 +510,6 @@ class _GoogleSearchWebViewState extends State<GoogleSearchWebView>
         animation: _gradientAnimation,
         builder: (context, child) {
           final t = _gradientAnimation.value;
-          // Flowing gradient alignment that moves over time
           final beginX = cos(t);
           final beginY = sin(t);
           final endX = cos(t + pi);
@@ -470,18 +520,17 @@ class _GoogleSearchWebViewState extends State<GoogleSearchWebView>
                 begin: Alignment(beginX, beginY),
                 end: Alignment(endX, endY),
                 colors: const [
-                  Color(0xFF6A1B9A), // deep purple
-                  Color(0xFF8A2BE2), // main purple
-                  Color(0xFFAB47BC), // lighter purple
-                  Color(0xFF7B1FA2), // medium purple
-                  Color(0xFF8A2BE2), // main purple
+                  Color(0xFF6A1B9A),
+                  Color(0xFF8A2BE2),
+                  Color(0xFFAB47BC),
+                  Color(0xFF7B1FA2),
+                  Color(0xFF8A2BE2),
                 ],
                 stops: const [0.0, 0.25, 0.5, 0.75, 1.0],
               ),
             ),
             child: Stack(
               children: [
-                // Secondary glow layer for depth
                 Container(
                   decoration: BoxDecoration(
                     gradient: RadialGradient(
@@ -497,7 +546,6 @@ class _GoogleSearchWebViewState extends State<GoogleSearchWebView>
                     ),
                   ),
                 ),
-                // Subtle second glow moving opposite
                 Container(
                   decoration: BoxDecoration(
                     gradient: RadialGradient(
@@ -513,7 +561,6 @@ class _GoogleSearchWebViewState extends State<GoogleSearchWebView>
                     ),
                   ),
                 ),
-                // Centered webview at 80% size
                 Center(
                   child: Container(
                     width: screenWidth * 0.80,
@@ -590,15 +637,11 @@ class _GoogleSearchWebViewState extends State<GoogleSearchWebView>
       initialSettings: InAppWebViewSettings(
         javaScriptEnabled: true,
         domStorageEnabled: true,
-        // Use the native WebView user agent — matches the TLS fingerprint
-        // so Google won't flag a UA/TLS mismatch.
         userAgent: '',
         mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
-        // Persist cookies & data across sessions so Google sees a returning visitor
         cacheEnabled: true,
         clearCache: false,
         thirdPartyCookiesEnabled: true,
-        // Disable media autoplay to reduce resource usage
         mediaPlaybackRequiresUserGesture: true,
       ),
       onWebViewCreated: (controller) {
@@ -609,14 +652,13 @@ class _GoogleSearchWebViewState extends State<GoogleSearchWebView>
           _progress = progress / 100;
         });
         if (progress > 30 && progress < 90) {
-          _updateStatus('Loading page...');
+          _updateStatus(
+              'Loading page... (${_currentQueryIndex + 1}/${widget.queries.length})');
         }
       },
       onLoadStop: (controller, url) async {
-        // If user solved the CAPTCHA and we navigated to a results page, extract
         final currentUrl = url?.toString() ?? '';
         if (_showCaptchaPrompt) {
-          // Check if we're past the CAPTCHA now
           if (currentUrl.contains('/search?') &&
               !(await _isCaptchaOrConsentPage())) {
             setState(() {
@@ -627,12 +669,21 @@ class _GoogleSearchWebViewState extends State<GoogleSearchWebView>
           }
           return;
         }
-        _updateStatus('Page loaded, extracting...');
+        _updateStatus(
+            'Page loaded, extracting... (${_currentQueryIndex + 1}/${widget.queries.length})');
         await _extractResults();
       },
       onReceivedError: (controller, request, error) {
-        print('GoogleSearchWebView: Load error: ${error.description}');
-        _popWithResults([]);
+        print(
+            'DeepDrissySearchWebView: Load error: ${error.description}');
+        // On error, try next query or return what we have
+        _currentQueryIndex++;
+        if (_currentQueryIndex < widget.queries.length) {
+          _isExtracting = false;
+          _loadNextQuery();
+        } else {
+          _popWithResults(_allResults);
+        }
       },
     );
   }

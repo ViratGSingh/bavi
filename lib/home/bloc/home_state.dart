@@ -52,6 +52,8 @@ enum HomeInstagramStatus { enabled, disabled }
 
 enum HomeSpicyStatus { enabled, disabled }
 
+enum HomeDeepDrissyStatus { enabled, disabled }
+
 enum HomeImageStatus { selected, unselected }
 
 enum HomeHistoryStatus { loading, idle }
@@ -108,6 +110,9 @@ final class HomeState extends Equatable {
     this.userCountry = "",
     this.userCountryCode = "",
     this.webSearchQuery,
+    this.deepDrissyStatus = HomeDeepDrissyStatus.disabled,
+    this.deepDrissyWebSearchQueries,
+    this.deepDrissyReadingStatus,
   })  : userData = userData ??
             UserProfileInfo(
               email: "NA",
@@ -173,6 +178,9 @@ final class HomeState extends Equatable {
   final String userCountry;
   final String userCountryCode;
   final String? webSearchQuery;
+  final HomeDeepDrissyStatus deepDrissyStatus;
+  final List<String>? deepDrissyWebSearchQueries;
+  final String? deepDrissyReadingStatus;
 
   HomeState copyWith({
     String? sessionId,
@@ -213,6 +221,9 @@ final class HomeState extends Equatable {
     String? userCountry,
     String? userCountryCode,
     Object? webSearchQuery = _sentinel,
+    HomeDeepDrissyStatus? deepDrissyStatus,
+    Object? deepDrissyWebSearchQueries = _sentinel,
+    Object? deepDrissyReadingStatus = _sentinel,
   }) {
     return HomeState(
       editQuery: editQuery ?? this.editQuery,
@@ -260,6 +271,13 @@ final class HomeState extends Equatable {
       webSearchQuery: webSearchQuery == _sentinel
           ? this.webSearchQuery
           : webSearchQuery as String?,
+      deepDrissyStatus: deepDrissyStatus ?? this.deepDrissyStatus,
+      deepDrissyWebSearchQueries: deepDrissyWebSearchQueries == _sentinel
+          ? this.deepDrissyWebSearchQueries
+          : deepDrissyWebSearchQueries as List<String>?,
+      deepDrissyReadingStatus: deepDrissyReadingStatus == _sentinel
+          ? this.deepDrissyReadingStatus
+          : deepDrissyReadingStatus as String?,
     );
   }
 
@@ -302,5 +320,8 @@ final class HomeState extends Equatable {
         userCountry,
         userCountryCode,
         webSearchQuery,
+        deepDrissyStatus,
+        deepDrissyWebSearchQueries,
+        deepDrissyReadingStatus,
       ];
 }

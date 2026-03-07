@@ -2225,17 +2225,12 @@ class _HomePageState extends State<HomePage>
                                                                   (url) async {
                                                                 if (url
                                                                     .isNotEmpty) {
-                                                                  // Open in external browser
-                                                                  final uri =
-                                                                      Uri.parse(
-                                                                          url);
-                                                                  if (!await launchUrl(
-                                                                      uri,
-                                                                      mode: LaunchMode
-                                                                          .externalApplication)) {
-                                                                    launchUrl(
-                                                                        uri);
-                                                                  }
+                                                                  Navigator.push(
+                                                                      context,
+                                                                      MaterialPageRoute(
+                                                                        builder: (context) =>
+                                                                            WebViewPage(url: url),
+                                                                      ));
                                                                 }
                                                               },
                                                               answerResults:

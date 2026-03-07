@@ -14,7 +14,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:icons_plus/icons_plus.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:bavi/home/widgets/web_view.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 class ThreadAnswerView extends StatefulWidget {
@@ -953,11 +953,9 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
           onTap: () async {
             if (item.url.isNotEmpty) {
               Navigator.pop(context);
-              final uri = Uri.parse(item.url);
-              if (!await launchUrl(uri,
-                  mode: LaunchMode.externalApplication)) {
-                launchUrl(uri);
-              }
+              Navigator.push(context, MaterialPageRoute(
+                builder: (context) => WebViewPage(url: item.url),
+              ));
             }
           },
           child: Padding(
@@ -1188,12 +1186,11 @@ class _PlaceCardState extends State<PlaceCard> {
       onTap: () async {
         final query = Uri.encodeComponent(
             "${widget.place.title} ${widget.place.address}");
-        final url = Uri.parse(
-            "https://www.google.com/maps/search/?api=1&query=$query&query_place_id=${widget.place.placeId}");
-        if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-          // fallback to browser if external app fails (though externalApplication usually handles both)
-          launchUrl(url);
-        }
+        final mapUrl =
+            "https://www.google.com/maps/search/?api=1&query=$query&query_place_id=${widget.place.placeId}";
+        Navigator.push(context, MaterialPageRoute(
+          builder: (context) => WebViewPage(url: mapUrl),
+        ));
       },
       child: Container(
         decoration: BoxDecoration(
@@ -1380,9 +1377,9 @@ class InstagramVideoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () async {
-        // Open Instagram reel in external app
-        final url = Uri.parse(video.link);
-        await launchUrl(url, mode: LaunchMode.externalApplication);
+        Navigator.push(context, MaterialPageRoute(
+          builder: (context) => WebViewPage(url: video.link),
+        ));
       },
       child: Container(
         margin: const EdgeInsets.only(right: 12),

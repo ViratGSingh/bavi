@@ -5134,16 +5134,36 @@ Current query to rewrite: $query
 
 Rewrite this query to be self-contained:""";
 
+    String modelName;
+    switch (state.selectedModel) {
+      case HomeModel.deepseek:
+        modelName = "deepseek/deepseek-v3";
+        break;
+      case HomeModel.gemini:
+        modelName = "google/gemini-2.5-flash";
+        break;
+      case HomeModel.claude:
+        modelName = "anthropic/claude-haiku-4.5";
+        break;
+      case HomeModel.openAI:
+        modelName = "openai/gpt-5-nano";
+        break;
+      case HomeModel.flashThink:
+        modelName = "google/gemini-2.0-flash-thinking-exp";
+        break;
+    }
+
     try {
-      final url = Uri.parse("https://api.sarvam.ai/v1/chat/completions");
+      final url =
+          Uri.parse("https://ai-gateway.vercel.sh/v1/chat/completions");
       final response = await http.post(
         url,
         headers: {
           "Content-Type": "application/json",
-          "Authorization": "Bearer ${dotenv.get("SARVAM_API_KEY")}",
+          "Authorization": "Bearer ${dotenv.get("AI_GATEWAY_API_KEY")}",
         },
         body: jsonEncode({
-          "model": "sarvam-m",
+          "model": modelName,
           "stream": false,
           "max_tokens": 300,
           "temperature": 0.1,
@@ -5359,24 +5379,8 @@ Don't reveal any personal information you have in your context unless asked abou
 """;
 
     // Step 4: Determine Model
-    String modelName;
-    switch (state.selectedModel) {
-      case HomeModel.deepseek:
-        modelName = "deepseek/deepseek-v3";
-        break;
-      case HomeModel.gemini:
-        modelName = "google/gemini-2.5-flash";
-        break;
-      case HomeModel.claude:
-        modelName = "anthropic/claude-haiku-4.5";
-        break;
-      case HomeModel.openAI:
-        modelName = "openai/gpt-5-nano";
-        break;
-      case HomeModel.flashThink:
-        modelName = "google/gemini-2.0-flash-thinking-exp";
-        break;
-    }
+    String modelName = "deepseek/deepseek-v3";
+     
 
     // Step 5: Make the streaming API request to Vercel AI SDK Gateway
     // Correct Vercel AI Gateway URL found via search.

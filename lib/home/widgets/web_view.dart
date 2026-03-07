@@ -1,4 +1,5 @@
 import 'package:bavi/home/view/home_page.dart';
+import 'package:bavi/home/widgets/tabs_view.dart';
 import 'package:bavi/models/ad_blockers/yt_ad_blocker.dart';
 import 'package:bavi/models/ad_blockers/gen_ad_blocker.dart';
 import 'package:drift/drift.dart' hide Column;
@@ -15,7 +16,7 @@ import 'dart:io';
 import 'dart:async';
 import 'package:path_provider/path_provider.dart';
 import 'package:bavi/app_database.dart';
-import 'package:url_launcher/url_launcher.dart'; // your Drift database file
+import 'package:url_launcher/url_launcher.dart';
 
 class WebViewPage extends StatefulWidget {
   final String url;
@@ -40,16 +41,16 @@ class WebViewPage extends StatefulWidget {
 
 class _WebViewPageState extends State<WebViewPage> {
   late InAppWebViewController _controller;
-  late PullToRefreshController _pullToRefreshController; // ✅ add this
+  late PullToRefreshController _pullToRefreshController;
   bool isLoading = true;
   double progress = 0.0;
-  late AppDatabase db; // Drift database instance
+  late AppDatabase db;
   Timer? _saveTimer;
   String? _currentTabId;
 
-  // Add these to your State class
   DateTime? _lastUserInteraction;
   bool _canGoForward = false;
+  String _currentUrl = '';
 
   @override
   void initState() {
@@ -62,10 +63,6 @@ class _WebViewPageState extends State<WebViewPage> {
           color: const Color(0xFFDFFF00)),
       onRefresh: () async {
         await _controller.reload();
-        //final url = await _controller.getUrl();
-        // if (widget.isIncognito != true) {
-        //   await _saveTabWithScreenshot(url?.toString() ?? widget.url);
-        // }
         _pullToRefreshController.endRefreshing();
       },
     );
@@ -93,103 +90,90 @@ class _WebViewPageState extends State<WebViewPage> {
     }
   }
 
+  Widget _navIconButton({
+    required IconData icon,
+    double size = 18,
+    Color? color,
+    VoidCallback? onPressed,
+  }) {
+    return SizedBox(
+      width: 36,
+      height: 36,
+      child: IconButton(
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(),
+        icon: Icon(icon, size: size, color: color ?? Colors.black87),
+        onPressed: onPressed,
+      ),
+    );
+  }
+
+  String _ensureHttps(String url) {
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) return 'https://www.google.com';
+    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+      return 'https://$trimmed';
+    }
+    return trimmed;
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_currentUrl.isEmpty) _currentUrl = _ensureHttps(widget.url);
     return SafeArea(
       child: Scaffold(
-        bottomSheet: Container(
-          //height: 240,
-          //constraints: BoxConstraints(maxHeight: 100, minHeight: 100),
-
-          decoration: BoxDecoration(
-            color: const Color(0xFFF2F2F2),
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(24),
-              topRight: Radius.circular(24),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 10,
-                offset: const Offset(0, -2),
-              ),
-            ],
-          ),
-          width: MediaQuery.of(context).size.width,
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.start,
-            children: [
-              // Top Navigation Bar
-              Container(
-                height: 52,
-                decoration: BoxDecoration(
-                  color: Colors.grey.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(16),
+        backgroundColor: Colors.white,
+        body: Column(
+          children: [
+            // Compact URL / Navigation Bar
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFFF9F9F9),
+                border: Border(
+                  bottom: BorderSide(
+                    color: Colors.grey.withOpacity(0.2),
+                    width: 0.5,
+                  ),
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(
-                        Icons.arrow_back_ios_new,
-                        size: 18,
-                        color: Colors.black87,
-                      ),
-                      onPressed: () async {
-                        _lastUserInteraction = DateTime.now();
-                        if (await _controller.canGoBack()) {
-                          await _controller.goBack();
-                          await _updateNavigationState();
-                        } else {
-                          // No history - close the WebView page
-                          Navigator.pop(context);
-                        }
-                      },
-                    ),
-                    IconButton(
-                      icon: Icon(
-                        Icons.arrow_forward_ios,
-                        size: 18,
-                        color: _canGoForward
-                            ? Colors.black87
-                            : Colors.grey.withOpacity(0.3),
-                      ),
-                      onPressed: _canGoForward
-                          ? () async {
-                              _lastUserInteraction = DateTime.now();
-                              await _controller.goForward();
-                              await _updateNavigationState();
-                            }
-                          : null,
-                    ),
-                    Expanded(
-                      child: Center(
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                getDomainFromUrl(widget.url) ?? 'website.com',
-                                style: const TextStyle(
-                                  color: Colors.black87,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Iconsax.link_2_outline,
-                          size: 20, color: Colors.black87),
-                      onPressed: () async {
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+              child: Row(
+                children: [
+                  _navIconButton(
+                    icon: Icons.arrow_back_ios_new_rounded,
+                    size: 17,
+                    onPressed: () async {
+                      _lastUserInteraction = DateTime.now();
+                      if (await _controller.canGoBack()) {
+                        await _controller.goBack();
+                        await _updateNavigationState();
+                      } else {
+                        Navigator.pop(context);
+                      }
+                    },
+                  ),
+                  _navIconButton(
+                    icon: Icons.arrow_forward_ios_rounded,
+                    size: 17,
+                    color: _canGoForward
+                        ? Colors.black87
+                        : Colors.grey.withOpacity(0.3),
+                    onPressed: _canGoForward
+                        ? () async {
+                            _lastUserInteraction = DateTime.now();
+                            await _controller.goForward();
+                            await _updateNavigationState();
+                          }
+                        : null,
+                  ),
+                  const SizedBox(width: 2),
+                  // URL pill
+                  Expanded(
+                    child: GestureDetector(
+                      onLongPress: () async {
                         final currentUrl = await _controller.getUrl();
-                        final urlToCopy = currentUrl?.toString() ?? widget.url;
+                        final urlToCopy =
+                            currentUrl?.toString() ?? widget.url;
                         Clipboard.setData(ClipboardData(text: urlToCopy));
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
@@ -197,265 +181,154 @@ class _WebViewPageState extends State<WebViewPage> {
                               duration: Duration(seconds: 1)),
                         );
                       },
+                      child: Container(
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        alignment: Alignment.center,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.lock_outline_rounded,
+                              size: 12,
+                              color: Colors.grey.shade600,
+                            ),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                getDomainFromUrl(_currentUrl) ?? 'website.com',
+                                style: TextStyle(
+                                  color: Colors.grey.shade700,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  fontFamily: 'Poppins',
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                    IconButton(
-                      icon: const Icon(Iconsax.refresh_outline,
-                          size: 20, color: Colors.black87),
-                      onPressed: () async {
-                        await _controller.reload();
-                        await _updateNavigationState();
-                      },
-                    ),
-                  ],
+                  ),
+                  const SizedBox(width: 2),
+                  _navIconButton(
+                    icon: Iconsax.refresh_outline,
+                    size: 18,
+                    onPressed: () async {
+                      await _controller.reload();
+                      await _updateNavigationState();
+                    },
+                  ),
+                  _navIconButton(
+                    icon: Iconsax.export_outline,
+                    size: 18,
+                    onPressed: () async {
+                      final currentUrl = await _controller.getUrl();
+                      Share.share(currentUrl?.toString() ?? widget.url);
+                    },
+                  ),
+                ],
+              ),
+            ),
+            // Progress bar
+            if (progress < 1.0)
+              LinearProgressIndicator(
+                value: progress,
+                color: const Color(0xFF8A2BE2),
+                backgroundColor: Colors.transparent,
+                minHeight: 2,
+              ),
+            // WebView content
+            Expanded(
+              child: InAppWebView(
+                initialUrlRequest: URLRequest(
+                  url: WebUri(_ensureHttps(widget.url)),
+                  headers: {
+                    'User-Agent':
+                        'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
+                  },
                 ),
-              ),
-              // const Spacer(),
-              // // Action Buttons Grid
-              // Row(
-              //   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              //   crossAxisAlignment: CrossAxisAlignment.start,
-              //   children: [
-              //     _buildActionButton(
-              //         Iconsax.search_normal_1_outline, "Find on Page", () {
-              //       // TODO: Implement find on page
-              //     }),
-              //     _buildActionButton(Iconsax.note_text_outline, "Summarize",
-              //         () {
-              //       // TODO: Implement summarize
-              //     }),
-              //     _buildActionButton(Iconsax.paintbucket_outline, "Pin", () {
-              //       // TODO: Implement pin
-              //     }),
-              //     _buildActionButton(Iconsax.export_outline, "Share", () {
-              //       Share.share(widget.url);
-              //     }),
-              //   ],
-              // ),
-              //const SizedBox(height: 8),
-            ],
-          ),
-        ),
-        // appBar: widget.showAppBar
-        //     ? AppBar(
-        //         titleSpacing: 0,
-        //         backgroundColor: Colors.white,
-        //         surfaceTintColor: Colors.white,
-        //         elevation: 4,
-        //         shadowColor: Colors.black.withOpacity(0.2),
-        //         leadingWidth: 40,
-        //         centerTitle: true,
-        //         //state.status == HomePageStatus.idle ? true : false,
-        //         leading: Padding(
-        //           padding: const EdgeInsets.only(left: 0),
-        //           child: InkWell(
-        //             onTap: () {
-        //               if (widget.isInitial == null ||
-        //                   widget.isInitial == false) {
-        //                 Navigator.pop(context);
-        //               } else {
-        //                 Navigator.push(
-        //                   context,
-        //                   MaterialPageRoute<void>(
-        //                     builder: (BuildContext context) => const HomePage(),
-        //                   ),
-        //                   //ModalRoute.withName('/home'),
-        //                 );
-        //               }
-        //             },
-        //             child: Container(
-        //               width: 32,
-        //               height: 32,
-        //               decoration: BoxDecoration(
-        //                 //color: Color(0xFFDFFF00),
-        //                 shape: BoxShape.circle,
-        //                 //border: Border.all()
-        //               ),
-        //               padding: EdgeInsets.fromLTRB(1, 0, 2, 0),
-        //               child: Center(
-        //                 child: Icon(
-        //                   Icons.arrow_back_ios,
-        //                   color: Colors.black,
-        //                   size: 20,
-        //                 ),
-        //               ),
-        //             ),
-        //           ),
-        //         ),
+                shouldInterceptRequest: (controller, request) async {
+                  try {
+                    final requestUrl = request.url.toString();
+                    final requestHost = request.url.host.toLowerCase();
 
-        //         title: Text(
-        //           getDomainFromUrl(widget.url) ?? 'Web View',
-        //           style: const TextStyle(
-        //             fontSize: 16,
-        //             fontWeight: FontWeight.bold,
-        //             color: Colors.black,
-        //           ),
-        //         ),
-        //         actions: [
-        //           Padding(
-        //             padding: const EdgeInsets.only(right: 6),
-        //             child: InkWell(
-        //               onTap: () {
-        //                 String? currentUrl = widget.url;
-        //                 if (currentUrl != "") {
-        //                   Share.share(currentUrl);
-        //                 } else {
-        //                   ScaffoldMessenger.of(context).showSnackBar(
-        //                     const SnackBar(
-        //                       content: Text('Unable to share link'),
-        //                       duration: Duration(seconds: 2),
-        //                     ),
-        //                   );
-        //                 }
-        //               },
-        //               child: Container(
-        //                 width: 32,
-        //                 height: 32,
-        //                 decoration: BoxDecoration(
-        //                     // borderRadius: BorderRadius.circular(18),
-        //                     // color: Color(0xFFDFFF00),
-        //                     // border: Border.all()
-        //                     ),
-        //                 child: Center(
-        //                   child: Icon(
-        //                     Iconsax.send_2_outline,
-        //                     color: Colors.black,
-        //                     size: 20,
-        //                   ),
-        //                 ),
-        //               ),
-        //             ),
-        //           ),
-        //           // Padding(
-        //           //   padding: const EdgeInsets.only(right: 6),
-        //           //   child: InkWell(
-        //           //     onTap: () async {
-        //           //       setState(() {
-        //           //         isLoading = true;
-        //           //         progress = 0.0;
-        //           //       });
-        //           //       try {
-        //           //         await _controller.reload();
-        //           //         final url = await _controller.getUrl();
-        //           //         await _saveTabWithScreenshot(url?.toString() ?? widget.url);
-        //           //       } catch (e) {
-        //           //         debugPrint('❌ Error refreshing: $e');
-        //           //       } finally {
-        //           //         setState(() {
-        //           //           isLoading = false;
-        //           //         });
-        //           //       }
-        //           //     },
-        //           //     child: Container(
-        //           //       width: 32,
-        //           //       height: 32,
-        //           //       decoration: BoxDecoration(
-        //           //           // borderRadius: BorderRadius.circular(18),
-        //           //           // color: Color(0xFFDFFF00),
-        //           //           // border: Border.all()
-        //           //           ),
-        //           //       child: Center(
-        //           //         child: Icon(
-        //           //           Iconsax.refresh_outline,
-        //           //           color: Colors.black,
-        //           //           size: 20,
-        //           //         ),
-        //           //       ),
-        //           //     ),
-        //           //   ),
-        //           // ),
-        //         ],
-        //       )
-        //     : null,
-        body: Stack(
-          children: [
-            //BasicBrowserView(url: widget.url),
-            InAppWebView(
-              initialUrlRequest: URLRequest(
-                url: WebUri(widget.url),
-                headers: {
-                  'User-Agent':
-                      'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
-                },
-              ),
-              shouldInterceptRequest: (controller, request) async {
-                try {
-                  final requestUrl = request.url.toString();
-                  final requestHost = request.url.host.toLowerCase();
-
-                  // // Check general ad blocking (includes all major ad networks)
-                  // if (GeneralAdBlocker.shouldBlockRequest(
-                  //     requestUrl, requestHost)) {
-                  //   print('Blocked ad request: $requestHost');
-                  //   return WebResourceResponse(
-                  //     contentType: 'text/plain',
-                  //     data: Uint8List.fromList([]),
-                  //   );
-                  // }
-
-                  //YouTube-specific blocking
-                  if (requestHost.contains('youtube.com')) {
-                    if (YouTubeAdBlocker.shouldBlockUrl(requestUrl)) {
-                      print('Blocked YouTube ad request: $requestUrl');
-                      return WebResourceResponse(
-                        contentType: 'text/plain',
-                        data: Uint8List.fromList([]),
-                      );
+                    if (requestHost.contains('youtube.com')) {
+                      if (YouTubeAdBlocker.shouldBlockUrl(requestUrl)) {
+                        print('Blocked YouTube ad request: $requestUrl');
+                        return WebResourceResponse(
+                          contentType: 'text/plain',
+                          data: Uint8List.fromList([]),
+                        );
+                      }
                     }
+                  } catch (e) {
+                    // Silent fail
                   }
-                } catch (e) {
-                  // Silent fail
-                }
-                return null;
-              },
+                  return null;
+                },
 
-              pullToRefreshController: _pullToRefreshController,
-              onWebViewCreated: (controller) {
-                _controller = controller;
-              },
-              onLoadStart: (controller, url) {
-                setState(() {
-                  isLoading = true;
-                });
-              },
-              onLoadStop: (controller, url) async {
-                setState(() {
-                  isLoading = false;
-                });
-                _pullToRefreshController.endRefreshing();
+                pullToRefreshController: _pullToRefreshController,
+                onWebViewCreated: (controller) {
+                  _controller = controller;
+                },
+                onReceivedError: (controller, request, error) {
+                  print('WebView error: ${error.type} - ${error.description} for ${request.url}');
+                },
+                onReceivedHttpError: (controller, request, response) {
+                  print('WebView HTTP error: ${response.statusCode} for ${request.url}');
+                },
+                onLoadStart: (controller, url) {
+                  setState(() {
+                    isLoading = true;
+                    if (url != null) {
+                      _currentUrl = url.toString();
+                    }
+                  });
+                },
+                onLoadStop: (controller, url) async {
+                  setState(() {
+                    isLoading = false;
+                    if (url != null) {
+                      _currentUrl = url.toString();
+                    }
+                  });
+                  _pullToRefreshController.endRefreshing();
 
-                final urlString = url.toString();
+                  final urlString = url.toString();
 
-                try {
-                  // Apply YouTube filters for YouTube pages
-                  if (urlString.contains('youtube.com')) {
+                  try {
+                    if (urlString.contains('youtube.com')) {
+                      await controller.evaluateJavascript(
+                          source: YouTubeAdBlocker.getCosmeticFilterScript());
+                    }
+
                     await controller.evaluateJavascript(
-                        source: YouTubeAdBlocker.getCosmeticFilterScript());
-                  }
+                        source: GeneralAdBlocker.getAdRemovalScript());
 
-                  // Apply general ad removal for all pages
-                  await controller.evaluateJavascript(
-                      source: GeneralAdBlocker.getAdRemovalScript());
-
-                  // Anti-redirect protection (less aggressive, allows real clicks)
-                  await controller.evaluateJavascript(source: """
+                    await controller.evaluateJavascript(source: """
         (function() {
-          // Override window.open completely
           window.open = function() {
-            console.log('❌ Blocked popup');
+            console.log('Blocked popup');
             return {
               closed: false,
               close: function() {},
               focus: function() {}
             };
           };
-          
-          // Track if user is clicking on a legitimate element
+
           var isLegitimateClick = false;
-          
-          // Mark legitimate clicks (on links, buttons, videos)
+
           document.addEventListener('mousedown', function(e) {
             var target = e.target;
-            if (target.tagName === 'A' || 
+            if (target.tagName === 'A' ||
                 target.tagName === 'BUTTON' ||
                 target.tagName === 'VIDEO' ||
                 target.closest('a') ||
@@ -466,38 +339,31 @@ class _WebViewPageState extends State<WebViewPage> {
               setTimeout(function() { isLegitimateClick = false; }, 100);
             }
           }, true);
-          
-          // Block clicks only on document/body (ad trick)
+
           ['click', 'mousedown', 'touchstart'].forEach(function(eventType) {
             document.addEventListener(eventType, function(e) {
               var target = e.target;
-              
-              // Only block if clicking directly on body/html
-              if ((target === document.body || target === document.documentElement) && 
+
+              if ((target === document.body || target === document.documentElement) &&
                   !isLegitimateClick) {
                 e.preventDefault();
                 e.stopPropagation();
                 e.stopImmediatePropagation();
-                console.log('❌ Blocked background click redirect');
                 return false;
               }
             }, true);
           });
-          
-          // Block meta refresh redirects
+
           document.querySelectorAll('meta[http-equiv="refresh"]').forEach(function(meta) {
             meta.remove();
-            console.log('❌ Blocked meta refresh');
           });
-          
-          // Watch for new meta refresh tags
+
           var observer = new MutationObserver(function(mutations) {
             mutations.forEach(function(mutation) {
               mutation.addedNodes.forEach(function(node) {
-                if (node.tagName === 'META' && 
+                if (node.tagName === 'META' &&
                     node.getAttribute('http-equiv') === 'refresh') {
                   node.remove();
-                  console.log('❌ Blocked dynamic meta refresh');
                 }
               });
             });
@@ -506,174 +372,237 @@ class _WebViewPageState extends State<WebViewPage> {
             childList: true,
             subtree: true
           });
-          
-          console.log('✅ Smart anti-redirect protection enabled');
         })();
       """);
 
-                  print('Applied smart protection');
-                } catch (e) {
-                  print('Error applying filters: $e');
-                }
-
-                // // Screenshot logic
-                // _saveTimer?.cancel();
-                // _saveTimer = Timer(const Duration(seconds: 1), () async {
-                //   if (widget.isIncognito != true) {
-                //     await _saveTabWithScreenshot(url.toString());
-                //   }
-                // });
-
-                // Update navigation state
-                await _updateNavigationState();
-              },
-              onProgressChanged: (controller, progressValue) {
-                setState(() {
-                  progress = (progressValue / 100);
-                });
-              },
-
-              // SMARTER: Allow user clicks, block automatic redirects
-              // SMARTER: Allow user clicks, block automatic redirects, open legit redirects in new page
-              shouldOverrideUrlLoading: (controller, navigationAction) async {
-                var uri = navigationAction.request.url;
-                var url = uri.toString();
-
-                print('Navigation attempt: $url');
-                print('Type: ${navigationAction.navigationType}');
-                print('Has gesture: ${navigationAction.hasGesture}');
-
-                // Always block ad domains
-                if (url.toLowerCase().contains('doubleclick.net') ||
-                    url.toLowerCase().contains('googlesyndication.com') ||
-                    url.toLowerCase().contains('adservice.google.com') ||
-                    url.toLowerCase().contains('googleadservices.com') ||
-                    url.toLowerCase().contains('adnxs.com') ||
-                    url.toLowerCase().contains('criteo.com') ||
-                    url.toLowerCase().contains('outbrain.com') ||
-                    url.toLowerCase().contains('taboola.com')) {
-                  print('❌ Blocked ad domain navigation');
-                  return NavigationActionPolicy.CANCEL;
-                }
-
-                // For main frame navigation
-                if (navigationAction.isForMainFrame) {
-                  // Allow initial load and reloads
-                  if (navigationAction.navigationType == NavigationType.OTHER ||
-                      navigationAction.navigationType ==
-                          NavigationType.RELOAD) {
-                    return NavigationActionPolicy.ALLOW;
+                    print('Applied smart protection');
+                  } catch (e) {
+                    print('Error applying filters: $e');
                   }
 
-                  // User clicked a link - allow navigation in same page
-                  if (navigationAction.navigationType ==
-                          NavigationType.LINK_ACTIVATED ||
-                      navigationAction.hasGesture == true) {
-                    print('✅ User clicked link - navigating in same page');
-                    _lastUserInteraction = DateTime.now();
-                    return NavigationActionPolicy.ALLOW;
+                  await _updateNavigationState();
+                },
+                onProgressChanged: (controller, progressValue) {
+                  setState(() {
+                    progress = (progressValue / 100);
+                  });
+                },
+                onUpdateVisitedHistory: (controller, url, isReload) {
+                  if (url != null) {
+                    setState(() {
+                      _currentUrl = url.toString();
+                    });
+                  }
+                },
+
+                shouldOverrideUrlLoading:
+                    (controller, navigationAction) async {
+                  var uri = navigationAction.request.url;
+                  var url = uri.toString();
+
+                  print('Navigation attempt: $url');
+                  print('Type: ${navigationAction.navigationType}');
+                  print('Has gesture: ${navigationAction.hasGesture}');
+
+                  if (url.toLowerCase().contains('doubleclick.net') ||
+                      url.toLowerCase().contains('googlesyndication.com') ||
+                      url.toLowerCase().contains('adservice.google.com') ||
+                      url.toLowerCase().contains('googleadservices.com') ||
+                      url.toLowerCase().contains('adnxs.com') ||
+                      url.toLowerCase().contains('criteo.com') ||
+                      url.toLowerCase().contains('outbrain.com') ||
+                      url.toLowerCase().contains('taboola.com')) {
+                    print('Blocked ad domain navigation');
+                    return NavigationActionPolicy.CANCEL;
                   }
 
-                  // Form submissions with user gesture - allow in same page
-                  if (navigationAction.navigationType ==
-                      NavigationType.FORM_SUBMITTED) {
-                    if (navigationAction.hasGesture == true) {
-                      print('✅ Form submission - navigating in same page');
+                  if (navigationAction.isForMainFrame) {
+                    if (navigationAction.navigationType ==
+                            NavigationType.OTHER ||
+                        navigationAction.navigationType ==
+                            NavigationType.RELOAD) {
+                      return NavigationActionPolicy.ALLOW;
+                    }
+
+                    if (navigationAction.navigationType ==
+                            NavigationType.LINK_ACTIVATED ||
+                        navigationAction.hasGesture == true) {
                       _lastUserInteraction = DateTime.now();
+                      return NavigationActionPolicy.ALLOW;
+                    }
+
+                    if (navigationAction.navigationType ==
+                        NavigationType.FORM_SUBMITTED) {
+                      if (navigationAction.hasGesture == true) {
+                        _lastUserInteraction = DateTime.now();
+                        return NavigationActionPolicy.ALLOW;
+                      }
+                    }
+
+                    if (navigationAction.navigationType ==
+                            NavigationType.OTHER &&
+                        navigationAction.hasGesture != true) {
+                      if (_lastUserInteraction != null) {
+                        var timeSinceInteraction =
+                            DateTime.now().difference(_lastUserInteraction!);
+                        if (timeSinceInteraction.inSeconds > 2) {
+                          print('Blocked automatic redirect to: $url');
+
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Blocked automatic redirect'),
+                              duration: Duration(seconds: 1),
+                            ),
+                          );
+
+                          return NavigationActionPolicy.CANCEL;
+                        }
+                      }
+                    }
+
+                    if (navigationAction.navigationType ==
+                        NavigationType.BACK_FORWARD) {
                       return NavigationActionPolicy.ALLOW;
                     }
                   }
 
-                  // Block automatic navigation (OTHER type without gesture)
-                  if (navigationAction.navigationType == NavigationType.OTHER &&
-                      navigationAction.hasGesture != true) {
-                    // Check if this is likely an automatic redirect
-                    if (_lastUserInteraction != null) {
-                      var timeSinceInteraction =
-                          DateTime.now().difference(_lastUserInteraction!);
-                      // If more than 2 seconds since last interaction, it's likely automatic
-                      if (timeSinceInteraction.inSeconds > 2) {
-                        print('❌ Blocked automatic redirect to: $url');
+                  return NavigationActionPolicy.ALLOW;
+                },
 
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Blocked automatic redirect'),
-                            duration: Duration(seconds: 1),
-                          ),
-                        );
+                onCreateWindow: (controller, createWindowAction) async {
+                  print(
+                      'Blocked popup window: ${createWindowAction.request.url}');
+                  return false;
+                },
 
-                        return NavigationActionPolicy.CANCEL;
-                      }
-                    }
-                  }
+                onReceivedServerTrustAuthRequest:
+                    (controller, challenge) async {
+                  return ServerTrustAuthResponse(
+                      action: ServerTrustAuthResponseAction.PROCEED);
+                },
 
-                  // Allow back/forward navigation
-                  if (navigationAction.navigationType ==
-                      NavigationType.BACK_FORWARD) {
-                    return NavigationActionPolicy.ALLOW;
-                  }
-                }
-
-                return NavigationActionPolicy.ALLOW;
-              },
-
-              // Block new windows absolutely
-              onCreateWindow: (controller, createWindowAction) async {
-                print(
-                    '❌ Blocked popup window: ${createWindowAction.request.url}');
-                return false;
-              },
-
-              initialSettings: InAppWebViewSettings(
-                contentBlockers: [
-                  ContentBlocker(
-                    trigger: ContentBlockerTrigger(
-                      urlFilter: ".*",
-                      ifDomain: [
-                        "*doubleclick.net",
-                        "*googlesyndication.com",
-                        "*adservice.google.com",
-                        "*googleadservices.com",
-                        "*google-analytics.com",
-                        "*googletagmanager.com",
-                        "*googletagservices.com",
-                        "*outbrain.com",
-                        "*taboola.com",
-                        "*criteo.com",
-                        "*advertising.com",
-                        "*adnxs.com",
-                        "*media.net",
-                      ],
+                initialSettings: InAppWebViewSettings(
+                  contentBlockers: [
+                    ContentBlocker(
+                      trigger: ContentBlockerTrigger(
+                        urlFilter: ".*",
+                        ifDomain: [
+                          "*doubleclick.net",
+                          "*googlesyndication.com",
+                          "*adservice.google.com",
+                          "*googleadservices.com",
+                          "*google-analytics.com",
+                          "*googletagmanager.com",
+                          "*googletagservices.com",
+                          "*outbrain.com",
+                          "*taboola.com",
+                          "*criteo.com",
+                          "*advertising.com",
+                          "*adnxs.com",
+                          "*media.net",
+                        ],
+                      ),
+                      action: ContentBlockerAction(
+                        type: ContentBlockerActionType.BLOCK,
+                      ),
                     ),
-                    action: ContentBlockerAction(
-                      type: ContentBlockerActionType.BLOCK,
+                  ],
+                  javaScriptEnabled: true,
+                  domStorageEnabled: true,
+                  javaScriptCanOpenWindowsAutomatically: false,
+                  supportMultipleWindows: false,
+                  useShouldOverrideUrlLoading: true,
+                  useShouldInterceptRequest: true,
+                  useOnLoadResource: false,
+                  allowContentAccess: true,
+                  allowFileAccess: true,
+                  userAgent:
+                      'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
+                  mediaPlaybackRequiresUserGesture: false,
+                  allowsInlineMediaPlayback: true,
+                  mixedContentMode:
+                      MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
+                  thirdPartyCookiesEnabled: true,
+                  cacheEnabled: true,
+                ),
+              ),
+            ),
+            // Safari-style bottom action bar
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFFF2F2F2),
+                border: Border(
+                  top: BorderSide(
+                    color: Colors.grey.withOpacity(0.25),
+                    width: 0.5,
+                  ),
+                ),
+              ),
+              padding: const EdgeInsets.fromLTRB(24, 10, 24, 10),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Tabs button
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (BuildContext context) =>
+                              const TabsViewPage(),
+                        ),
+                      );
+                    },
+                    child: Icon(
+                      Icons.copy_rounded,
+                      size: 22,
+                      color: Colors.grey.shade500,
+                    ),
+                  ),
+                  // Center "+" button
+                  GestureDetector(
+                    onTap: () async {
+                      final currentUrl = await _controller.getUrl();
+                      Share.share(currentUrl?.toString() ?? widget.url);
+                    },
+                    child: Container(
+                      width: 120,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withOpacity(0.18),
+                        borderRadius: BorderRadius.circular(21),
+                      ),
+                      child: Center(
+                        child: Icon(
+                          Icons.add,
+                          size: 26,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Menu button
+                  GestureDetector(
+                    onTap: () => _showBrowserMenu(context),
+                    child: Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withOpacity(0.18),
+                        borderRadius: BorderRadius.circular(21),
+                      ),
+                      child: Center(
+                        child: Icon(
+                          Icons.keyboard_arrow_up_rounded,
+                          size: 26,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
                     ),
                   ),
                 ],
-                javaScriptEnabled: true,
-                domStorageEnabled: true,
-                javaScriptCanOpenWindowsAutomatically: false,
-                supportMultipleWindows: false,
-                useShouldOverrideUrlLoading: true,
-                userAgent:
-                    'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
-                mediaPlaybackRequiresUserGesture: false,
-                allowsInlineMediaPlayback: true,
-                mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
               ),
             ),
-            if (progress < 1.0)
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: LinearProgressIndicator(
-                  value: progress,
-                  color: Color(0xFF8A2BE2),
-                  backgroundColor: Colors.transparent,
-                  minHeight: 2,
-                ),
-              ),
           ],
         ),
       ),
@@ -682,12 +611,10 @@ class _WebViewPageState extends State<WebViewPage> {
 
   Future<void> _saveTabWithScreenshot(String url) async {
     try {
-      // Get page title
       final title = await _controller.getTitle();
 
       final screenshot = await _controller.takeScreenshot();
 
-      // Save only if screenshot is available
       if (screenshot != null) {
         final dir = await getApplicationDocumentsDirectory();
         final filePath =
@@ -705,7 +632,7 @@ class _WebViewPageState extends State<WebViewPage> {
               updatedAt: Value(DateTime.now()),
             ),
           );
-          debugPrint('🔁 Tab updated: $title');
+          debugPrint('Tab updated: $title');
         } else {
           final insertedTab = await db.insertTab(TabsCompanion.insert(
             title: Value(title ?? 'Untitled'),
@@ -716,14 +643,295 @@ class _WebViewPageState extends State<WebViewPage> {
             updatedAt: Value(DateTime.now()),
           ));
           _currentTabId = insertedTab.toString();
-          debugPrint('✅ Tab saved: $title');
+          debugPrint('Tab saved: $title');
         }
       } else {
-        debugPrint('⚠️ Screenshot not captured, tab not saved.');
+        debugPrint('Screenshot not captured, tab not saved.');
       }
     } catch (e) {
-      debugPrint('❌ Error saving tab: $e');
+      debugPrint('Error saving tab: $e');
     }
+  }
+
+  void _showBrowserMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return Container(
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Navigation bar (back, forward, domain, copy, reload)
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade200,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  children: [
+                    GestureDetector(
+                      onTap: () async {
+                        Navigator.pop(ctx);
+                        if (await _controller.canGoBack()) {
+                          await _controller.goBack();
+                        }
+                      },
+                      child: Icon(Icons.chevron_left_rounded,
+                          size: 28, color: Colors.grey.shade700),
+                    ),
+                    const SizedBox(width: 4),
+                    GestureDetector(
+                      onTap: () async {
+                        Navigator.pop(ctx);
+                        if (await _controller.canGoForward()) {
+                          await _controller.goForward();
+                        }
+                      },
+                      child: Icon(Icons.chevron_right_rounded,
+                          size: 28, color: Colors.grey.shade700),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Center(
+                        child: Text(
+                          getDomainFromUrl(_currentUrl) ?? 'website.com',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey.shade800,
+                            fontFamily: 'Poppins',
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () async {
+                        final currentUrl = await _controller.getUrl();
+                        Clipboard.setData(ClipboardData(
+                            text: currentUrl?.toString() ?? _currentUrl));
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text('Link copied'),
+                              duration: Duration(seconds: 1)),
+                        );
+                      },
+                      child: Icon(Icons.link_rounded,
+                          size: 22, color: Colors.grey.shade700),
+                    ),
+                    const SizedBox(width: 12),
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _controller.reload();
+                      },
+                      child: Icon(Icons.refresh_rounded,
+                          size: 22, color: Colors.grey.shade700),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              // Action buttons row
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade200,
+                  borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(16)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildMenuAction(Icons.search_rounded, 'Find on Page',
+                        () {
+                      Navigator.pop(ctx);
+                    }),
+                    _buildMenuAction(Icons.bookmark_outline_rounded, 'Bookmark',
+                        () async {
+                      final title = await _controller.getTitle();
+                      if (ctx.mounted) Navigator.pop(ctx);
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                              content:
+                                  Text('Bookmarked: ${title ?? 'Page'}'),
+                              duration: const Duration(seconds: 1)),
+                        );
+                      }
+                    }),
+                    _buildMenuAction(Icons.push_pin_outlined, 'Pin', () {
+                      Navigator.pop(ctx);
+                    }),
+                    _buildMenuAction(Icons.ios_share_rounded, 'Share',
+                        () async {
+                      Navigator.pop(ctx);
+                      final currentUrl = await _controller.getUrl();
+                      Share.share(currentUrl?.toString() ?? _currentUrl);
+                    }),
+                  ],
+                ),
+              ),
+              // Menu list items
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade200,
+                  borderRadius: const BorderRadius.vertical(
+                      bottom: Radius.circular(16)),
+                ),
+                child: Column(
+                  children: [
+                    Divider(
+                        height: 0.5,
+                        thickness: 0.5,
+                        color: Colors.grey.shade300),
+                    _buildMenuItem(
+                      icon: Icons.text_fields_rounded,
+                      label: 'Display Options',
+                      trailing: Icon(Icons.keyboard_arrow_down_rounded,
+                          color: Colors.grey.shade500),
+                      onTap: () => Navigator.pop(ctx),
+                    ),
+                    Divider(
+                        height: 0.5,
+                        thickness: 0.5,
+                        color: Colors.grey.shade300),
+                    _buildMenuItem(
+                      icon: Icons.translate_rounded,
+                      label: 'Translate',
+                      onTap: () => Navigator.pop(ctx),
+                    ),
+                    Divider(
+                        height: 0.5,
+                        thickness: 0.5,
+                        color: Colors.grey.shade300),
+                    _buildMenuItem(
+                      icon: Icons.article_outlined,
+                      label: 'Reader Mode',
+                      onTap: () => Navigator.pop(ctx),
+                    ),
+                    Divider(
+                        height: 0.5,
+                        thickness: 0.5,
+                        color: Colors.grey.shade300),
+                    _buildMenuItem(
+                      icon: Icons.open_in_browser_rounded,
+                      label: 'Open in Browser',
+                      onTap: () async {
+                        Navigator.pop(ctx);
+                        final currentUrl = await _controller.getUrl();
+                        if (currentUrl != null) {
+                          await launchUrl(currentUrl,
+                              mode: LaunchMode.externalApplication);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              // Close button
+              GestureDetector(
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.pop(context);
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade200,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Center(
+                    child: Text(
+                      'Close Tab',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.red.shade400,
+                        fontFamily: 'Poppins',
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMenuAction(IconData icon, String label, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: Colors.grey.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Center(
+              child: Icon(icon, color: Colors.black87, size: 24),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.grey.shade700,
+              fontWeight: FontWeight.w500,
+              fontFamily: 'Poppins',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMenuItem({
+    required IconData icon,
+    required String label,
+    Widget? trailing,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Icon(icon, size: 22, color: Colors.black87),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.black87,
+                  fontFamily: 'Poppins',
+                ),
+              ),
+            ),
+            if (trailing != null) trailing,
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildActionButton(IconData icon, String label, VoidCallback onTap) {
@@ -801,24 +1009,12 @@ class _BasicBrowserViewState extends State<BasicBrowserView> {
   @override
   Widget build(BuildContext context) {
     return InAppWebView(
-      //key: webViewKey,
       initialUrlRequest: URLRequest(url: WebUri(widget.url)),
       shouldInterceptRequest: (controller, request) async {
         try {
           final requestUrl = request.url.toString();
           final requestHost = request.url.host.toLowerCase();
 
-          // // Check general ad blocking (includes all major ad networks)
-          // if (GeneralAdBlocker.shouldBlockRequest(
-          //     requestUrl, requestHost)) {
-          //   print('Blocked ad request: $requestHost');
-          //   return WebResourceResponse(
-          //     contentType: 'text/plain',
-          //     data: Uint8List.fromList([]),
-          //   );
-          // }
-
-          // YouTube-specific blocking
           if (requestHost.contains('youtube.com') ||
               requestHost.contains('googlevideo.com')) {
             if (YouTubeAdBlocker.shouldBlockUrl(requestUrl)) {
@@ -888,7 +1084,6 @@ class _BasicBrowserViewState extends State<BasicBrowserView> {
         final url = navigationAction.request.url;
         if (url != null) {
           final scheme = url.scheme;
-          // Handle external intents normally
           if (![
             'http',
             'https',
@@ -904,7 +1099,6 @@ class _BasicBrowserViewState extends State<BasicBrowserView> {
             }
           }
 
-          // If it's a normal web URL, open it in a new WebViewPage
           if (navigationAction.isForMainFrame &&
               (scheme == 'http' || scheme == 'https')) {
             Navigator.push(

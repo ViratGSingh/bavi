@@ -1,7 +1,7 @@
 import 'package:bavi/models/thread.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:bavi/home/widgets/web_view.dart';
 
 class YoutubeVideoCard extends StatelessWidget {
   final YoutubeVideoData video;
@@ -14,11 +14,12 @@ class YoutubeVideoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () async {
-        // Open YouTube video in external app
-        final url =
-            Uri.parse('https://www.youtube.com/watch?v=${video.videoId}');
-        await launchUrl(url, mode: LaunchMode.externalApplication);
+      onTap: () {
+        Navigator.push(context, MaterialPageRoute(
+          builder: (context) => WebViewPage(
+            url: 'https://www.youtube.com/watch?v=${video.videoId}',
+          ),
+        ));
       },
       child: Container(
         margin: const EdgeInsets.only(right: 12),

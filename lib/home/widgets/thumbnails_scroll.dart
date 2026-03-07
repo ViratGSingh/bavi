@@ -3,7 +3,7 @@ import 'package:bavi/models/short_video.dart';
 import 'package:flutter/material.dart';
 import 'package:icons_plus/icons_plus.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:bavi/home/widgets/web_view.dart';
 
 class ShortVideoThumbnails extends StatelessWidget {
   final List<ExtractedVideoInfo>? shortVideos;
@@ -64,17 +64,17 @@ class ShortVideoThumbnails extends StatelessWidget {
                         
                                 String href =
                                     "${shortVideos?[index].videoData.videoUrl}/?igsh=a281dGZqd3lsZmIy";
-                                final uri = Uri.parse(href);
-                                await launchUrl(uri,
-                                    mode: LaunchMode.externalApplication);                        
+                                Navigator.push(context, MaterialPageRoute(
+                                  builder: (context) => WebViewPage(url: href),
+                                ));                        
                                     
                               } 
                               else {
                                 String href =
                                     shortVideos?[index].videoData.videoUrl ?? "";
-                                final uri = Uri.parse(href);
-                                await launchUrl(uri,
-                                    mode: LaunchMode.externalApplication);
+                                Navigator.push(context, MaterialPageRoute(
+                                  builder: (context) => WebViewPage(url: href),
+                                ));
                               }
                             },
                             child: Stack(
@@ -188,9 +188,9 @@ class LongVideoThumbnails extends StatelessWidget {
                               // } else {
                                 String href =
                                     longVideos?[index].videoData.videoUrl ?? "";
-                                final uri = Uri.parse(href);
-                                await launchUrl(uri,
-                                    mode: LaunchMode.externalApplication);
+                                Navigator.push(context, MaterialPageRoute(
+                                  builder: (context) => WebViewPage(url: href),
+                                ));
                               //}
                             },
                             child: Container(
@@ -289,9 +289,9 @@ class SearchResultThumbnails extends StatelessWidget {
                         child: GestureDetector(
                           onTap: () async {
                             String href = searchResults?[index].url ?? "";
-                            final uri = Uri.parse(href); 
-                            await launchUrl(uri,
-                                mode: LaunchMode.externalApplication);
+                            Navigator.push(context, MaterialPageRoute(
+                              builder: (context) => WebViewPage(url: href),
+                            ));
                           },
                           child: Container(
                             key: ValueKey(updthumbnailUrl),

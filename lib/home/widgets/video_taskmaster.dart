@@ -12,7 +12,7 @@ import 'package:remixicon/remixicon.dart';
 import 'package:shimmer/shimmer.dart';
 import 'dart:async';
 
-import 'package:url_launcher/url_launcher.dart';
+import 'package:bavi/home/widgets/web_view.dart';
 
 class VideoTaskmaster extends StatefulWidget {
   final HomePageStatus status;
@@ -497,13 +497,11 @@ class _VideoTaskmasterState extends State<VideoTaskmaster> {
                               )
                             : MarkdownBody(
                                 data: _currentAnswer,
-                                onTapLink: (text, href, title) async {
+                                onTapLink: (text, href, title) {
                                   if (href != null) {
-                                    final uri = Uri.parse(href);
-                                    if (await canLaunchUrl(uri)) {
-                                      await launchUrl(uri,
-                                          mode: LaunchMode.externalApplication);
-                                    }
+                                    Navigator.push(context, MaterialPageRoute(
+                                      builder: (context) => WebViewPage(url: href),
+                                    ));
                                   }
                                 },
                                 styleSheet: MarkdownStyleSheet.fromTheme(
@@ -680,11 +678,12 @@ class _VideoTaskmasterState extends State<VideoTaskmaster> {
                                                   itemBuilder: (context, index) {
                                                     final item = widget.videos?[index];
                                                     return GestureDetector(
-                                                      onTap: () async {
-                                                            final uri = Uri.parse(item?.videoData.videoUrl ?? "");
-                                                            if (await canLaunchUrl(uri)) {
-                                                              await launchUrl(uri,
-                                                                  mode: LaunchMode.externalApplication);
+                                                      onTap: () {
+                                                            final url = item?.videoData.videoUrl ?? "";
+                                                            if (url.isNotEmpty) {
+                                                              Navigator.push(context, MaterialPageRoute(
+                                                                builder: (context) => WebViewPage(url: url),
+                                                              ));
                                                             }
                                                           },
                                                       child: Column(
@@ -719,11 +718,12 @@ class _VideoTaskmasterState extends State<VideoTaskmaster> {
                                                   itemBuilder: (context, index) {
                                                     final item = widget.searchResults?[index];
                                                     return GestureDetector(
-                                                      onTap: () async {
-                                                            final uri = Uri.parse(item?.url ?? "");
-                                                            if (await canLaunchUrl(uri)) {
-                                                              await launchUrl(uri,
-                                                                  mode: LaunchMode.externalApplication);
+                                                      onTap: () {
+                                                            final url = item?.url ?? "";
+                                                            if (url.isNotEmpty) {
+                                                              Navigator.push(context, MaterialPageRoute(
+                                                                builder: (context) => WebViewPage(url: url),
+                                                              ));
                                                             }
                                                           },
                                                       child: Column(
@@ -939,10 +939,11 @@ class _VideoTaskmasterState extends State<VideoTaskmaster> {
                                                           .videoData
                                                           .videoUrl ??
                                                       "";
-                                                  final uri = Uri.parse(href);
-                                                  await launchUrl(uri,
-                                                      mode: LaunchMode
-                                                          .externalApplication);
+                                                  if (href.isNotEmpty) {
+                                                    Navigator.push(context, MaterialPageRoute(
+                                                      builder: (context) => WebViewPage(url: href),
+                                                    ));
+                                                  }
                                                 },
                                                 // onLongPressStart: (_) {
                                                 //   _showOverlay(
@@ -1062,14 +1063,11 @@ class _VideoTaskmasterState extends State<VideoTaskmaster> {
                                         )
                                       : MarkdownBody(
                                           data: _currentAnswer,
-                                          onTapLink: (text, href, title) async {
+                                          onTapLink: (text, href, title) {
                                             if (href != null) {
-                                              final uri = Uri.parse(href);
-                                              if (await canLaunchUrl(uri)) {
-                                                await launchUrl(uri,
-                                                    mode: LaunchMode
-                                                        .externalApplication);
-                                              }
+                                              Navigator.push(context, MaterialPageRoute(
+                                                builder: (context) => WebViewPage(url: href),
+                                              ));
                                             }
                                           },
                                           styleSheet:

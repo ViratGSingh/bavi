@@ -6,7 +6,7 @@ import 'package:bavi/widgets/profile_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:icons_plus/icons_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:bavi/home/widgets/web_view.dart';
 
 class SearchResultView extends StatefulWidget {
   final String markdownText;
@@ -176,13 +176,11 @@ class _SearchResultViewState extends State<SearchResultView> {
                           child: SingleChildScrollView(
                             child: MarkdownBody(
                               data: widget.markdownText,
-                              onTapLink: (text, href, title) async {
+                              onTapLink: (text, href, title) {
                                 if (href != null) {
-                                  final uri = Uri.parse(href);
-                                  if (await canLaunchUrl(uri)) {
-                                    await launchUrl(uri,
-                                        mode: LaunchMode.externalApplication);
-                                  }
+                                  Navigator.push(context, MaterialPageRoute(
+                                    builder: (context) => WebViewPage(url: href),
+                                  ));
                                 }
                               },
                               styleSheet: MarkdownStyleSheet.fromTheme(

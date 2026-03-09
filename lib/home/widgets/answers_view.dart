@@ -34,7 +34,6 @@ class ThreadAnswerView extends StatefulWidget {
   final Function(String url) onLinkTap;
   final ExtractedUrlResultData? extractedUrlData;
   final String? deepDrissyReadingStatus;
-
   const ThreadAnswerView({
     super.key,
     required this.youtubeVideos,
@@ -475,46 +474,46 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
                       ),
                     ],
                     SelectionArea(
-                      child: MarkdownBody(
-                        data: widget.answer,
-                        onTapLink: (text, href, title) async {
-                          if (href != null) {
-                            widget.onLinkTap(href);
-                          }
-                        },
-                        styleSheet:
-                            MarkdownStyleSheet.fromTheme(Theme.of(context))
-                                .copyWith(
-                          h1: const TextStyle(
-                              color: Colors.black,
+                        child: MarkdownBody(
+                          data: widget.answer,
+                          onTapLink: (text, href, title) async {
+                            if (href != null) {
+                              widget.onLinkTap(href);
+                            }
+                          },
+                          styleSheet:
+                              MarkdownStyleSheet.fromTheme(Theme.of(context))
+                                  .copyWith(
+                            h1: const TextStyle(
+                                color: Colors.black,
+                                fontFamily: 'Poppins',
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold),
+                            h2: const TextStyle(
+                                color: Colors.black,
+                                fontFamily: 'Poppins',
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold),
+                            h3: const TextStyle(
+                                color: Colors.black,
+                                fontFamily: 'Poppins',
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600),
+                            p: const TextStyle(
+                                color: Colors.black,
+                                fontFamily: 'Poppins',
+                                fontSize: 14,
+                                height: 1.5),
+                            a: const TextStyle(
                               fontFamily: 'Poppins',
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold),
-                          h2: const TextStyle(
-                              color: Colors.black,
-                              fontFamily: 'Poppins',
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold),
-                          h3: const TextStyle(
-                              color: Colors.black,
-                              fontFamily: 'Poppins',
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600),
-                          p: const TextStyle(
-                              color: Colors.black,
-                              fontFamily: 'Poppins',
-                              fontSize: 14,
-                              height: 1.5),
-                          a: const TextStyle(
-                            fontFamily: 'Poppins',
-                            color: Color(0xFF8A2BE2),
-                            decoration: TextDecoration.underline,
-                            decorationColor: Color(0xFF8A2BE2),
+                              color: Color(0xFF8A2BE2),
+                              decoration: TextDecoration.underline,
+                              decorationColor: Color(0xFF8A2BE2),
+                            ),
+                            listBullet: const TextStyle(fontSize: 16),
                           ),
-                          listBullet: const TextStyle(fontSize: 16),
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -953,8 +952,16 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
           onTap: () async {
             if (item.url.isNotEmpty) {
               Navigator.pop(context);
+              // Pass snippet text to highlight on the source page
+              String? highlightText = item.snippet;
+              if (highlightText.length > 200) {
+                highlightText = highlightText.substring(0, 200);
+              }
               Navigator.push(context, MaterialPageRoute(
-                builder: (context) => WebViewPage(url: item.url),
+                builder: (context) => WebViewPage(
+                  url: item.url,
+                  highlightText: highlightText,
+                ),
               ));
             }
           },
@@ -1495,3 +1502,4 @@ class InstagramVideoCard extends StatelessWidget {
     );
   }
 }
+

@@ -361,6 +361,7 @@ class _HomePageState extends State<HomePage>
               MaterialPageRoute(
                 builder: (_) => GoogleSearchWebView(
                   query: state.webSearchQuery!,
+                  quickMode: state.isQuickSearch,
                 ),
               ),
             );
@@ -2225,11 +2226,35 @@ class _HomePageState extends State<HomePage>
                                                                   (url) async {
                                                                 if (url
                                                                     .isNotEmpty) {
+                                                                  // Find matching snippet for this URL to highlight on page
+                                                                  String? highlightText;
+                                                                  try {
+                                                                    final matchingSource = result
+                                                                        .influence
+                                                                        .firstWhere(
+                                                                            (s) => url
+                                                                                .contains(Uri.parse(s.url).host));
+                                                                    highlightText =
+                                                                        matchingSource
+                                                                            .snippet;
+                                                                    // Use first ~200 chars of snippet for highlight
+                                                                    if (highlightText.length >
+                                                                        200) {
+                                                                      highlightText =
+                                                                          highlightText
+                                                                              .substring(0, 200);
+                                                                    }
+                                                                  } catch (_) {}
                                                                   Navigator.push(
                                                                       context,
                                                                       MaterialPageRoute(
                                                                         builder: (context) =>
-                                                                            WebViewPage(url: url),
+                                                                            WebViewPage(
+                                                                          url:
+                                                                              url,
+                                                                          highlightText:
+                                                                              highlightText,
+                                                                        ),
                                                                       ));
                                                                 }
                                                               },

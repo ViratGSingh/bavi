@@ -110,6 +110,7 @@ final class HomeState extends Equatable {
     this.userCountry = "",
     this.userCountryCode = "",
     this.webSearchQuery,
+    this.isQuickSearch = false,
     this.deepDrissyStatus = HomeDeepDrissyStatus.disabled,
     this.deepDrissyWebSearchQueries,
     this.deepDrissyReadingStatus,
@@ -178,6 +179,7 @@ final class HomeState extends Equatable {
   final String userCountry;
   final String userCountryCode;
   final String? webSearchQuery;
+  final bool isQuickSearch;
   final HomeDeepDrissyStatus deepDrissyStatus;
   final List<String>? deepDrissyWebSearchQueries;
   final String? deepDrissyReadingStatus;
@@ -221,6 +223,7 @@ final class HomeState extends Equatable {
     String? userCountry,
     String? userCountryCode,
     Object? webSearchQuery = _sentinel,
+    bool? isQuickSearch,
     HomeDeepDrissyStatus? deepDrissyStatus,
     Object? deepDrissyWebSearchQueries = _sentinel,
     Object? deepDrissyReadingStatus = _sentinel,
@@ -271,6 +274,7 @@ final class HomeState extends Equatable {
       webSearchQuery: webSearchQuery == _sentinel
           ? this.webSearchQuery
           : webSearchQuery as String?,
+      isQuickSearch: isQuickSearch ?? this.isQuickSearch,
       deepDrissyStatus: deepDrissyStatus ?? this.deepDrissyStatus,
       deepDrissyWebSearchQueries: deepDrissyWebSearchQueries == _sentinel
           ? this.deepDrissyWebSearchQueries
@@ -320,6 +324,7 @@ final class HomeState extends Equatable {
         userCountry,
         userCountryCode,
         webSearchQuery,
+        isQuickSearch,
         deepDrissyStatus,
         deepDrissyWebSearchQueries,
         deepDrissyReadingStatus,

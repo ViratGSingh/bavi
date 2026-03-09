@@ -2257,7 +2257,34 @@ Rules:
     }
   }
 
-  /// Function to search using SerpAPI Google results for Instagram Reels
+  /// Check if a query is a simple factual question suitable for quick search
+  bool _isSimpleFactualQuery(String query) {
+    final lower = query.toLowerCase().trim();
+    final words = lower.split(RegExp(r'\s+'));
+
+    if (words.length < 3 || words.length > 15) return false;
+    if (state.selectedImage != null) return false;
+    if (state.searchType == HomeSearchType.extractUrl) return false;
+
+    final factualStarters = [
+      'who ', 'what ', 'when ', 'where ', 'which ',
+      'how old ', 'how tall ', 'how many ', 'how much ',
+      'how long ', 'how far ', 'how big ',
+      'define ', 'meaning of ',
+    ];
+    if (!factualStarters.any((s) => lower.startsWith(s))) return false;
+
+    final complexPatterns = [
+      'compare', 'difference between', 'pros and cons',
+      'explain why', 'explain how', 'how to ', 'how do i',
+      'how can i', 'why does', 'why is', 'why are',
+      'list all', 'tell me about', 'and also',
+    ];
+    if (complexPatterns.any((p) => lower.contains(p))) return false;
+
+    return true;
+  }
+
   Future<void> _getFastAnswer(
       HomeGetAnswer event, Emitter<HomeState> emit) async {
     print(
@@ -2503,7 +2530,7 @@ Rules:
 
         if (state.generalStatus == HomeGeneralStatus.enabled) {
           _webSearchCompleter = Completer<List<ExtractedResultInfo>>();
-          emit(state.copyWith(webSearchQuery: searchQuery));
+          emit(state.copyWith(webSearchQuery: searchQuery, isQuickSearch: _isSimpleFactualQuery(query)));
 
           // Wait for the UI to open WebView and return results
           final webResults = await _webSearchCompleter!.future;
@@ -3487,16 +3514,16 @@ You are in DEEP RESEARCH mode. You have been provided with results from multiple
 
 Rules:
 - Always answer in Markdown.
-- Provide a comprehensive, detailed analysis structured by the different aspects of the query.
-- Structure your response with clear headings, subheadings, and bullet points.
+- Write in-depth, nuanced paragraphs — NOT a list of headlines or bullet-point summaries. Each section should have substantial prose that explains context, reasoning, and details. Think long-form article, not listicle.
+- Use headings sparingly to organize major sections. Under each heading, write full paragraphs with flowing narrative. Bullet points should only be used for truly list-like content (e.g., ingredients, specs, steps), not as a substitute for explanation.
 - Always **bold key insights** and highlight notable places, dishes, or experiences.
 - For any place, food item, or experience that was featured in a source, wrap the main word or phrase in this format: `[text to show](<link>)` (e.g., Try the **[Dum Pukht Biryani](https://example.com/food)**).
 - **Be Conversational**: Write naturally, like a knowledgeable friend. Avoid robotic phrases like "based on search results" or "these sources say."
 - Only use the sources that directly answer the query.
 - If no strong or direct matches are found, gracefully say: _"There isn't a perfect match for that, but here are a few options that might still interest you."_
 - Do not repeat the question or use generic filler lines.
-- Keep your language engaging, be as detailed and exhaustive as possible, ensuring no relevant detail from the sources is omitted, while still maintaining clarity and readability.
-- Since this is deep research mode, provide more depth, cover multiple angles, compare perspectives, and give a thorough analysis.
+- Go deep: explain the *why* behind things, provide historical context, compare different perspectives, discuss tradeoffs, and surface non-obvious insights. Don't just state facts — analyze them.
+- Synthesize information across multiple sources into a cohesive narrative rather than summarizing each source separately.
 - If the query consists primarily of a URL (e.g., youtube.com/...), use the provided content from the extracted URL to summarize what the page or video is about.
 
 """}
@@ -3537,7 +3564,7 @@ Don't reveal any personal information you have in your context unless asked abou
     request.body = jsonEncode({
       "model": modelName,
       "stream": true,
-      "max_tokens": 16384,
+      "max_tokens": 32768,
       "messages": [
         {"role": "system", "content": systemPrompt},
         ...previousResults.expand((item) => [

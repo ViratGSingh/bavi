@@ -7,8 +7,9 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 class GoogleSearchWebView extends StatefulWidget {
   final String query;
+  final bool quickMode;
 
-  const GoogleSearchWebView({required this.query, super.key});
+  const GoogleSearchWebView({required this.query, this.quickMode = false, super.key});
 
   @override
   State<GoogleSearchWebView> createState() => _GoogleSearchWebViewState();
@@ -83,60 +84,6 @@ class _GoogleSearchWebViewState extends State<GoogleSearchWebView>
 ''');
     final result = (check ?? '').toString();
     return result == 'captcha' || result == 'consent';
-  }
-
-  /// Scroll down to find and reveal the last organic result, then stop
-  Future<void> _scrollToLastOrganicResult() async {
-    if (_controller == null) return;
-
-    // First find how many organic results exist and scroll to the last one
-    // Use smooth scrollBy in steps until we reach the bottom of organic results
-    _updateStatus('Scanning results...');
-
-    // Scroll down step by step, checking for organic results along the way
-    int lastKnownCount = 0;
-    int stableRounds = 0;
-
-    for (int step = 0; step < 12; step++) {
-      // Count organic results currently visible
-      final countResult = await _controller!.evaluateJavascript(source: '''
-(function() {
-  var items = document.querySelectorAll('#rso .g h3, #search .g h3');
-  return items.length;
-})();
-''');
-      final currentCount =
-          int.tryParse(countResult?.toString() ?? '0') ?? 0;
-
-      if (currentCount > 0) {
-        _updateStatus('Found $currentCount results...');
-        setState(() {
-          _resultCount = currentCount;
-        });
-      }
-
-      // If count stopped growing, we've seen all organic results
-      if (currentCount == lastKnownCount && currentCount > 0) {
-        stableRounds++;
-        if (stableRounds >= 2) break;
-      } else {
-        stableRounds = 0;
-      }
-      lastKnownCount = currentCount;
-
-      // Scroll to the last organic result found so far
-      await _controller!.evaluateJavascript(source: '''
-(function() {
-  var items = document.querySelectorAll('#rso .g h3, #search .g h3');
-  if (items.length > 0) {
-    items[items.length - 1].scrollIntoView({ behavior: 'smooth', block: 'center' });
-  } else {
-    window.scrollBy({ top: window.innerHeight * 0.7, behavior: 'smooth' });
-  }
-})();
-''');
-      await Future.delayed(const Duration(milliseconds: 700));
-    }
   }
 
   Future<List<ExtractedResultInfo>> _extractResultsFromPage() async {
@@ -333,10 +280,6 @@ class _GoogleSearchWebViewState extends State<GoogleSearchWebView>
     if (_isExtracting || _controller == null) return;
     _isExtracting = true;
 
-    // Small random delay to appear more natural
-    await Future.delayed(
-        Duration(milliseconds: 1500 + Random().nextInt(1000)));
-
     // Check if we landed on a CAPTCHA page
     if (await _isCaptchaOrConsentPage()) {
       print('GoogleSearchWebView: CAPTCHA detected, letting user solve it');
@@ -353,50 +296,20 @@ class _GoogleSearchWebViewState extends State<GoogleSearchWebView>
     }
 
     try {
-      _updateStatus('Reading page...');
-
-      // First extraction pass
-      var allResults = await _extractResultsFromPage();
-      setState(() {
-        _resultCount = allResults.length;
-      });
-      _updateStatus('Found ${allResults.length} results');
-
-      // Scroll through organic results so user sees them loading
-      await _scrollToLastOrganicResult();
-
-      // Re-extract after scrolling to pick up any lazy-loaded results
-      await Future.delayed(const Duration(milliseconds: 500));
-      _updateStatus('Extracting results...');
-
-      final moreResults = await _extractResultsFromPage();
-
-      // Merge results, dedup by URL
-      final seenUrls = <String>{};
-      final mergedResults = <ExtractedResultInfo>[];
-      for (final r in [...allResults, ...moreResults]) {
-        if (!seenUrls.contains(r.url)) {
-          seenUrls.add(r.url);
-          mergedResults.add(r);
-        }
+      // Wait for results to render, then grab them without scrolling
+      _updateStatus('Extracting...');
+      List<ExtractedResultInfo> results = [];
+      // Retry a few times — Google renders results dynamically after page load
+      for (int attempt = 0; attempt < 5; attempt++) {
+        await Future.delayed(const Duration(milliseconds: 500));
+        results = await _extractResultsFromPage();
+        if (results.isNotEmpty) break;
       }
-      allResults = mergedResults;
-
-      // Take up to 15
-      if (allResults.length > 15) {
-        allResults = allResults.sublist(0, 15);
-      }
-
       setState(() {
-        _resultCount = allResults.length;
+        _resultCount = results.length;
       });
-      _updateStatus('Got ${allResults.length} results');
-
-      print(
-          'GoogleSearchWebView: Extracted ${allResults.length} results');
-
-      await Future.delayed(const Duration(milliseconds: 400));
-      _popWithResults(allResults);
+      print('GoogleSearchWebView: Extracted ${results.length} results');
+      _popWithResults(results.length > 15 ? results.sublist(0, 15) : results);
     } catch (e) {
       print('GoogleSearchWebView: Error extracting results: $e');
       _popWithResults([]);

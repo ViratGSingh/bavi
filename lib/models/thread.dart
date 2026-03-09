@@ -25,7 +25,6 @@ class ThreadResultData extends Equatable {
   final List<YoutubeVideoData> youtubeVideos;
   final HomeSearchType searchType;
   final ExtractedUrlResultData? extractedUrlData;
-
   ThreadResultData({
     required this.searchType,
     required this.web,

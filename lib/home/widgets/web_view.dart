@@ -25,6 +25,7 @@ class WebViewPage extends StatefulWidget {
   final bool? isInitial;
   final bool? isIncognito;
   final bool showAppBar;
+  final String? highlightText;
 
   const WebViewPage(
       {required this.url,
@@ -33,6 +34,7 @@ class WebViewPage extends StatefulWidget {
       this.isInitial,
       this.isIncognito,
       this.showAppBar = true,
+      this.highlightText,
       super.key});
 
   @override
@@ -128,63 +130,45 @@ class _WebViewPageState extends State<WebViewPage> {
             // Compact URL / Navigation Bar
             Container(
               decoration: BoxDecoration(
-                color: const Color(0xFFF9F9F9),
+                color:  Colors.white,
                 border: Border(
-                  bottom: BorderSide(
-                    color: Colors.grey.withOpacity(0.2),
+                  top: BorderSide(
+                    color: Colors.grey.withOpacity(0.25),
                     width: 0.5,
                   ),
                 ),
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              
               child: Row(
                 children: [
                   _navIconButton(
-                    icon: Icons.arrow_back_ios_new_rounded,
-                    size: 17,
+                    icon: Icons.close_rounded,
+                    size: 22,
                     onPressed: () async {
-                      _lastUserInteraction = DateTime.now();
-                      if (await _controller.canGoBack()) {
-                        await _controller.goBack();
-                        await _updateNavigationState();
-                      } else {
                         Navigator.pop(context);
-                      }
+                      
                     },
                   ),
-                  _navIconButton(
-                    icon: Icons.arrow_forward_ios_rounded,
-                    size: 17,
-                    color: _canGoForward
-                        ? Colors.black87
-                        : Colors.grey.withOpacity(0.3),
-                    onPressed: _canGoForward
-                        ? () async {
-                            _lastUserInteraction = DateTime.now();
-                            await _controller.goForward();
-                            await _updateNavigationState();
-                          }
-                        : null,
-                  ),
-                  const SizedBox(width: 2),
+                  //const SizedBox(width: 2),
                   // URL pill
                   Expanded(
                     child: GestureDetector(
                       onLongPress: () async {
-                        final currentUrl = await _controller.getUrl();
-                        final urlToCopy =
-                            currentUrl?.toString() ?? widget.url;
-                        Clipboard.setData(ClipboardData(text: urlToCopy));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content: Text('Link copied'),
-                              duration: Duration(seconds: 1)),
-                        );
+                        // final currentUrl = await _controller.getUrl();
+                        // final urlToCopy =
+                        //     currentUrl?.toString() ?? widget.url;
+                        // Clipboard.setData(ClipboardData(text: urlToCopy));
+                        // ScaffoldMessenger.of(context).showSnackBar(
+                        //   const SnackBar(
+                        //       content: Text('Link copied'),
+                        //       duration: Duration(seconds: 1)),
+                        // );
                       },
                       child: Container(
                         height: 34,
                         decoration: BoxDecoration(
-                          color: Colors.grey.withOpacity(0.12),
+                          color:  Colors.white,
                           borderRadius: BorderRadius.circular(10),
                         ),
                         padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -193,18 +177,18 @@ class _WebViewPageState extends State<WebViewPage> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
-                              Icons.lock_outline_rounded,
-                              size: 12,
-                              color: Colors.grey.shade600,
-                            ),
-                            const SizedBox(width: 4),
+                            // Icon(
+                            //   Icons.lock_outline_rounded,
+                            //   size: 12,
+                            //   color: Colors.grey.shade600,
+                            // ),
+                            // const SizedBox(width: 4),
                             Flexible(
                               child: Text(
                                 getDomainFromUrl(_currentUrl) ?? 'website.com',
                                 style: TextStyle(
-                                  color: Colors.grey.shade700,
-                                  fontSize: 13,
+                                  color: Colors.black,
+                                  fontSize: 14,
                                   fontWeight: FontWeight.w500,
                                   fontFamily: 'Poppins',
                                 ),
@@ -217,18 +201,18 @@ class _WebViewPageState extends State<WebViewPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 2),
+                  // const SizedBox(width: 6),
+                  // _navIconButton(
+                  //   icon: Iconsax.refresh_outline,
+                  //   size: 18,
+                  //   onPressed: () async {
+                  //     await _controller.reload();
+                  //     await _updateNavigationState();
+                  //   },
+                  // ),
                   _navIconButton(
-                    icon: Iconsax.refresh_outline,
-                    size: 18,
-                    onPressed: () async {
-                      await _controller.reload();
-                      await _updateNavigationState();
-                    },
-                  ),
-                  _navIconButton(
-                    icon: Iconsax.export_outline,
-                    size: 18,
+                    icon: Iconsax.send_2_outline,
+                    size: 22,
                     onPressed: () async {
                       final currentUrl = await _controller.getUrl();
                       Share.share(currentUrl?.toString() ?? widget.url);
@@ -378,6 +362,103 @@ class _WebViewPageState extends State<WebViewPage> {
                     print('Applied smart protection');
                   } catch (e) {
                     print('Error applying filters: $e');
+                  }
+
+                  // Highlight and scroll to answer text if provided
+                  if (widget.highlightText != null &&
+                      widget.highlightText!.isNotEmpty) {
+                    final escapedText = widget.highlightText!
+                        .replaceAll(RegExp(r'\s+'), ' ')
+                        .trim()
+                        .replaceAll('\\', '\\\\')
+                        .replaceAll("'", "\\'")
+                        .replaceAll('\n', ' ')
+                        .replaceAll('\r', ' ');
+                    await controller.evaluateJavascript(source: """
+        (function() {
+          var rawText = '$escapedText';
+
+          // Build search phrases: split into sentences, then progressively shorter word chunks
+          function buildPhrases(text) {
+            var phrases = [];
+            // Split into sentences and take each as a candidate
+            var sentences = text.split(/[.!?]+/).map(function(s) { return s.trim(); }).filter(function(s) { return s.length > 10; });
+            for (var i = 0; i < sentences.length; i++) {
+              phrases.push(sentences[i]);
+            }
+            // Also try word-based chunks from the start
+            var words = text.split(/\\s+/);
+            for (var len = Math.min(words.length, 12); len >= 3; len--) {
+              var chunk = words.slice(0, len).join(' ');
+              if (chunk.length > 10) phrases.push(chunk);
+            }
+            return phrases;
+          }
+
+          // Use window.find() to locate text across DOM nodes, then highlight the selection
+          function findAndHighlight(text) {
+            // Clear any existing selection
+            window.getSelection().removeAllRanges();
+            // window.find(text, caseSensitive, backwards, wrapAround)
+            if (window.find && window.find(text, false, false, true)) {
+              var sel = window.getSelection();
+              if (sel && sel.rangeCount > 0) {
+                try {
+                  var range = sel.getRangeAt(0);
+                  var mark = document.createElement('mark');
+                  mark.style.backgroundColor = '#DFFF00';
+                  mark.style.padding = '2px 4px';
+                  mark.style.borderRadius = '3px';
+                  mark.style.color = '#000';
+                  range.surroundContents(mark);
+                  sel.removeAllRanges();
+                  mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  return true;
+                } catch(e) {
+                  // surroundContents fails if range spans multiple elements
+                  // Just scroll to the selection instead
+                  try {
+                    var rect = sel.getRangeAt(0).getBoundingClientRect();
+                    window.scrollTo({ top: window.scrollY + rect.top - window.innerHeight / 3, behavior: 'smooth' });
+                    // Add a temporary highlight overlay
+                    var overlay = document.createElement('div');
+                    overlay.style.cssText = 'position:absolute;background:#DFFF00;opacity:0.4;pointer-events:none;z-index:99999;border-radius:3px;transition:opacity 3s;';
+                    overlay.style.top = (window.scrollY + rect.top - 2) + 'px';
+                    overlay.style.left = (rect.left - 2) + 'px';
+                    overlay.style.width = (rect.width + 4) + 'px';
+                    overlay.style.height = (rect.height + 4) + 'px';
+                    document.body.appendChild(overlay);
+                    setTimeout(function() { overlay.style.opacity = '0'; }, 3000);
+                    setTimeout(function() { overlay.remove(); }, 6000);
+                    sel.removeAllRanges();
+                    return true;
+                  } catch(e2) {}
+                }
+              }
+            }
+            return false;
+          }
+
+          function attempt() {
+            var phrases = buildPhrases(rawText);
+            for (var i = 0; i < phrases.length; i++) {
+              if (findAndHighlight(phrases[i])) return true;
+            }
+            return false;
+          }
+
+          // Try immediately
+          if (!attempt()) {
+            // Retry after 1s for dynamically loaded content
+            setTimeout(function() {
+              if (!attempt()) {
+                // Final retry after 3s
+                setTimeout(function() { attempt(); }, 2000);
+              }
+            }, 1000);
+          }
+        })();
+      """);
                   }
 
                   await _updateNavigationState();
@@ -530,7 +611,7 @@ class _WebViewPageState extends State<WebViewPage> {
             // Safari-style bottom action bar
             Container(
               decoration: BoxDecoration(
-                color: const Color(0xFFF2F2F2),
+                color:  Colors.white,
                 border: Border(
                   top: BorderSide(
                     color: Colors.grey.withOpacity(0.25),
@@ -538,68 +619,96 @@ class _WebViewPageState extends State<WebViewPage> {
                   ),
                 ),
               ),
-              padding: const EdgeInsets.fromLTRB(24, 10, 24, 10),
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                //mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // Tabs button
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute<void>(
-                          builder: (BuildContext context) =>
-                              const TabsViewPage(),
-                        ),
-                      );
+                  _navIconButton(
+                    icon: Icons.arrow_back_ios_new_rounded,
+                    size: 22,
+                    onPressed: () async {
+                      _lastUserInteraction = DateTime.now();
+                      if (await _controller.canGoBack()) {
+                        await _controller.goBack();
+                        await _updateNavigationState();
+                      } else {
+                        Navigator.pop(context);
+                      }
                     },
-                    child: Icon(
-                      Icons.copy_rounded,
-                      size: 22,
-                      color: Colors.grey.shade500,
-                    ),
                   ),
-                  // Center "+" button
-                  GestureDetector(
-                    onTap: () async {
-                      final currentUrl = await _controller.getUrl();
-                      Share.share(currentUrl?.toString() ?? widget.url);
-                    },
-                    child: Container(
-                      width: 120,
-                      height: 42,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.withOpacity(0.18),
-                        borderRadius: BorderRadius.circular(21),
-                      ),
-                      child: Center(
-                        child: Icon(
-                          Icons.add,
-                          size: 26,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                    ),
+                  SizedBox(width: 6),
+                  _navIconButton(
+                    icon: Icons.arrow_forward_ios_rounded,
+                    size: 22,
+                    color: _canGoForward
+                        ? Colors.black87
+                        : Colors.grey.withOpacity(0.3),
+                    onPressed: _canGoForward
+                        ? () async {
+                            _lastUserInteraction = DateTime.now();
+                            await _controller.goForward();
+                            await _updateNavigationState();
+                          }
+                        : null,
                   ),
-                  // Menu button
-                  GestureDetector(
-                    onTap: () => _showBrowserMenu(context),
-                    child: Container(
-                      width: 42,
-                      height: 42,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.withOpacity(0.18),
-                        borderRadius: BorderRadius.circular(21),
-                      ),
-                      child: Center(
-                        child: Icon(
-                          Icons.keyboard_arrow_up_rounded,
-                          size: 26,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                    ),
-                  ),
+                  // // Tabs button
+                  // GestureDetector(
+                  //   onTap: () {
+                  //     Navigator.push(
+                  //       context,
+                  //       MaterialPageRoute<void>(
+                  //         builder: (BuildContext context) =>
+                  //             const TabsViewPage(),
+                  //       ),
+                  //     );
+                  //   },
+                  //   child: Icon(
+                  //     Icons.copy_rounded,
+                  //     size: 22,
+                  //     color: Colors.grey.shade500,
+                  //   ),
+                  // ),
+                  // // Center "+" button
+                  // GestureDetector(
+                  //   onTap: () async {
+                  //     final currentUrl = await _controller.getUrl();
+                  //     Share.share(currentUrl?.toString() ?? widget.url);
+                  //   },
+                  //   child: Container(
+                  //     width: 120,
+                  //     height: 42,
+                  //     decoration: BoxDecoration(
+                  //       color: Colors.grey.withOpacity(0.18),
+                  //       borderRadius: BorderRadius.circular(21),
+                  //     ),
+                  //     child: Center(
+                  //       child: Icon(
+                  //         Icons.add,
+                  //         size: 26,
+                  //         color: Colors.grey.shade600,
+                  //       ),
+                  //     ),
+                  //   ),
+                  // ),
+                  // // Menu button
+                  // GestureDetector(
+                  //   onTap: () => _showBrowserMenu(context),
+                  //   child: Container(
+                  //     width: 42,
+                  //     height: 42,
+                  //     decoration: BoxDecoration(
+                  //       color: Colors.grey.withOpacity(0.18),
+                  //       borderRadius: BorderRadius.circular(21),
+                  //     ),
+                  //     child: Center(
+                  //       child: Icon(
+                  //         Icons.keyboard_arrow_up_rounded,
+                  //         size: 26,
+                  //         color: Colors.grey.shade600,
+                  //       ),
+                  //     ),
+                  //   ),
+                  // ),
                 ],
               ),
             ),

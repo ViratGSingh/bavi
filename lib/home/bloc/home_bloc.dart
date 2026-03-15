@@ -2861,7 +2861,7 @@ Rules:
         imageStatus: HomeImageStatus.unselected));
     event.imageDescriptionNotifier.value = "";
 
-    // Generate thread title and summary using Sarvam AI before saving
+    // Generate thread title and summary using AI Gateway before saving
     final titleSummary =
         await _generateThreadTitleAndSummary(updThreadData.results);
     updThreadData = updThreadData.copyWith(
@@ -5220,7 +5220,7 @@ Rewrite this query to be self-contained:""";
     return query;
   }
 
-  /// Generates thread title and summary using Sarvam AI based on all user inputs in the thread.
+  /// Generates thread title and summary using AI Gateway based on all user inputs in the thread.
   /// Returns a map with 'title' and 'summary' keys.
   /// Summary is limited to 150 characters.
   Future<Map<String, String>> _generateThreadTitleAndSummary(
@@ -5255,15 +5255,34 @@ Respond ONLY in this exact JSON format, no other text:
 Generate a title and summary for this thread.""";
 
     try {
-      final url = Uri.parse("https://api.sarvam.ai/v1/chat/completions");
+      String modelName;
+      switch (state.selectedModel) {
+        case HomeModel.deepseek:
+          modelName = "deepseek/deepseek-v3";
+          break;
+        case HomeModel.gemini:
+          modelName = "google/gemini-2.5-flash";
+          break;
+        case HomeModel.claude:
+          modelName = "anthropic/claude-haiku-4.5";
+          break;
+        case HomeModel.openAI:
+          modelName = "openai/gpt-5-nano";
+          break;
+        case HomeModel.flashThink:
+          modelName = "google/gemini-2.0-flash-thinking-exp";
+          break;
+      }
+
+      final url = Uri.parse("https://ai-gateway.vercel.sh/v1/chat/completions");
       final response = await http.post(
         url,
         headers: {
           "Content-Type": "application/json",
-          "Authorization": "Bearer ${dotenv.get("SARVAM_API_KEY")}",
+          "Authorization": "Bearer ${dotenv.get("AI_GATEWAY_API_KEY")}",
         },
         body: jsonEncode({
-          "model": "sarvam-m",
+          "model": modelName,
           "stream": false,
           "max_tokens": 200,
           "temperature": 0.3,

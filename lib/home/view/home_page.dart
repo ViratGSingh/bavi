@@ -7,7 +7,8 @@ import 'package:bavi/home/widgets/sources_bottom_sheet.dart';
 import 'package:bavi/home/widgets/location_permission_sheet.dart';
 import 'package:bavi/home/widgets/web_view.dart';
 import 'package:bavi/home/widgets/google_search_webview.dart';
-import 'package:bavi/home/widgets/deep_drissy_search_webview.dart';
+// import 'package:bavi/home/widgets/deep_drissy_search_webview.dart';
+import 'package:bavi/home/widgets/mode_bottom_sheet.dart';
 import 'package:bavi/models/short_video.dart';
 import 'package:bavi/models/thread.dart';
 import 'package:flutter/services.dart';
@@ -265,11 +266,47 @@ class _HomePageState extends State<HomePage>
   Widget build(BuildContext context) {
     return BlocProvider<HomeBloc>(
       create: (context) =>
-          HomeBloc(httpClient: http.Client())..add(HomeInitialUserData()),
+          HomeBloc(httpClient: http.Client())
+            ..add(HomeInitialUserData())
+            ..add(HomeLocalAILoadIfDownloaded()),
       child: BlocListener<HomeBloc, HomeState>(
-        listenWhen: (previous, current) =>
-            previous.ocrExtractionStatus != current.ocrExtractionStatus,
+        listenWhen: (prev, curr) =>
+            prev.localAIStatus != curr.localAIStatus &&
+            curr.localAIStatus == LocalAIStatus.error,
         listener: (context, state) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              behavior: SnackBarBehavior.floating,
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              backgroundColor: Colors.red.shade50,
+              content: Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded,
+                      color: Colors.red.shade700, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Couldn\'t load Drissy. Your device may be low on memory — try closing some apps or freeing up storage.',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 13,
+                        color: Colors.red.shade800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              duration: const Duration(seconds: 6),
+            ),
+          );
+        },
+        child: BlocListener<HomeBloc, HomeState>(
+          listenWhen: (previous, current) =>
+              previous.ocrExtractionStatus != current.ocrExtractionStatus,
+          listener: (context, state) {
           final imageDescriptionNotifier = ValueNotifier<String>('');
 
           if (state.ocrExtractionStatus == OCRExtractionStatus.loading) {
@@ -371,28 +408,30 @@ class _HomePageState extends State<HomePage>
                   );
             }
           },
-          child: BlocListener<HomeBloc, HomeState>(
-            listenWhen: (previous, current) =>
-                previous.deepDrissyWebSearchQueries !=
-                    current.deepDrissyWebSearchQueries &&
-                current.deepDrissyWebSearchQueries != null,
-            listener: (context, state) async {
-              final results =
-                  await Navigator.push<List<ExtractedResultInfo>>(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => DeepDrissySearchWebView(
-                    queries: state.deepDrissyWebSearchQueries!,
-                  ),
-                ),
-              );
-              if (context.mounted) {
-                context.read<HomeBloc>().add(
-                      HomeDeepDrissyWebSearchResultsReceived(
-                          results ?? []),
-                    );
-              }
-            },
+          // Deep Drissy webview listener commented out
+          // child: BlocListener<HomeBloc, HomeState>(
+          //   listenWhen: (previous, current) =>
+          //       previous.deepDrissyWebSearchQueries !=
+          //           current.deepDrissyWebSearchQueries &&
+          //       current.deepDrissyWebSearchQueries != null,
+          //   listener: (context, state) async {
+          //     final results =
+          //         await Navigator.push<List<ExtractedResultInfo>>(
+          //       context,
+          //       MaterialPageRoute(
+          //         builder: (_) => DeepDrissySearchWebView(
+          //           queries: state.deepDrissyWebSearchQueries!,
+          //         ),
+          //       ),
+          //     );
+          //     if (context.mounted) {
+          //       context.read<HomeBloc>().add(
+          //             HomeDeepDrissyWebSearchResultsReceived(
+          //                 results ?? []),
+          //           );
+          //     }
+          //   },
+          //   child:
             child: BlocListener<HomeBloc, HomeState>(
             listenWhen: (previous, current) =>
                 previous.showLocationRationale !=
@@ -753,48 +792,49 @@ class _HomePageState extends State<HomePage>
                               Padding(
                                 padding: const EdgeInsets.only(right: 8),
                                 child: state.status == HomePageStatus.idle
-                                    ? GestureDetector(
-                                        onTap: () async {
-                                          final isGuest =
-                                              _profilePicUrl.isEmpty &&
-                                                  (_displayName.isEmpty ||
-                                                      _displayName == 'Guest');
-                                          if (isGuest) {
-                                            final result =
-                                                await showAuthBottomSheet(
-                                                    context);
-                                            if (result) {
-                                              _loadProfileData();
-                                            }
-                                          } else {
-                                            await Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (_) =>
-                                                    const ProfilePage(),
-                                              ),
-                                            );
-                                            _loadProfileData();
-                                          }
-                                        },
-                                        child: _profilePicUrl.isNotEmpty
-                                            ? CircleAvatar(
-                                                radius: 16,
-                                                backgroundColor:
-                                                    const Color(0xFFF3F4F6),
-                                                child: ClipOval(
-                                                  child: CachedNetworkImage(
-                                                    imageUrl: _profilePicUrl,
-                                                    width: 32,
-                                                    height: 32,
-                                                    fit: BoxFit.cover,
-                                                    errorWidget: (_, __, ___) =>
-                                                        _profileIconFallback(),
-                                                  ),
-                                                ),
-                                              )
-                                            : _profileIconFallback(),
-                                      )
+                                    ? SizedBox.shrink()
+                                    //  GestureDetector(
+                                    //     onTap: () async {
+                                    //       final isGuest =
+                                    //           _profilePicUrl.isEmpty &&
+                                    //               (_displayName.isEmpty ||
+                                    //                   _displayName == 'Guest');
+                                    //       if (isGuest) {
+                                    //         final result =
+                                    //             await showAuthBottomSheet(
+                                    //                 context);
+                                    //         if (result) {
+                                    //           _loadProfileData();
+                                    //         }
+                                    //       } else {
+                                    //         await Navigator.push(
+                                    //           context,
+                                    //           MaterialPageRoute(
+                                    //             builder: (_) =>
+                                    //                 const ProfilePage(),
+                                    //           ),
+                                    //         );
+                                    //         _loadProfileData();
+                                    //       }
+                                    //     },
+                                    //     child: _profilePicUrl.isNotEmpty
+                                    //         ? CircleAvatar(
+                                    //             radius: 16,
+                                    //             backgroundColor:
+                                    //                 const Color(0xFFF3F4F6),
+                                    //             child: ClipOval(
+                                    //               child: CachedNetworkImage(
+                                    //                 imageUrl: _profilePicUrl,
+                                    //                 width: 32,
+                                    //                 height: 32,
+                                    //                 fit: BoxFit.cover,
+                                    //                 errorWidget: (_, __, ___) =>
+                                    //                     _profileIconFallback(),
+                                    //               ),
+                                    //             ),
+                                    //           )
+                                    //         : _profileIconFallback(),
+                                    //   )
                                     : GestureDetector(
                                         onTap: () {
                                           HapticFeedback.lightImpact();
@@ -1588,75 +1628,168 @@ class _HomePageState extends State<HomePage>
                                     children: [
                                       Row(
                                         children: [
-                                          // Deep Drissy toggle chip
-                                          GestureDetector(
-                                            onTap: () {
-                                              context
-                                                  .read<HomeBloc>()
-                                                  .add(HomeToggleDeepDrissy());
-                                            },
-                                            child: AnimatedContainer(
-                                              duration: const Duration(
-                                                  milliseconds: 300),
-                                              curve: Curves.easeInOut,
-                                              height: 32,
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 12),
-                                              decoration: BoxDecoration(
-                                                color: state.deepDrissyStatus ==
-                                                        HomeDeepDrissyStatus
-                                                            .enabled
-                                                    ? const Color(0xFFE8D5FF)
-                                                    : Colors.grey
-                                                        .withOpacity(0.1),
-                                                borderRadius:
-                                                    BorderRadius.circular(26),
-                                                border: state
-                                                            .deepDrissyStatus ==
-                                                        HomeDeepDrissyStatus
-                                                            .enabled
-                                                    ? Border.all(
-                                                        color: const Color(
-                                                                0xFF8A2BE2)
-                                                            .withOpacity(0.3))
-                                                    : null,
-                                              ),
-                                              child: Row(
-                                                mainAxisSize:
-                                                    MainAxisSize.min,
-                                                children: [
-                                                  Icon(
-                                                    Icons.auto_awesome,
-                                                    size: 16,
-                                                    color: state
-                                                                .deepDrissyStatus ==
-                                                            HomeDeepDrissyStatus
-                                                                .enabled
-                                                        ? const Color(
-                                                            0xFF8A2BE2)
-                                                        : Colors.black54,
-                                                  ),
-                                                  const SizedBox(width: 6),
-                                                  Text(
-                                                    "Deep Drissy",
-                                                    style: TextStyle(
-                                                      color: state
-                                                                  .deepDrissyStatus ==
-                                                              HomeDeepDrissyStatus
-                                                                  .enabled
-                                                          ? const Color(
-                                                              0xFF8A2BE2)
-                                                          : Colors.black54,
-                                                      fontSize: 13,
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
+                                          // // Deep Drissy toggle chip
+                                          // GestureDetector(
+                                          //   onTap: () {
+                                          //     context
+                                          //         .read<HomeBloc>()
+                                          //         .add(HomeToggleDeepDrissy());
+                                          //   },
+                                          //   child: AnimatedContainer(
+                                          //     duration: const Duration(
+                                          //         milliseconds: 300),
+                                          //     curve: Curves.easeInOut,
+                                          //     height: 32,
+                                          //     padding:
+                                          //         const EdgeInsets.symmetric(
+                                          //             horizontal: 12),
+                                          //     decoration: BoxDecoration(
+                                          //       color: state.deepDrissyStatus ==
+                                          //               HomeDeepDrissyStatus
+                                          //                   .enabled
+                                          //           ? const Color(0xFFE8D5FF)
+                                          //           : Colors.grey
+                                          //               .withOpacity(0.1),
+                                          //       borderRadius:
+                                          //           BorderRadius.circular(26),
+                                          //       border: state
+                                          //                   .deepDrissyStatus ==
+                                          //               HomeDeepDrissyStatus
+                                          //                   .enabled
+                                          //           ? Border.all(
+                                          //               color: const Color(
+                                          //                       0xFF8A2BE2)
+                                          //                   .withOpacity(0.3))
+                                          //           : null,
+                                          //     ),
+                                          //     child: Row(
+                                          //       mainAxisSize:
+                                          //           MainAxisSize.min,
+                                          //       children: [
+                                          //         Icon(
+                                          //           Icons.auto_awesome,
+                                          //           size: 16,
+                                          //           color: state
+                                          //                       .deepDrissyStatus ==
+                                          //                   HomeDeepDrissyStatus
+                                          //                       .enabled
+                                          //               ? const Color(
+                                          //                   0xFF8A2BE2)
+                                          //               : Colors.black54,
+                                          //         ),
+                                          //         const SizedBox(width: 6),
+                                          //         Text(
+                                          //           "Deep Drissy",
+                                          //           style: TextStyle(
+                                          //             color: state
+                                          //                         .deepDrissyStatus ==
+                                          //                     HomeDeepDrissyStatus
+                                          //                         .enabled
+                                          //                 ? const Color(
+                                          //                     0xFF8A2BE2)
+                                          //                 : Colors.black54,
+                                          //             fontSize: 13,
+                                          //             fontWeight:
+                                          //                 FontWeight.w600,
+                                          //           ),
+                                          //         ),
+                                          //       ],
+                                          //     ),
+                                          //   ),
+                                          // ),
+                                          // const SizedBox(width: 8),
+                                          // // Local AI chip — opens model picker
+                                          // GestureDetector(
+                                          //   onTap: () {
+                                          //     showModalBottomSheet(
+                                          //       context: context,
+                                          //       isScrollControlled: true,
+                                          //       backgroundColor:
+                                          //           Colors.transparent,
+                                          //       builder: (_) =>
+                                          //           ModeBottomSheet(
+                                          //         selectedModel:
+                                          //             state.selectedModel,
+                                          //         localAIStatus:
+                                          //             state.localAIStatus,
+                                          //         localAIDownloadProgress: state
+                                          //             .localAIDownloadProgress,
+                                          //         onModelSelected: (model) {
+                                          //           context
+                                          //               .read<HomeBloc>()
+                                          //               .add(HomeModelSelect(
+                                          //                   model));
+                                          //         },
+                                          //       ),
+                                          //     );
+                                          //   },
+                                          //   child: AnimatedContainer(
+                                          //     duration: const Duration(
+                                          //         milliseconds: 300),
+                                          //     curve: Curves.easeInOut,
+                                          //     height: 32,
+                                          //     padding:
+                                          //         const EdgeInsets.symmetric(
+                                          //             horizontal: 12),
+                                          //     decoration: BoxDecoration(
+                                          //       color: state.selectedModel ==
+                                          //               HomeModel.localAI
+                                          //           ? const Color(0xFFE8D5FF)
+                                          //           : Colors.grey
+                                          //               .withOpacity(0.1),
+                                          //       borderRadius:
+                                          //           BorderRadius.circular(26),
+                                          //       border: state.selectedModel ==
+                                          //               HomeModel.localAI
+                                          //           ? Border.all(
+                                          //               color: const Color(
+                                          //                       0xFF8A2BE2)
+                                          //                   .withOpacity(0.3))
+                                          //           : null,
+                                          //     ),
+                                          //     child: Row(
+                                          //       mainAxisSize:
+                                          //           MainAxisSize.min,
+                                          //       children: [
+                                          //         Icon(
+                                          //           Iconsax.mobile_outline,
+                                          //           size: 16,
+                                          //           color: state.selectedModel ==
+                                          //                   HomeModel.localAI
+                                          //               ? const Color(
+                                          //                   0xFF8A2BE2)
+                                          //               : Colors.black54,
+                                          //         ),
+                                          //         const SizedBox(width: 6),
+                                          //         Text(
+                                          //           state.localAIStatus ==
+                                          //                   LocalAIStatus
+                                          //                       .downloading
+                                          //               ? "AI ${(state.localAIDownloadProgress * 100).toInt()}%"
+                                          //               : state.localAIStatus ==
+                                          //                       LocalAIStatus
+                                          //                           .loading
+                                          //                   ? "Loading..."
+                                          //                   : state.selectedModel ==
+                                          //                           HomeModel
+                                          //                               .localAI
+                                          //                       ? "Local AI"
+                                          //                       : "Models",
+                                          //           style: TextStyle(
+                                          //             color: state.selectedModel ==
+                                          //                     HomeModel.localAI
+                                          //                 ? const Color(
+                                          //                     0xFF8A2BE2)
+                                          //                 : Colors.black54,
+                                          //             fontSize: 13,
+                                          //             fontWeight:
+                                          //                 FontWeight.w600,
+                                          //           ),
+                                          //         ),
+                                          //       ],
+                                          //     ),
+                                          //   ),
+                                          // ),
                                           // const SizedBox(width: 8),
                                           // // Search toggle chip
                                           // GestureDetector(
@@ -1855,26 +1988,19 @@ class _HomePageState extends State<HomePage>
                                                         } else {
                                                           taskTextController
                                                               .text = "";
-                                                          if (state.deepDrissyStatus ==
-                                                              HomeDeepDrissyStatus
-                                                                  .enabled) {
-                                                            context
-                                                                .read<
-                                                                    HomeBloc>()
-                                                                .add(
-                                                                  HomeDeepDrissyGetAnswer(
-                                                                    taskText,
-                                                                    streamedText,
-                                                                    extractedUrlDescription,
-                                                                    extractedUrlTitle,
-                                                                    extractedUrl,
-                                                                    extractedImageUrl,
-                                                                    imageDescriptionNotifier
-                                                                        .value,
-                                                                    imageDescriptionNotifier,
-                                                                  ),
-                                                                );
-                                                          } else {
+                                                          // Deep Drissy commented out — always use HomeGetAnswer
+                                                          // if (state.deepDrissyStatus ==
+                                                          //     HomeDeepDrissyStatus.enabled) {
+                                                          //   context.read<HomeBloc>().add(
+                                                          //     HomeDeepDrissyGetAnswer(
+                                                          //       taskText, streamedText,
+                                                          //       extractedUrlDescription, extractedUrlTitle,
+                                                          //       extractedUrl, extractedImageUrl,
+                                                          //       imageDescriptionNotifier.value,
+                                                          //       imageDescriptionNotifier,
+                                                          //     ),
+                                                          //   );
+                                                          // } else {
                                                             context
                                                                 .read<
                                                                     HomeBloc>()
@@ -1891,7 +2017,7 @@ class _HomePageState extends State<HomePage>
                                                                     imageDescriptionNotifier,
                                                                   ),
                                                                 );
-                                                          }
+                                                          // }
                                                         }
                                                         setState(() {
                                                           isTaskValid = false;
@@ -2040,21 +2166,67 @@ class _HomePageState extends State<HomePage>
                                                       ),
                                                     ],
                                                   )
-                                                : Row(
+                                                : Column(
                                                     mainAxisSize:
                                                         MainAxisSize.min,
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .center,
                                                     children: [
-                                                      // D with chat icon inside
-                                                      Stack(
-                                                        clipBehavior: Clip.none,
-                                                        alignment:
-                                                            Alignment.center,
+                                                      Row(
+                                                        mainAxisSize:
+                                                            MainAxisSize.min,
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .center,
                                                         children: [
+                                                          // D with chat icon inside
+                                                          Stack(
+                                                            clipBehavior:
+                                                                Clip.none,
+                                                            alignment: Alignment
+                                                                .center,
+                                                            children: [
+                                                              Text(
+                                                                'D',
+                                                                style:
+                                                                    TextStyle(
+                                                                  color: Color(
+                                                                      0xFF8A2BE2),
+                                                                  fontSize: 56,
+                                                                  fontFamily:
+                                                                      'BagelFatOne',
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w600,
+                                                                  height: 1,
+                                                                ),
+                                                              ),
+                                                              Container(
+                                                                color: Color(
+                                                                    0xFF8A2BE2),
+                                                                width: 20,
+                                                                height: 30,
+                                                                child: SizedBox
+                                                                    .shrink(),
+                                                              ),
+                                                              // Yellow chat bubble icon positioned inside D's counter
+                                                              Positioned(
+                                                                top: 24,
+                                                                left: 14,
+                                                                child:
+                                                                    CustomPaint(
+                                                                  size: Size(
+                                                                      10, 18),
+                                                                  painter:
+                                                                      ChatBubblePainter(
+                                                                    color: Color(
+                                                                        0xFFDFFF00),
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                          // rissy text
                                                           Text(
-                                                            'D',
+                                                            'rissy',
                                                             style: TextStyle(
                                                               color: Color(
                                                                   0xFF8A2BE2),
@@ -2067,44 +2239,44 @@ class _HomePageState extends State<HomePage>
                                                               height: 1,
                                                             ),
                                                           ),
-                                                          Container(
-                                                            color: Color(
-                                                                0xFF8A2BE2),
-                                                            width: 20,
-                                                            height: 30,
-                                                            child: SizedBox
-                                                                .shrink(),
-                                                          ),
-                                                          // Yellow chat bubble icon positioned inside D's counter
-                                                          Positioned(
-                                                            top: 24,
-                                                            left: 14,
-                                                            child: CustomPaint(
-                                                              size:
-                                                                  Size(10, 18),
-                                                              painter:
-                                                                  ChatBubblePainter(
-                                                                color: Color(
-                                                                    0xFFDFFF00),
-                                                              ),
-                                                            ),
-                                                          ),
                                                         ],
                                                       ),
-                                                      // rissy text
-                                                      Text(
-                                                        'rissy',
-                                                        style: TextStyle(
-                                                          color:
-                                                              Color(0xFF8A2BE2),
-                                                          fontSize: 56,
-                                                          fontFamily:
-                                                              'BagelFatOne',
-                                                          fontWeight:
-                                                              FontWeight.w600,
-                                                          height: 1,
+                                                      // Loading indicator when local model is loading/downloading
+                                                      if (state.localAIStatus ==
+                                                              LocalAIStatus
+                                                                  .loading ||
+                                                          state.localAIStatus ==
+                                                              LocalAIStatus
+                                                                  .downloading) ...[
+                                                        const SizedBox(
+                                                            height: 16),
+                                                        SizedBox(
+                                                          width: 24,
+                                                          height: 24,
+                                                          child:
+                                                              CircularProgressIndicator(
+                                                            strokeWidth: 3,
+                                                            color: Color(
+                                                                0xFF8A2BE2),
+                                                          ),
                                                         ),
-                                                      ),
+                                                        const SizedBox(
+                                                            height: 8),
+                                                        Text(
+                                                          state.localAIStatus ==
+                                                                  LocalAIStatus
+                                                                      .downloading
+                                                              ? 'Downloading model... ${(state.localAIDownloadProgress * 100).toInt()}%'
+                                                              : 'Loading model...',
+                                                          style: TextStyle(
+                                                            color: Color(
+                                                                0xFF8A2BE2),
+                                                            fontSize: 14,
+                                                            fontWeight:
+                                                                FontWeight.w500,
+                                                          ),
+                                                        ),
+                                                      ],
                                                     ],
                                                   ),
                                           ),
@@ -2362,9 +2534,10 @@ class _HomePageState extends State<HomePage>
               );
             }),
           ), // Close inner BlocListener for location
-        ), // Close BlocListener for deepDrissyWebSearchQueries
+        // ), // Close BlocListener for deepDrissyWebSearchQueries
         ), // Close BlocListener for webSearchQuery
       ), // Close outer BlocListener for OCR
+      ), // Close BlocListener for localAI error
     );
   }
 }

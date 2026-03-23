@@ -26,13 +26,21 @@ import 'package:drift/drift.dart' as drift;
 import 'package:bavi/app_database.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:bavi/services/answer_memory_service.dart';
+import 'package:bavi/services/drissy_engine.dart';
+import 'package:bavi/services/storage_checker.dart';
 import 'package:bavi/services/profile_stats_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
 part 'home_event.dart';
 part 'home_state.dart';
 
 class HomeBloc extends Bloc<HomeEvent, HomeState> {
   final http.Client httpClient;
+  final DrissyEngine _drissyEngine = DrissyEngine();
+
+  static const String _modelFileName = 'drissy-qwen3.5-2b.Q4_K_M.gguf';
+  static const String _modelDownloadUrl =
+      'https://huggingface.co/drissea-ai/drissy-qwen3.5-2b-GGUF/resolve/main/drissy-qwen3.5-2b.Q4_K_M.gguf';
   // @override
   // void onTransition(Transition<HomeEvent, HomeState> transition) {
   //   super.onTransition(transition);
@@ -79,6 +87,9 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     on<HomeDeepDrissyGetAnswer>(_getDeepDrissyAnswer);
     on<HomeDeepDrissyWebSearchResultsReceived>(
         _handleDeepDrissyWebSearchResults);
+    on<HomeLocalAIDownloadAndLoad>(_downloadAndLoadLocalModel);
+    on<HomeLocalAIDownloadProgress>(_handleLocalAIDownloadProgress);
+    on<HomeLocalAILoadIfDownloaded>(_loadModelIfDownloaded);
   }
 
   Completer<List<ExtractedResultInfo>>? _webSearchCompleter;
@@ -804,6 +815,122 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     Emitter<HomeState> emit,
   ) async {
     emit(state.copyWith(selectedModel: event.model));
+    // Auto-trigger download+load when localAI is selected and not ready
+    if (event.model == HomeModel.localAI &&
+        state.localAIStatus != LocalAIStatus.ready &&
+        state.localAIStatus != LocalAIStatus.downloading &&
+        state.localAIStatus != LocalAIStatus.loading) {
+      add(HomeLocalAIDownloadAndLoad());
+    }
+  }
+
+  void _handleLocalAIDownloadProgress(
+    HomeLocalAIDownloadProgress event,
+    Emitter<HomeState> emit,
+  ) {
+    emit(state.copyWith(localAIDownloadProgress: event.progress));
+  }
+
+  Future<void> _downloadAndLoadLocalModel(
+    HomeLocalAIDownloadAndLoad event,
+    Emitter<HomeState> emit,
+  ) async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final modelFile = File('${dir.path}/$_modelFileName');
+
+      // Step 1: Download if not already on disk
+      if (!await modelFile.exists()) {
+        // Check available storage before downloading
+        final availableBytes = await StorageChecker.getAvailableBytes();
+        // Model is ~1.7GB; require 2GB buffer for safety
+        const requiredBytes = 2 * 1024 * 1024 * 1024; // 2 GB
+        if (availableBytes != null && availableBytes < requiredBytes) {
+          emit(state.copyWith(localAIStatus: LocalAIStatus.noStorage));
+          return;
+        }
+
+        emit(state.copyWith(
+          localAIStatus: LocalAIStatus.downloading,
+          localAIDownloadProgress: 0.0,
+        ));
+
+        final request = http.Request('GET', Uri.parse(_modelDownloadUrl));
+        final response = await http.Client().send(request);
+
+        if (response.statusCode != 200) {
+          print('Model download failed: ${response.statusCode}');
+          emit(state.copyWith(localAIStatus: LocalAIStatus.error));
+          return;
+        }
+
+        final totalBytes = response.contentLength ?? 0;
+        if (totalBytes > 0) {
+          emit(state.copyWith(localAITotalBytes: totalBytes));
+        }
+        int receivedBytes = 0;
+        final sink = modelFile.openWrite();
+
+        await for (final chunk in response.stream) {
+          sink.add(chunk);
+          receivedBytes += chunk.length;
+          if (totalBytes > 0) {
+            final progress = receivedBytes / totalBytes;
+            // Emit progress every ~2%
+            if ((progress * 100).floor() >
+                (state.localAIDownloadProgress * 100).floor()) {
+              emit(state.copyWith(localAIDownloadProgress: progress));
+            }
+          }
+        }
+        await sink.flush();
+        await sink.close();
+        emit(state.copyWith(localAIDownloadProgress: 1.0));
+      }
+
+      // Step 2: Load model into engine
+      emit(state.copyWith(localAIStatus: LocalAIStatus.loading));
+
+      final success = await _drissyEngine.loadModel(modelFile.path);
+      if (success) {
+        emit(state.copyWith(localAIStatus: LocalAIStatus.ready));
+        print('Local AI model loaded successfully');
+      } else {
+        emit(state.copyWith(localAIStatus: LocalAIStatus.error));
+      }
+    } catch (e) {
+      print('Local AI download/load error: $e');
+      emit(state.copyWith(localAIStatus: LocalAIStatus.error));
+    }
+  }
+
+  Future<void> _loadModelIfDownloaded(
+    HomeLocalAILoadIfDownloaded event,
+    Emitter<HomeState> emit,
+  ) async {
+    // Skip if already loaded or currently loading/downloading
+    if (state.localAIStatus == LocalAIStatus.ready ||
+        state.localAIStatus == LocalAIStatus.loading ||
+        state.localAIStatus == LocalAIStatus.downloading) {
+      return;
+    }
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final modelFile = File('${dir.path}/$_modelFileName');
+      if (!await modelFile.exists()) return;
+
+      emit(state.copyWith(localAIStatus: LocalAIStatus.loading));
+      final success = await _drissyEngine.loadModel(modelFile.path);
+      if (success) {
+        emit(state.copyWith(localAIStatus: LocalAIStatus.ready));
+        print('Local AI model loaded on home init');
+      } else {
+        emit(state.copyWith(localAIStatus: LocalAIStatus.error));
+      }
+    } catch (e) {
+      print('Local AI load error: $e');
+      emit(state.copyWith(localAIStatus: LocalAIStatus.error));
+    }
   }
 
   //Switch Search Type
@@ -1158,43 +1285,23 @@ Rules:
 5. Return ONLY the search query, nothing else.
 """;
 
-      final url = Uri.parse("https://api.groq.com/openai/v1/chat/completions");
-      final request = http.Request("POST", url);
-      request.headers.addAll({
-        "Content-Type": "application/json",
-        "Authorization": "Bearer ${dotenv.get("GROQ_API_KEY")}",
-      });
-
-      request.body = jsonEncode({
-        "model": "llama-3.1-8b-instant",
-        "stream": false,
-        "messages": [
-          {"role": "user", "content": prompt}
-        ],
-      });
-
-      final response = await httpClient.send(request);
-
-      if (response.statusCode == 200) {
-        final body = await response.stream.transform(utf8.decoder).join();
-        final data = jsonDecode(body);
-        final String searchQuery =
-            data['choices']?[0]?['message']?['content']?.trim() ?? query;
-        print("DEBUG: Generated search query: $searchQuery");
-        return (type: "general", searchQuery: searchQuery);
-      } else {
-        print("DEBUG: Search query generation failed: ${response.statusCode}");
-        return (
-          type: "general",
-          searchQuery: query
-        ); // Fallback to original query
+      if (_drissyEngine.isLoaded) {
+        final searchQuery = await _drissyEngine.complete(
+          systemMessage: "You are a search query optimizer. Generate a concise, effective Google search query. Return ONLY the search query, nothing else.",
+          userMessage: prompt,
+          maxTokens: 50,
+          temperature: 0.1,
+        );
+        if (searchQuery != null && searchQuery.isNotEmpty) {
+          print("DEBUG: Generated search query: $searchQuery");
+          return (type: "general", searchQuery: searchQuery);
+        }
       }
+      print("DEBUG: Search query generation skipped: local AI not loaded");
+      return (type: "general", searchQuery: query);
     } catch (e) {
       print("DEBUG: Search query generation error: $e");
-      return (
-        type: "general",
-        searchQuery: query
-      ); // Fallback to original query
+      return (type: "general", searchQuery: query);
     }
   }
 
@@ -1835,21 +1942,57 @@ Rules:
                 "📚 Adding ${memoryContext.length} memory chunks to chat context");
           }
 
-          // No image, use vercelGenerateChatReply with memory context
-          answer = await vercelGenerateChatReply(
-            query,
-            memoryContext,
-            event.streamedText,
-            emit,
-            event.imageDescription,
-            state.threadData.results
+          // No image, use local AI for chat reply
+          if (_drissyEngine.isLoaded) {
+            final chatSystemPrompt = """You are a personal memory assistant that helps users recall and explore information from their saved memories.
+
+Rules:
+- Always respond in Markdown format.
+- **ONLY use information from the provided memory context** - do NOT make up or hallucinate any information.
+- If the memory results don't contain relevant information, honestly say "I don't have that in your memories" rather than guessing.
+- Be conversational and warm.
+- **Bold key insights** and important information.
+- Keep responses concise and optimized for mobile readability.
+
+The user is located in ${userData.city}, ${userData.region}, ${userData.country}. The current date and time is ${DateTime.now()}.
+${memoryContext.isNotEmpty ? "\nMemory context:\n${memoryContext.map((m) => '${m["title"]}: ${m["snippet"]}').join('\n')}" : ""}
+${event.imageDescription.isNotEmpty ? "\nImage description: ${event.imageDescription}" : ""}
+${resultData.extractedUrlData != null && resultData.extractedUrlData!.snippet.isNotEmpty ? "\nExtracted URL: ${resultData.extractedUrlData!.snippet}" : ""}""";
+
+            final previousResults = state.threadData.results
                 .getRange(0, state.threadData.results.length - 1)
-                .toList(),
-            resultData.extractedUrlData,
-            userData.city,
-            userData.region,
-            userData.country,
-          );
+                .toList();
+            final conversationMessages = <Map<String, String>>[];
+            for (final item in previousResults) {
+              conversationMessages.add({
+                'role': 'user',
+                'content': item.userQuery,
+              });
+              conversationMessages.add({
+                'role': 'assistant',
+                'content': item.answer,
+              });
+            }
+            conversationMessages.add({
+              'role': 'user',
+              'content': query,
+            });
+
+            String finalContent = "";
+            await for (final token in _drissyEngine.chat(
+              systemMessage: chatSystemPrompt,
+              conversationMessages: conversationMessages,
+            )) {
+              finalContent += token;
+              event.streamedText.value = finalContent;
+              emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+            }
+            answer = finalContent.isNotEmpty ? finalContent : null;
+          } else {
+            answer = 'Local AI model not loaded. Please enable Local AI in settings.';
+            event.streamedText.value = answer!;
+            emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+          }
         }
       } else {
         //Understand the query
@@ -2775,20 +2918,38 @@ Rules:
       print("");
 
       print("Starting to generate answer");
-      answer = await vercelNewGenerateReply(
-        query,
-        formattedResults,
-        event.streamedText,
-        emit,
-        event.imageDescription,
-        state.threadData.results
-            .getRange(0, state.threadData.results.length - 1)
-            .toList(),
-        resultData.extractedUrlData,
-        city,
-        region,
-        country,
-      );
+
+      // Local AI: use on-device model
+      if (_drissyEngine.isLoaded) {
+        // Trim sources for small on-device model: top 5, max 300 chars each
+        final trimmedSources = <String>[];
+        const maxSources = 5;
+        const maxSnippetChars = 300;
+        for (int i = 0;
+            i < formattedResults.length && i < maxSources;
+            i++) {
+          final s = formattedResults[i];
+          final snippet = (s["snippet"] ?? "").length > maxSnippetChars
+              ? s["snippet"]!.substring(0, maxSnippetChars)
+              : s["snippet"] ?? "";
+          trimmedSources.add('${s["title"]}: $snippet');
+        }
+
+        String finalContent = "";
+        await for (final token in _drissyEngine.answer(
+          query: query,
+          sources: trimmedSources,
+        )) {
+          finalContent += token;
+          event.streamedText.value = finalContent;
+          emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+        }
+        answer = finalContent.isNotEmpty ? finalContent : null;
+      } else {
+        answer = 'Local AI model not loaded. Please enable Local AI in settings.';
+        event.streamedText.value = answer!;
+        emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+      }
     }
 
     //Update ThreadData
@@ -2884,74 +3045,33 @@ Rules:
   /// Generate multiple search queries from user input for Deep Drissy mode
   Future<List<String>> _generateMultipleSearchQueries(String query) async {
     try {
-      String modelName;
-      switch (state.selectedModel) {
-        case HomeModel.deepseek:
-          modelName = "deepseek/deepseek-v3";
-          break;
-        case HomeModel.gemini:
-          modelName = "google/gemini-2.5-flash";
-          break;
-        case HomeModel.claude:
-          modelName = "anthropic/claude-haiku-4.5";
-          break;
-        case HomeModel.openAI:
-          modelName = "openai/gpt-5-nano";
-          break;
-        case HomeModel.flashThink:
-          modelName = "google/gemini-2.0-flash-thinking-exp";
-          break;
-      }
+      if (_drissyEngine.isLoaded) {
+        final content = await _drissyEngine.complete(
+          systemMessage:
+              "You are a search query generator. Given a user question, generate 3-5 diverse Google search queries that together comprehensively address different aspects of the question. Return ONLY a JSON array of strings, nothing else. Example: [\"query 1\", \"query 2\", \"query 3\"]",
+          userMessage: query,
+          maxTokens: 300,
+          temperature: 0.3,
+        );
 
-      final url =
-          Uri.parse("https://ai-gateway.vercel.sh/v1/chat/completions");
-      final response = await http.post(
-        url,
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer ${dotenv.get("AI_GATEWAY_API_KEY")}",
-        },
-        body: jsonEncode({
-          "model": modelName,
-          "stream": false,
-          "max_tokens": 300,
-          "temperature": 0.3,
-          "messages": [
-            {
-              "role": "system",
-              "content":
-                  "You are a search query generator. Given a user question, generate 3-5 diverse Google search queries that together comprehensively address different aspects of the question. Return ONLY a JSON array of strings, nothing else. Example: [\"query 1\", \"query 2\", \"query 3\"]"
-            },
-            {
-              "role": "user",
-              "content": query,
-            },
-          ],
-        }),
-      );
+        if (content != null && content.isNotEmpty) {
+          String jsonStr = content;
+          if (jsonStr.contains("```")) {
+            jsonStr = jsonStr
+                .replaceAll(RegExp(r'```json\s*'), '')
+                .replaceAll(RegExp(r'```\s*'), '')
+                .trim();
+          }
 
-      if (response.statusCode == 200) {
-        final decoded = jsonDecode(response.body);
-        final content =
-            decoded["choices"]?[0]?["message"]?["content"] ?? "";
-        final contentStr = content.toString().trim();
-
-        // Parse JSON array from response
-        // Handle potential markdown code blocks
-        String jsonStr = contentStr;
-        if (jsonStr.contains("```")) {
-          jsonStr = jsonStr
-              .replaceAll(RegExp(r'```json\s*'), '')
-              .replaceAll(RegExp(r'```\s*'), '')
-              .trim();
+          final List<dynamic> queries = jsonDecode(jsonStr);
+          final result =
+              queries.map((q) => q.toString().trim()).toList();
+          print(
+              "Deep Drissy: Generated ${result.length} search queries: $result");
+          return result;
         }
-
-        final List<dynamic> queries = jsonDecode(jsonStr);
-        final result =
-            queries.map((q) => q.toString().trim()).toList();
-        print(
-            "Deep Drissy: Generated ${result.length} search queries: $result");
-        return result;
+      } else {
+        print("Error generating multiple search queries: local AI not loaded");
       }
     } catch (e) {
       print("Error generating multiple search queries: $e");
@@ -3357,20 +3477,38 @@ Rules:
       }
 
       print("Deep Drissy: Starting answer generation");
-      answer = await vercelDeepDrissyGenerateReply(
-        query,
-        formattedResults,
-        event.streamedText,
-        emit,
-        event.imageDescription,
-        state.threadData.results
-            .getRange(0, state.threadData.results.length - 1)
-            .toList(),
-        resultData.extractedUrlData,
-        city,
-        region,
-        country,
-      );
+
+      // Local AI: use on-device model
+      if (_drissyEngine.isLoaded) {
+        // Trim sources for small on-device model: top 8, max 500 chars each
+        final trimmedSources = <String>[];
+        const maxSources = 8;
+        const maxSnippetChars = 500;
+        for (int i = 0;
+            i < formattedResults.length && i < maxSources;
+            i++) {
+          final s = formattedResults[i];
+          final snippet = (s["snippet"] ?? "").length > maxSnippetChars
+              ? s["snippet"]!.substring(0, maxSnippetChars)
+              : s["snippet"] ?? "";
+          trimmedSources.add('${s["title"]}: $snippet');
+        }
+
+        String finalContent = "";
+        await for (final token in _drissyEngine.answer(
+          query: query,
+          sources: trimmedSources,
+        )) {
+          finalContent += token;
+          event.streamedText.value = finalContent;
+          emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+        }
+        answer = finalContent.isNotEmpty ? finalContent : null;
+      } else {
+        answer = 'Local AI model not loaded. Please enable Local AI in settings.';
+        event.streamedText.value = answer!;
+        emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+      }
     }
 
     // Update ThreadData (Deep Drissy)
@@ -3536,7 +3674,7 @@ Don't reveal any personal information you have in your context unless asked abou
     String modelName;
     switch (state.selectedModel) {
       case HomeModel.deepseek:
-        modelName = "deepseek/deepseek-v3";
+        modelName = "deepseek/deepseek-v3.2";
         break;
       case HomeModel.gemini:
         modelName = "google/gemini-2.5-flash";
@@ -3549,6 +3687,9 @@ Don't reveal any personal information you have in your context unless asked abou
         break;
       case HomeModel.flashThink:
         modelName = "google/gemini-2.0-flash-thinking-exp";
+        break;
+      case HomeModel.localAI:
+        modelName = "deepseek/deepseek-v3.2";
         break;
     }
 
@@ -5114,103 +5255,40 @@ ${jsonEncode({
       return query;
     }
 
-    // This is a follow-up query (has previous messages), so we rewrite it
-
-    // Build conversation history from previous results (most recent first for truncation)
-    final conversationParts = previousResults.reversed.map((r) {
-      return "User: ${r.userQuery}\nAssistant: ${r.answer}";
-    }).toList();
-
-    // Limit to ~4k tokens (approximately 4 chars per token, so ~16k chars)
-    const maxChars = 16000;
-    var totalChars = 0;
-    final limitedParts = <String>[];
-
-    for (final part in conversationParts) {
-      if (totalChars + part.length > maxChars) {
-        // Truncate this part if needed to fit
-        final remaining = maxChars - totalChars;
-        if (remaining > 100) {
-          limitedParts.add(part.substring(0, remaining) + "...[truncated]");
-        }
-        break;
-      }
-      limitedParts.add(part);
-      totalChars += part.length;
-    }
-
-    // Reverse back to chronological order
-    final conversationHistory = limitedParts.reversed.join("\n\n");
+    // Build a minimal context: only the user queries (not full answers)
+    // to stay well within the small model's 4096 context window.
+    final recentResults = previousResults.length > 3
+        ? previousResults.sublist(previousResults.length - 3)
+        : previousResults;
+    final contextLines = recentResults
+        .map((r) => r.userQuery)
+        .where((q) => q.isNotEmpty)
+        .toList();
 
     final systemPrompt =
-        """You are a query rewriting assistant. Your task is to rewrite user queries to be completely self-contained.
+        """Rewrite the QUERY by replacing pronouns and references using the CONTEXT. Output ONLY the rewritten query. No explanation.""";
 
-Given a conversation history and the current query, rewrite the current query so that:
-1. All pronouns (it, this, that, they, he, she, etc.) are replaced with the actual entities they refer to from the conversation
-2. All context-dependent references are replaced with explicit information
-3. The meaning and intent of the query remains exactly the same
-4. Everything else in the query stays unchanged
-5. If the query is already self-contained and doesn't need any context, return it as-is
-
-IMPORTANT: Only output the rewritten query, nothing else. No explanations, no quotes, just the query.""";
-
-    final userMessage = """Conversation history:
-$conversationHistory
-
-Current query to rewrite: $query
-
-Rewrite this query to be self-contained:""";
-
-    String modelName;
-    switch (state.selectedModel) {
-      case HomeModel.deepseek:
-        modelName = "deepseek/deepseek-v3";
-        break;
-      case HomeModel.gemini:
-        modelName = "google/gemini-2.5-flash";
-        break;
-      case HomeModel.claude:
-        modelName = "anthropic/claude-haiku-4.5";
-        break;
-      case HomeModel.openAI:
-        modelName = "openai/gpt-5-nano";
-        break;
-      case HomeModel.flashThink:
-        modelName = "google/gemini-2.0-flash-thinking-exp";
-        break;
-    }
+    final userMessage =
+        """CONTEXT:\n${contextLines.join('\n')}\n\nQUERY: $query\n\nREWRITTEN QUERY:""";
 
     try {
-      final url =
-          Uri.parse("https://ai-gateway.vercel.sh/v1/chat/completions");
-      final response = await http.post(
-        url,
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer ${dotenv.get("AI_GATEWAY_API_KEY")}",
-        },
-        body: jsonEncode({
-          "model": modelName,
-          "stream": false,
-          "max_tokens": 300,
-          "temperature": 0.1,
-          "messages": [
-            {"role": "system", "content": systemPrompt},
-            {"role": "user", "content": userMessage},
-          ],
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        final decoded = jsonDecode(response.body);
-        final content = decoded["choices"]?[0]?["message"]?["content"] ?? "";
-        final rewrittenQuery = content.toString().trim();
-
-        if (rewrittenQuery.isNotEmpty) {
-          return rewrittenQuery;
+      if (_drissyEngine.isLoaded) {
+        final result = await _drissyEngine.complete(
+          systemMessage: systemPrompt,
+          userMessage: userMessage,
+          maxTokens: 60,
+          temperature: 0.1,
+        );
+        if (result != null && result.isNotEmpty) {
+          // Guard: if the model produced something way longer than the
+          // original query it likely answered instead of rewriting.
+          if (result.length <= query.length * 3) {
+            return result;
+          }
+          print("❌ Query rewrite too long, using original");
         }
       } else {
-        print("❌ Query rewrite API failed: ${response.statusCode}");
+        print("❌ Query rewrite skipped: local AI not loaded");
       }
     } catch (e) {
       print("❌ Query rewrite failed: $e");
@@ -5255,51 +5333,16 @@ Respond ONLY in this exact JSON format, no other text:
 Generate a title and summary for this thread.""";
 
     try {
-      String modelName;
-      switch (state.selectedModel) {
-        case HomeModel.deepseek:
-          modelName = "deepseek/deepseek-v3";
-          break;
-        case HomeModel.gemini:
-          modelName = "google/gemini-2.5-flash";
-          break;
-        case HomeModel.claude:
-          modelName = "anthropic/claude-haiku-4.5";
-          break;
-        case HomeModel.openAI:
-          modelName = "openai/gpt-5-nano";
-          break;
-        case HomeModel.flashThink:
-          modelName = "google/gemini-2.0-flash-thinking-exp";
-          break;
-      }
+      if (_drissyEngine.isLoaded) {
+        final content = await _drissyEngine.complete(
+          systemMessage: systemPrompt,
+          userMessage: userMessage,
+          maxTokens: 200,
+          temperature: 0.3,
+        );
 
-      final url = Uri.parse("https://ai-gateway.vercel.sh/v1/chat/completions");
-      final response = await http.post(
-        url,
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer ${dotenv.get("AI_GATEWAY_API_KEY")}",
-        },
-        body: jsonEncode({
-          "model": modelName,
-          "stream": false,
-          "max_tokens": 200,
-          "temperature": 0.3,
-          "messages": [
-            {"role": "system", "content": systemPrompt},
-            {"role": "user", "content": userMessage},
-          ],
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        final decoded = jsonDecode(response.body);
-        final content = decoded["choices"]?[0]?["message"]?["content"] ?? "";
-
-        // Parse the JSON response
-        try {
-          // Try to extract JSON from the response (handle potential markdown code blocks)
+        if (content != null && content.isNotEmpty) {
+          // Parse the JSON response
           String jsonStr = content;
           if (content.contains('```')) {
             final match =
@@ -5314,12 +5357,9 @@ Generate a title and summary for this thread.""";
           String title = parsed["title"] ?? "";
           String summary = parsed["summary"] ?? "";
 
-          // Ensure summary is max 150 characters
           if (summary.length > 150) {
             summary = "${summary.substring(0, 147)}...";
           }
-
-          // Ensure title is max 50 characters
           if (title.length > 50) {
             title = "${title.substring(0, 47)}...";
           }
@@ -5328,30 +5368,17 @@ Generate a title and summary for this thread.""";
           print("📝 Generated thread summary: $summary");
 
           return {'title': title, 'summary': summary};
-        } catch (parseError) {
-          print("❌ Failed to parse title/summary JSON: $parseError");
-          // Fallback: use first query as title
-          final fallbackTitle = userQueries.first.length > 50
-              ? "${userQueries.first.substring(0, 47)}..."
-              : userQueries.first;
-          return {'title': fallbackTitle, 'summary': ''};
         }
-      } else {
-        print("❌ Sarvam AI request failed: ${response.statusCode}");
-        // Fallback: use first query as title
-        final fallbackTitle = userQueries.first.length > 50
-            ? "${userQueries.first.substring(0, 47)}..."
-            : userQueries.first;
-        return {'title': fallbackTitle, 'summary': ''};
       }
     } catch (e) {
       print("❌ Error generating thread title/summary: $e");
-      // Fallback: use first query as title
-      final fallbackTitle = userQueries.first.length > 50
-          ? "${userQueries.first.substring(0, 47)}..."
-          : userQueries.first;
-      return {'title': fallbackTitle, 'summary': ''};
     }
+
+    // Fallback: use first query as title
+    final fallbackTitle = userQueries.first.length > 50
+        ? "${userQueries.first.substring(0, 47)}..."
+        : userQueries.first;
+    return {'title': fallbackTitle, 'summary': ''};
   }
 
   Future<String?> vercelNewGenerateReply(
@@ -5425,7 +5452,7 @@ Don't reveal any personal information you have in your context unless asked abou
 """;
 
     // Step 4: Determine Model
-    String modelName = "deepseek/deepseek-v3";
+    String modelName = "deepseek/deepseek-v3.2";
      
 
     // Step 5: Make the streaming API request to Vercel AI SDK Gateway
@@ -5642,7 +5669,7 @@ Don't reveal any personal information you have in your context unless asked abou
               result["url"]!.length +
               result["snippet"]!.length) ~/
           4);
-      if (totalTokens + tokens > 125000) {
+      if (totalTokens + tokens > 8000) {
         break;
       }
       formattedSources.add({
@@ -5811,7 +5838,7 @@ Don't reveal any personal information you have in your context unless asked abou
           "query": fullQuery,
           "search_results": searchResultsStr,
           "system_prompt": systemPrompt,
-          "max_tokens": 8000,
+          "max_tokens": 6000,
           "temperature": 0.7,
           "thinking": false,
           "stream": true,
@@ -5952,7 +5979,7 @@ $formattedUserContext
     String modelName;
     switch (state.selectedModel) {
       case HomeModel.deepseek:
-        modelName = "deepseek/deepseek-v3";
+        modelName = "deepseek/deepseek-v3.2";
         break;
       case HomeModel.gemini:
         modelName = "google/gemini-2.5-flash";
@@ -5966,6 +5993,9 @@ $formattedUserContext
       case HomeModel.flashThink:
         modelName =
             "google/gemini-2.0-flash-thinking-exp"; // Placeholder or appropriate model
+        break;
+      case HomeModel.localAI:
+        modelName = "deepseek/deepseek-v3.2";
         break;
     }
 

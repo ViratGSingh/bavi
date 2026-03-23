@@ -164,6 +164,21 @@ class _DeepDrissySearchWebViewState extends State<DeepDrissySearchWebView>
     return false;
   }
 
+  function isYouTubeVideo(url) {
+    if (!url) return false;
+    try {
+      var u = new URL(url);
+      var host = u.hostname;
+      if (host === 'youtu.be') return true;
+      if (host.indexOf('youtube.com') !== -1 || host.indexOf('youtube.') !== -1) {
+        if (u.pathname.indexOf('/watch') === 0) return true;
+        if (u.pathname.indexOf('/shorts') === 0) return true;
+        if (u.pathname.indexOf('/video') === 0) return true;
+      }
+    } catch(e) {}
+    return false;
+  }
+
   function cleanUrl(url) {
     if (url.indexOf('/url?') !== -1 || url.indexOf('google.com/url') !== -1) {
       try {
@@ -256,6 +271,7 @@ class _DeepDrissySearchWebViewState extends State<DeepDrissySearchWebView>
     }
 
     if (!url || isGoogleInternal(url)) continue;
+    if (isYouTubeVideo(url)) continue;
     if (seen[url]) continue;
     seen[url] = true;
 
@@ -274,7 +290,7 @@ class _DeepDrissySearchWebViewState extends State<DeepDrissySearchWebView>
       var link = block.querySelector('a[href]');
       if (!link) continue;
       var href = cleanUrl(link.href || '');
-      if (!href || isGoogleInternal(href) || seen[href]) continue;
+      if (!href || isGoogleInternal(href) || isYouTubeVideo(href) || seen[href]) continue;
 
       var textEl = block.querySelector('h3') || block.querySelector('[role="heading"]');
       var title2 = textEl ? (textEl.innerText || '').trim() : (link.innerText || '').trim();
@@ -295,7 +311,7 @@ class _DeepDrissySearchWebViewState extends State<DeepDrissySearchWebView>
     for (var k = 0; k < allLinks.length; k++) {
       var lnk = allLinks[k];
       var lHref = cleanUrl(lnk.href || '');
-      if (!lHref || isGoogleInternal(lHref) || seen[lHref]) continue;
+      if (!lHref || isGoogleInternal(lHref) || isYouTubeVideo(lHref) || seen[lHref]) continue;
 
       var lText = (lnk.innerText || '').trim();
       if (lText.length < 8 || lText.length > 200) continue;

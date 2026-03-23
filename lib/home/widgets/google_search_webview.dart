@@ -110,6 +110,21 @@ class _GoogleSearchWebViewState extends State<GoogleSearchWebView>
     return false;
   }
 
+  function isYouTubeVideo(url) {
+    if (!url) return false;
+    try {
+      var u = new URL(url);
+      var host = u.hostname;
+      if (host === 'youtu.be') return true;
+      if (host.indexOf('youtube.com') !== -1 || host.indexOf('youtube.') !== -1) {
+        if (u.pathname.indexOf('/watch') === 0) return true;
+        if (u.pathname.indexOf('/shorts') === 0) return true;
+        if (u.pathname.indexOf('/video') === 0) return true;
+      }
+    } catch(e) {}
+    return false;
+  }
+
   function cleanUrl(url) {
     if (url.indexOf('/url?') !== -1 || url.indexOf('google.com/url') !== -1) {
       try {
@@ -202,6 +217,7 @@ class _GoogleSearchWebViewState extends State<GoogleSearchWebView>
     }
 
     if (!url || isGoogleInternal(url)) continue;
+    if (isYouTubeVideo(url)) continue;
     if (seen[url]) continue;
     seen[url] = true;
 
@@ -220,7 +236,7 @@ class _GoogleSearchWebViewState extends State<GoogleSearchWebView>
       var link = block.querySelector('a[href]');
       if (!link) continue;
       var href = cleanUrl(link.href || '');
-      if (!href || isGoogleInternal(href) || seen[href]) continue;
+      if (!href || isGoogleInternal(href) || isYouTubeVideo(href) || seen[href]) continue;
 
       var textEl = block.querySelector('h3') || block.querySelector('[role="heading"]');
       var title2 = textEl ? (textEl.innerText || '').trim() : (link.innerText || '').trim();
@@ -241,7 +257,7 @@ class _GoogleSearchWebViewState extends State<GoogleSearchWebView>
     for (var k = 0; k < allLinks.length; k++) {
       var lnk = allLinks[k];
       var lHref = cleanUrl(lnk.href || '');
-      if (!lHref || isGoogleInternal(lHref) || seen[lHref]) continue;
+      if (!lHref || isGoogleInternal(lHref) || isYouTubeVideo(lHref) || seen[lHref]) continue;
 
       var lText = (lnk.innerText || '').trim();
       if (lText.length < 8 || lText.length > 200) continue;
@@ -276,9 +292,59 @@ class _GoogleSearchWebViewState extends State<GoogleSearchWebView>
     return [];
   }
 
+  Future<void> _scrollToLastOrganicResult() async {
+    if (_controller == null) return;
+
+    _updateStatus('Scanning results...');
+
+    int lastKnownCount = 0;
+    int stableRounds = 0;
+
+    for (int step = 0; step < 12; step++) {
+      final countResult = await _controller!.evaluateJavascript(source: '''
+(function() {
+  var items = document.querySelectorAll('#rso .g h3, #search .g h3');
+  return items.length;
+})();
+''');
+      final currentCount =
+          int.tryParse(countResult?.toString() ?? '0') ?? 0;
+
+      if (currentCount > 0) {
+        _updateStatus('Found $currentCount results');
+        setState(() {
+          _resultCount = currentCount;
+        });
+      }
+
+      if (currentCount == lastKnownCount && currentCount > 0) {
+        stableRounds++;
+        if (stableRounds >= 2) break;
+      } else {
+        stableRounds = 0;
+      }
+      lastKnownCount = currentCount;
+
+      await _controller!.evaluateJavascript(source: '''
+(function() {
+  var items = document.querySelectorAll('#rso .g h3, #search .g h3');
+  if (items.length > 0) {
+    items[items.length - 1].scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } else {
+    window.scrollBy({ top: window.innerHeight * 0.7, behavior: 'smooth' });
+  }
+})();
+''');
+      await Future.delayed(const Duration(milliseconds: 700));
+    }
+  }
+
   Future<void> _extractResults() async {
     if (_isExtracting || _controller == null) return;
     _isExtracting = true;
+
+    await Future.delayed(
+        Duration(milliseconds: 1500 + Random().nextInt(1000)));
 
     // Check if we landed on a CAPTCHA page
     if (await _isCaptchaOrConsentPage()) {
@@ -296,20 +362,55 @@ class _GoogleSearchWebViewState extends State<GoogleSearchWebView>
     }
 
     try {
-      // Wait for results to render, then grab them without scrolling
-      _updateStatus('Extracting...');
-      List<ExtractedResultInfo> results = [];
-      // Retry a few times — Google renders results dynamically after page load
-      for (int attempt = 0; attempt < 5; attempt++) {
+      if (widget.quickMode) {
+        // Quick mode: grab results as soon as any appear
+        _updateStatus('Extracting...');
+        List<ExtractedResultInfo> results = [];
+        for (int attempt = 0; attempt < 5; attempt++) {
+          await Future.delayed(const Duration(milliseconds: 500));
+          results = await _extractResultsFromPage();
+          if (results.isNotEmpty) break;
+        }
+        setState(() {
+          _resultCount = results.length;
+        });
+        print('GoogleSearchWebView: Extracted ${results.length} results');
+        _popWithResults(
+            results.length > 15 ? results.sublist(0, 15) : results);
+      } else {
+        // General mode: same approach as deep drissy for a single query
+        _updateStatus('Reading page...');
+        var allResults = await _extractResultsFromPage();
+        _updateStatus('Found ${allResults.length} results');
+
+        await _scrollToLastOrganicResult();
+
         await Future.delayed(const Duration(milliseconds: 500));
-        results = await _extractResultsFromPage();
-        if (results.isNotEmpty) break;
+        _updateStatus('Extracting results...');
+
+        final moreResults = await _extractResultsFromPage();
+
+        // Merge results, dedup by URL
+        final mergedResults = <ExtractedResultInfo>[];
+        final localSeen = <String>{};
+        for (final r in [...allResults, ...moreResults]) {
+          if (!localSeen.contains(r.url)) {
+            localSeen.add(r.url);
+            mergedResults.add(r);
+          }
+        }
+        allResults = mergedResults;
+
+        if (allResults.length > 15) {
+          allResults = allResults.sublist(0, 15);
+        }
+
+        setState(() {
+          _resultCount = allResults.length;
+        });
+        print('GoogleSearchWebView: Extracted ${allResults.length} results');
+        _popWithResults(allResults);
       }
-      setState(() {
-        _resultCount = results.length;
-      });
-      print('GoogleSearchWebView: Extracted ${results.length} results');
-      _popWithResults(results.length > 15 ? results.sublist(0, 15) : results);
     } catch (e) {
       print('GoogleSearchWebView: Error extracting results: $e');
       _popWithResults([]);

@@ -13,6 +13,8 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:app_links/app_links.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 
 void main() async {
   // Preserve splash screen until initialization is complete
@@ -26,7 +28,14 @@ void main() async {
   FirebaseFirestore.instance.settings = const Settings(
     persistenceEnabled: true,
   );
-  final router = AppRouter(true).router;
+
+  // Check if the model is already downloaded on device
+  final dir = await getApplicationDocumentsDirectory();
+  final modelFile = File('${dir.path}/drissy-qwen3.5-2b.Q4_K_M.gguf');
+  final hasModel = await modelFile.exists();
+
+  final router =
+      AppRouter(true, hasCompletedOnboarding: hasModel).router;
   navService.setRouter(router);
 
   // Remove splash screen right before running the app

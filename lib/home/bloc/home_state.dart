@@ -66,7 +66,9 @@ enum HomeExtractUrlStatus { loading, success, failure, idle }
 
 enum OCRExtractionStatus { idle, loading, success, failed, cancelled }
 
-enum HomeModel { deepseek, gemini, claude, openAI, flashThink }
+enum HomeModel { deepseek, gemini, claude, openAI, flashThink, localAI }
+
+enum LocalAIStatus { idle, downloading, loading, ready, error, noStorage }
 
 const _sentinel = Object();
 
@@ -94,7 +96,7 @@ final class HomeState extends Equatable {
     this.uploadedImageUrl,
     this.isAnalyzingImage = false,
     this.ocrExtractionStatus = OCRExtractionStatus.idle,
-    this.selectedModel = HomeModel.deepseek,
+    this.selectedModel = HomeModel.localAI,
     this.searchType = HomeSearchType.general,
     this.actionType = HomeActionType.general,
     this.extractUrlStatus = HomeExtractUrlStatus.idle,
@@ -114,6 +116,9 @@ final class HomeState extends Equatable {
     this.deepDrissyStatus = HomeDeepDrissyStatus.disabled,
     this.deepDrissyWebSearchQueries,
     this.deepDrissyReadingStatus,
+    this.localAIStatus = LocalAIStatus.idle,
+    this.localAIDownloadProgress = 0.0,
+    this.localAITotalBytes = 0,
   })  : userData = userData ??
             UserProfileInfo(
               email: "NA",
@@ -183,6 +188,9 @@ final class HomeState extends Equatable {
   final HomeDeepDrissyStatus deepDrissyStatus;
   final List<String>? deepDrissyWebSearchQueries;
   final String? deepDrissyReadingStatus;
+  final LocalAIStatus localAIStatus;
+  final double localAIDownloadProgress;
+  final int localAITotalBytes;
 
   HomeState copyWith({
     String? sessionId,
@@ -227,6 +235,9 @@ final class HomeState extends Equatable {
     HomeDeepDrissyStatus? deepDrissyStatus,
     Object? deepDrissyWebSearchQueries = _sentinel,
     Object? deepDrissyReadingStatus = _sentinel,
+    LocalAIStatus? localAIStatus,
+    double? localAIDownloadProgress,
+    int? localAITotalBytes,
   }) {
     return HomeState(
       editQuery: editQuery ?? this.editQuery,
@@ -282,6 +293,10 @@ final class HomeState extends Equatable {
       deepDrissyReadingStatus: deepDrissyReadingStatus == _sentinel
           ? this.deepDrissyReadingStatus
           : deepDrissyReadingStatus as String?,
+      localAIStatus: localAIStatus ?? this.localAIStatus,
+      localAIDownloadProgress:
+          localAIDownloadProgress ?? this.localAIDownloadProgress,
+      localAITotalBytes: localAITotalBytes ?? this.localAITotalBytes,
     );
   }
 
@@ -328,5 +343,8 @@ final class HomeState extends Equatable {
         deepDrissyStatus,
         deepDrissyWebSearchQueries,
         deepDrissyReadingStatus,
+        localAIStatus,
+        localAIDownloadProgress,
+        localAITotalBytes,
       ];
 }

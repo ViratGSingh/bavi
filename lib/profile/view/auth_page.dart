@@ -107,7 +107,7 @@ class _AuthSheetContent extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             const Text(
-              'To sync your history across devices and get \na cool profile card, please sign in with your Google account.',
+              'To sync your history across devices, please sign in with your Google account.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Color(0xFF6B7280),

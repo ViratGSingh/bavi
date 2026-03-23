@@ -2,7 +2,7 @@ import 'package:bavi/home/view/home_page.dart';
 import 'package:bavi/home/widgets/video_scroll.dart';
 import 'package:bavi/home/widgets/web_view.dart';
 import 'package:bavi/login/view/login_page.dart';
-import 'package:bavi/login/widgets/onboarding.dart';
+import 'package:bavi/onboarding/view/onboarding_page.dart';
 import 'package:bavi/models/short_video.dart';
 import 'package:bavi/navigation_service.dart';
 import 'package:bavi/widgets/loading.screen.dart';
@@ -10,9 +10,10 @@ import 'package:go_router/go_router.dart';
 
 class AppRouter {
   final bool isLoggedIn;
-  AppRouter(this.isLoggedIn);
+  final bool hasCompletedOnboarding;
+  AppRouter(this.isLoggedIn, {this.hasCompletedOnboarding = true});
   late final GoRouter router = GoRouter(
-    initialLocation: '/home',
+    initialLocation: hasCompletedOnboarding ? '/home' : '/onboarding',
     redirect: (context, state) {
       final uriString = state.uri.toString();
       if (uriString.startsWith('http') || uriString.startsWith('https')) {
@@ -104,11 +105,7 @@ class AppRouter {
       
       GoRoute(
         path: '/onboarding',
-        builder: (context, state) {
-          // Extract the name from queryParams
-          final String name = state.uri.queryParameters['name'] ?? '';
-          return WelcomePage(name: name);
-        },
+        builder: (context, state) => const OnboardingPage(),
       ),
       GoRoute(
         path: '/loading',

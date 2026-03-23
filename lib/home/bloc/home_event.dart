@@ -394,3 +394,14 @@ final class HomeDeepDrissyWebSearchResultsReceived extends HomeEvent {
   final List<ExtractedResultInfo> results;
   HomeDeepDrissyWebSearchResultsReceived(this.results);
 }
+
+/// Local AI model download/load events
+final class HomeLocalAIDownloadAndLoad extends HomeEvent {}
+
+/// Load model into memory if already downloaded (no download)
+final class HomeLocalAILoadIfDownloaded extends HomeEvent {}
+
+final class HomeLocalAIDownloadProgress extends HomeEvent {
+  final double progress;
+  HomeLocalAIDownloadProgress(this.progress);
+}

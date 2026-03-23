@@ -5,11 +5,15 @@ import 'package:icons_plus/icons_plus.dart';
 class ModeBottomSheet extends StatelessWidget {
   final Function(HomeModel) onModelSelected;
   final HomeModel selectedModel;
+  final LocalAIStatus localAIStatus;
+  final double localAIDownloadProgress;
 
   const ModeBottomSheet({
     super.key,
     required this.onModelSelected,
     required this.selectedModel,
+    this.localAIStatus = LocalAIStatus.idle,
+    this.localAIDownloadProgress = 0.0,
   });
 
   @override
@@ -95,8 +99,108 @@ class ModeBottomSheet extends StatelessWidget {
               Navigator.pop(context);
             },
           ),
+          const SizedBox(height: 12),
+          _buildLocalAICard(context),
           const SizedBox(height: 20),
         ],
+      ),
+    );
+  }
+
+  Widget _buildLocalAICard(BuildContext context) {
+    final isSelected = selectedModel == HomeModel.localAI;
+    final isDownloading = localAIStatus == LocalAIStatus.downloading;
+    final isLoading = localAIStatus == LocalAIStatus.loading;
+    final isReady = localAIStatus == LocalAIStatus.ready;
+
+    final isNoStorage = localAIStatus == LocalAIStatus.noStorage;
+
+    String subtitle = 'On-device, private inference';
+    if (isNoStorage) {
+      subtitle = 'Not enough storage — free up space to download';
+    } else if (isDownloading) {
+      subtitle =
+          'Downloading model... ${(localAIDownloadProgress * 100).toInt()}%';
+    } else if (isLoading) {
+      subtitle = 'Loading model...';
+    } else if (isReady) {
+      subtitle = 'Ready - runs fully on device';
+    }
+
+    return GestureDetector(
+      onTap: () {
+        onModelSelected(HomeModel.localAI);
+        Navigator.pop(context);
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? const Color(0xFFF3E5F5)
+              : const Color(0xFFF5F5F5),
+          borderRadius: BorderRadius.circular(16),
+          border: isSelected
+              ? Border.all(color: const Color(0xFF8A2BE2), width: 1)
+              : null,
+        ),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Iconsax.mobile_outline,
+                  color: isSelected ? const Color(0xFF8A2BE2) : Colors.black,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Local AI',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: isSelected
+                              ? const Color(0xFF8A2BE2)
+                              : Colors.black,
+                        ),
+                      ),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          color: isSelected
+                              ? const Color(0xFF8A2BE2).withOpacity(0.7)
+                              : Colors.black54,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (isSelected)
+                  const Icon(
+                    Icons.check_circle,
+                    color: Color(0xFF8A2BE2),
+                    size: 20,
+                  ),
+              ],
+            ),
+            if (isDownloading) ...[
+              const SizedBox(height: 10),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: localAIDownloadProgress,
+                  backgroundColor: Colors.grey[300],
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                      Color(0xFF8A2BE2)),
+                  minHeight: 4,
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

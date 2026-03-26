@@ -4,8 +4,10 @@ import 'package:llamadart/llamadart.dart';
 class DrissyEngine {
   LlamaEngine? _engine;
   bool _isLoaded = false;
+  bool _isVisionLoaded = false;
 
   bool get isLoaded => _isLoaded;
+  bool get isVisionLoaded => _isVisionLoaded;
 
   static const String systemPrompt =
       '''You are Drissy, a private, conversational, and insightful answer engine. You do not save user data and keep as much processing as possible strictly on-device.
@@ -41,11 +43,11 @@ Rules:
       await _engine!.loadModel(
         modelPath,
         modelParams: ModelParams(
-          contextSize: 4096,
+          contextSize: 8192,
           gpuLayers: ModelParams.maxGpuLayers,
           numberOfThreads: 2,
           numberOfThreadsBatch: 4,
-          batchSize: 1024,
+          batchSize: 2048,
           microBatchSize: 512,
           preferredBackend: Platform.isIOS ? GpuBackend.metal : GpuBackend.vulkan,
         ),
@@ -60,6 +62,21 @@ Rules:
     } catch (e) {
       print('Failed to load model: $e');
       _isLoaded = false;
+      return false;
+    }
+  }
+
+  /// Load the multimodal projector for vision support
+  Future<bool> loadVisionProjector(String mmProjPath) async {
+    if (_engine == null || !_isLoaded) return false;
+    try {
+      await _engine!.loadMultimodalProjector(mmProjPath);
+      _isVisionLoaded = true;
+      print('Vision projector loaded successfully');
+      return true;
+    } catch (e) {
+      print('Failed to load vision projector: $e');
+      _isVisionLoaded = false;
       return false;
     }
   }
@@ -122,15 +139,19 @@ Rules:
       ),
     ];
 
-    await for (final chunk in _engine!.create(
-      messages,
-      params: _generationParams,
-      enableThinking: false,
-    )) {
-      final content = chunk.choices.firstOrNull?.delta.content;
-      if (content != null && content.isNotEmpty) {
-        yield content;
+    try {
+      await for (final chunk in _engine!.create(
+        messages,
+        params: _generationParams,
+        enableThinking: false,
+      )) {
+        final content = chunk.choices.firstOrNull?.delta.content;
+        if (content != null && content.isNotEmpty) {
+          yield content;
+        }
       }
+    } catch (e) {
+      print('DrissyEngine answer error: $e');
     }
   }
 
@@ -179,10 +200,67 @@ Rules:
     return result.trim().isNotEmpty ? result.trim() : null;
   }
 
-  /// Streaming chat with conversation history
+  /// Streaming answer with image (vision) support for search mode
+  Stream<String> answerWithImage({
+    required String query,
+    required String imagePath,
+    required List<String> sources,
+  }) async* {
+    if (!_isLoaded || _engine == null) {
+      yield 'Model not loaded.';
+      return;
+    }
+
+    if (!_isVisionLoaded) {
+      yield 'Vision is not available on this device. Please try again without an image.';
+      return;
+    }
+
+    final sourcesText = sources
+        .asMap()
+        .entries
+        .map((e) => 'Source ${e.key + 1}:\n${e.value}')
+        .join('\n\n');
+
+    final userMessage = sources.isNotEmpty
+        ? 'Sources:\n$sourcesText\n\nUser question: $query'
+        : query;
+
+    final messages = <LlamaChatMessage>[
+      LlamaChatMessage.fromText(
+        role: LlamaChatRole.system,
+        text: systemPrompt,
+      ),
+      LlamaChatMessage.withContent(
+        role: LlamaChatRole.user,
+        content: [
+          LlamaImageContent(path: imagePath),
+          LlamaTextContent(userMessage),
+        ],
+      ),
+    ];
+
+    try {
+      await for (final chunk in _engine!.create(
+        messages,
+        params: _generationParams,
+        enableThinking: false,
+      )) {
+        final content = chunk.choices.firstOrNull?.delta.content;
+        if (content != null && content.isNotEmpty) {
+          yield content;
+        }
+      }
+    } catch (e) {
+      print('DrissyEngine answerWithImage error: $e');
+    }
+  }
+
+  /// Streaming chat with conversation history and optional image
   Stream<String> chat({
     required String systemMessage,
     required List<Map<String, String>> conversationMessages,
+    String? imagePath,
   }) async* {
     if (!_isLoaded || _engine == null) {
       yield 'Model not loaded.';
@@ -194,26 +272,52 @@ Rules:
         role: LlamaChatRole.system,
         text: systemMessage,
       ),
-      ...conversationMessages.map((m) {
-        final role = m['role'] == 'assistant'
-            ? LlamaChatRole.assistant
-            : LlamaChatRole.user;
-        return LlamaChatMessage.fromText(
-          role: role,
-          text: m['content'] ?? '',
-        );
-      }),
     ];
 
-    await for (final chunk in _engine!.create(
-      messages,
-      params: _generationParams,
-      enableThinking: false,
-    )) {
-      final content = chunk.choices.firstOrNull?.delta.content;
-      if (content != null && content.isNotEmpty) {
-        yield content;
+    // Add previous conversation history (text only)
+    for (int i = 0; i < conversationMessages.length - 1; i++) {
+      final m = conversationMessages[i];
+      final role = m['role'] == 'assistant'
+          ? LlamaChatRole.assistant
+          : LlamaChatRole.user;
+      messages.add(LlamaChatMessage.fromText(
+        role: role,
+        text: m['content'] ?? '',
+      ));
+    }
+
+    // Add the last user message — with image if provided and vision is loaded
+    if (conversationMessages.isNotEmpty) {
+      final lastMsg = conversationMessages.last;
+      if (imagePath != null && _isVisionLoaded) {
+        messages.add(LlamaChatMessage.withContent(
+          role: LlamaChatRole.user,
+          content: [
+            LlamaImageContent(path: imagePath),
+            LlamaTextContent(lastMsg['content'] ?? ''),
+          ],
+        ));
+      } else {
+        messages.add(LlamaChatMessage.fromText(
+          role: LlamaChatRole.user,
+          text: lastMsg['content'] ?? '',
+        ));
       }
+    }
+
+    try {
+      await for (final chunk in _engine!.create(
+        messages,
+        params: _generationParams,
+        enableThinking: false,
+      )) {
+        final content = chunk.choices.firstOrNull?.delta.content;
+        if (content != null && content.isNotEmpty) {
+          yield content;
+        }
+      }
+    } catch (e) {
+      print('DrissyEngine chat error: $e');
     }
   }
 

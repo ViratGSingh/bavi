@@ -62,6 +62,11 @@ class AppDatabase extends _$AppDatabase {
   Future<void> deleteThread(String id) async {
     await (delete(threads)..where((t) => t.id.equals(id))).go();
   }
+
+  // ✅ Delete all threads
+  Future<void> deleteAllThreads() async {
+    await delete(threads).go();
+  }
 }
 
 LazyDatabase _openConnection() {

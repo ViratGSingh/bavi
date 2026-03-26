@@ -405,3 +405,5 @@ final class HomeLocalAIDownloadProgress extends HomeEvent {
   final double progress;
   HomeLocalAIDownloadProgress(this.progress);
 }
+
+final class HomeDeleteAllHistory extends HomeEvent {}

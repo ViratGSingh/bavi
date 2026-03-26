@@ -96,7 +96,7 @@ class WelcomeScreen extends StatelessWidget {
         
         // Bottom white card section
         Expanded(
-          flex: 25,
+          flex: 20,
           child: Container(
             width: double.infinity,
             decoration: const BoxDecoration(
@@ -107,16 +107,17 @@ class WelcomeScreen extends StatelessWidget {
               ),
             ),
             transform: Matrix4.translationValues(0, -28, 0),
-            padding: const EdgeInsets.fromLTRB(28, 40, 28, 32),
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
             child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-
-                const Text(
-                  'Speedrun your journey \nthrough the web',
+                Column(children: [
+                   const Text(
+                  'Curiosity Without Compromise',//\nthrough the web',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontFamily: 'Poppins',
-                    fontSize: 28,
+                    fontSize: 24,
                     fontWeight: FontWeight.w700,
                     color: Colors.black,
                     height: 1.3,
@@ -124,17 +125,19 @@ class WelcomeScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'An assistant that browses the internet for you, so you can focus on what matters',
+                  'A private assistant that chats, sees\nand browses the web for you',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontFamily: 'Poppins',
-                    fontSize: 14,
+                    fontSize: 12,
                     fontWeight: FontWeight.w400,
                     color: Colors.grey.shade600,
                     height: 1.5,
                   ),
                 ),
-                const Spacer(),
+               
+                ],),
+
                 // "Let's Start!" button
                 SizedBox(
                   width: double.infinity,

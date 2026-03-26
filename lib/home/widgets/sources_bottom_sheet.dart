@@ -35,7 +35,12 @@ class _SourcesBottomSheetState extends State<SourcesBottomSheet> {
 
   Future<void> _pickImage(ImageSource source) async {
     try {
-      final XFile? image = await _picker.pickImage(source: source);
+      final XFile? image = await _picker.pickImage(
+        source: source,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 70,
+      );
       if (image != null) {
         print("DEBUG: Image picked: ${image.path}");
 
@@ -73,7 +78,6 @@ class _SourcesBottomSheetState extends State<SourcesBottomSheet> {
                 'Drissy',
                 style: TextStyle(
                     fontSize: 24,
-                    fontWeight: FontWeight.bold,
                     fontFamily: 'BagelFatOne'),
               ),
               InkWell(
@@ -128,42 +132,42 @@ class _SourcesBottomSheetState extends State<SourcesBottomSheet> {
           //   },
           // ),
           // const SizedBox(height: 16),
-          _buildTypeRow(
-            icon: const Icon(Iconsax.youtube_outline, size: 24),
-            label: 'YouTube',
-            sublabel: 'Shows the best youtube videos for your answer',
-            value: HomeSearchType.youtube,
-            isEnabled: widget.isYoutubeEnabled,
-            onChanged: (value) async {
-              await Future.delayed(const Duration(milliseconds: 200));
-              widget.onToggleYoutube();
-            },
-          ),
-          const SizedBox(height: 16),
-          _buildTypeRow(
-            icon: const Icon(Iconsax.instagram_outline, size: 24),
-            label: 'Instagram',
-            sublabel: 'Shows the best instagram videos for your answer',
-            value: HomeSearchType.instagram,
-            isEnabled: widget.isInstagramEnabled,
-            onChanged: (value) async {
-              await Future.delayed(const Duration(milliseconds: 200));
-              widget.onToggleInstagram();
-            },
-          ),
-          const SizedBox(height: 16),
-          _buildTypeRow(
-            icon: const Icon(Iconsax.map_1_outline, size: 24),
-            label: 'Map',
-            sublabel:
-                'Helps you decide best places to visit or services to use',
-            value: HomeSearchType.map,
-            isEnabled: widget.isMapEnabled,
-            onChanged: (value) async {
-              await Future.delayed(const Duration(milliseconds: 200));
-              widget.onToggleMap();
-            },
-          ),
+          // _buildTypeRow(
+          //   icon: const Icon(Iconsax.youtube_outline, size: 24),
+          //   label: 'YouTube',
+          //   sublabel: 'Shows the best youtube videos for your answer',
+          //   value: HomeSearchType.youtube,
+          //   isEnabled: widget.isYoutubeEnabled,
+          //   onChanged: (value) async {
+          //     await Future.delayed(const Duration(milliseconds: 200));
+          //     widget.onToggleYoutube();
+          //   },
+          // ),
+          // const SizedBox(height: 16),
+          // _buildTypeRow(
+          //   icon: const Icon(Iconsax.instagram_outline, size: 24),
+          //   label: 'Instagram',
+          //   sublabel: 'Shows the best instagram videos for your answer',
+          //   value: HomeSearchType.instagram,
+          //   isEnabled: widget.isInstagramEnabled,
+          //   onChanged: (value) async {
+          //     await Future.delayed(const Duration(milliseconds: 200));
+          //     widget.onToggleInstagram();
+          //   },
+          // ),
+          // const SizedBox(height: 16),
+          // _buildTypeRow(
+          //   icon: const Icon(Iconsax.map_1_outline, size: 24),
+          //   label: 'Map',
+          //   sublabel:
+          //       'Helps you decide best places to visit or services to use',
+          //   value: HomeSearchType.map,
+          //   isEnabled: widget.isMapEnabled,
+          //   onChanged: (value) async {
+          //     await Future.delayed(const Duration(milliseconds: 200));
+          //     widget.onToggleMap();
+          //   },
+          // ),
           // const SizedBox(height: 16),
           // _buildTypeRow(
           //   icon: const Icon(Iconsax.huobi_token_ht_outline, size: 24),

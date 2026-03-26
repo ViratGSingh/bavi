@@ -148,8 +148,7 @@ class _HistoryPageState extends State<HistoryPage>
                     child: GestureDetector(
                       onTap: () => Navigator.pop(context),
                       child: Container(
-                        color: Colors.black
-                            .withOpacity(0.3 * (1 - _widthAnimation.value)),
+                        color: Colors.transparent,
                       ),
                     ),
                   ),

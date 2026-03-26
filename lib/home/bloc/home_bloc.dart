@@ -41,6 +41,9 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
   static const String _modelFileName = 'drissy-qwen3.5-2b.Q4_K_M.gguf';
   static const String _modelDownloadUrl =
       'https://huggingface.co/drissea-ai/drissy-qwen3.5-2b-GGUF/resolve/main/drissy-qwen3.5-2b.Q4_K_M.gguf';
+  static const String _mmProjFileName = 'drissy-qwen3.5-2b.BF16-mmproj.gguf';
+  static const String _mmProjDownloadUrl =
+      'https://huggingface.co/drissea-ai/drissy-qwen3.5-2b-GGUF/resolve/main/drissy-qwen3.5-2b.BF16-mmproj.gguf';
   // @override
   // void onTransition(Transition<HomeEvent, HomeState> transition) {
   //   super.onTransition(transition);
@@ -90,6 +93,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     on<HomeLocalAIDownloadAndLoad>(_downloadAndLoadLocalModel);
     on<HomeLocalAIDownloadProgress>(_handleLocalAIDownloadProgress);
     on<HomeLocalAILoadIfDownloaded>(_loadModelIfDownloaded);
+    on<HomeDeleteAllHistory>(_deleteAllHistory);
   }
 
   Completer<List<ExtractedResultInfo>>? _webSearchCompleter;
@@ -496,62 +500,25 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     imageDescription.value = "";
 
     try {
-      final bytes = await File(image.path).readAsBytes();
-      final fileName = "${const Uuid().v4()}.jpg";
+      // Verify the image file exists and is readable
+      final file = File(image.path);
+      if (!await file.exists()) {
+        throw Exception('Image file not found');
+      }
 
-      final accessKey = dotenv.get("R2_ACCESS_KEY_ID");
-      final secretKey = dotenv.get("R2_SECRET_ACCESS_KEY");
-      final endpoint = dotenv.get("R2_ENDPOINT");
-      final publicBaseUrl = dotenv.get("R2_PUBLIC_BASE_URL");
-
-      // Ensure endpoint doesn't have trailing slash
-      final cleanEndpoint = endpoint.endsWith('/')
-          ? endpoint.substring(0, endpoint.length - 1)
-          : endpoint;
-
-      // Construct URI for the specific bucket and key
-      final uri = Uri.parse("$cleanEndpoint/drissea/drissea_uploads/$fileName");
-
-      final cleanPublicBaseUrl = publicBaseUrl.endsWith('/')
-          ? publicBaseUrl.substring(0, publicBaseUrl.length - 1)
-          : publicBaseUrl;
-      final publicUrl = "$cleanPublicBaseUrl/drissea_uploads/$fileName";
-
-      // Run both upload and description in parallel
-      final results = await Future.wait([
-        // Upload to R2
-        _uploadWithSigV4(
-          uri: uri,
-          method: 'PUT',
-          payload: bytes,
-          accessKey: accessKey,
-          secretKey: secretKey,
-          region: 'auto',
-        ).then((_) => publicUrl),
-
-        // Extract text from image using PaddleOCR (local LLM)
-        _extractTextWithPaddleOCR(bytes),
-      ]);
-
-      final uploadedUrl = results[0] as String;
-      final description = results[1] as String;
-
-      print("DEBUG: Image upload success: $uploadedUrl");
-      print("DEBUG: Image description: $description");
-
-      // Update the imageDescription ValueNotifier
-      imageDescription.value = description;
+      // On-device vision will analyze the image when the user sends a query.
+      // Just mark the image as ready.
+      imageDescription.value = "Image selected for on-device analysis";
 
       emit(state.copyWith(
         selectedImage: state.selectedImage,
         imageStatus: state.imageStatus,
-        uploadedImageUrl: uploadedUrl,
+        uploadedImageUrl: "",
         isAnalyzingImage: false,
         ocrExtractionStatus: OCRExtractionStatus.success,
       ));
     } catch (e) {
-      print("DEBUG: Image upload/analysis error: $e");
-      // Clear image on failure
+      print("DEBUG: Image analysis error: $e");
       emit(state.copyWith(
         selectedImage: null,
         imageStatus: HomeImageStatus.unselected,
@@ -561,7 +528,6 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       ));
       imageDescription.value = "";
 
-      // Reset status after a short delay
       await Future.delayed(const Duration(milliseconds: 100));
       emit(state.copyWith(ocrExtractionStatus: OCRExtractionStatus.idle));
     }
@@ -595,10 +561,15 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         ],
       });
 
-      final response = await httpClient.send(request);
+      final response = await httpClient.send(request).timeout(
+        const Duration(seconds: 30),
+      );
 
       if (response.statusCode == 200) {
-        final body = await response.stream.transform(utf8.decoder).join();
+        final body = await response.stream
+            .transform(utf8.decoder)
+            .join()
+            .timeout(const Duration(seconds: 30));
         final data = jsonDecode(body);
         final description = data['choices']?[0]?['message']?['content'] ??
             "No description available";
@@ -853,13 +824,16 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         emit(state.copyWith(
           localAIStatus: LocalAIStatus.downloading,
           localAIDownloadProgress: 0.0,
+          localAIDownloadPhase: 'Downloading model...',
         ));
 
         final request = http.Request('GET', Uri.parse(_modelDownloadUrl));
-        final response = await http.Client().send(request);
+        final client = http.Client();
+        final response = await client.send(request);
 
         if (response.statusCode != 200) {
           print('Model download failed: ${response.statusCode}');
+          client.close();
           emit(state.copyWith(localAIStatus: LocalAIStatus.error));
           return;
         }
@@ -885,14 +859,67 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         }
         await sink.flush();
         await sink.close();
+        client.close();
         emit(state.copyWith(localAIDownloadProgress: 1.0));
       }
 
-      // Step 2: Load model into engine
-      emit(state.copyWith(localAIStatus: LocalAIStatus.loading));
+      // Step 2: Download mmproj if not already on disk
+      final mmProjFile = File('${dir.path}/$_mmProjFileName');
+      if (!await mmProjFile.exists()) {
+        emit(state.copyWith(
+          localAIDownloadProgress: 0.0,
+          localAIDownloadPhase: 'Downloading vision model...',
+        ));
+        try {
+          final mmRequest =
+              http.Request('GET', Uri.parse(_mmProjDownloadUrl));
+          final mmClient = http.Client();
+          final mmResponse = await mmClient.send(mmRequest);
+          if (mmResponse.statusCode == 200) {
+            final mmTotalBytes = mmResponse.contentLength ?? 0;
+            if (mmTotalBytes > 0) {
+              emit(state.copyWith(localAIVisionTotalBytes: mmTotalBytes));
+            }
+            int mmReceivedBytes = 0;
+            final mmSink = mmProjFile.openWrite();
+            await for (final chunk in mmResponse.stream) {
+              mmSink.add(chunk);
+              mmReceivedBytes += chunk.length;
+              if (mmTotalBytes > 0) {
+                final mmProgress = mmReceivedBytes / mmTotalBytes;
+                if ((mmProgress * 100).floor() >
+                    (state.localAIDownloadProgress * 100).floor()) {
+                  emit(state.copyWith(localAIDownloadProgress: mmProgress));
+                }
+              }
+            }
+            await mmSink.flush();
+            await mmSink.close();
+            emit(state.copyWith(localAIDownloadProgress: 1.0));
+            print('Vision projector downloaded');
+          }
+          mmClient.close();
+        } catch (e) {
+          print('mmproj download error (non-fatal): $e');
+        }
+      }
+
+      // Step 3: Load model into engine
+      // Brief pause to let the system reclaim download memory before loading
+      // the model — prevents OOM on low-RAM (4 GB) devices.
+      await Future.delayed(const Duration(seconds: 2));
+
+      emit(state.copyWith(
+        localAIStatus: LocalAIStatus.loading,
+        localAIDownloadPhase: '',
+      ));
 
       final success = await _drissyEngine.loadModel(modelFile.path);
       if (success) {
+        // Load vision projector if available
+        if (await mmProjFile.exists()) {
+          await _drissyEngine.loadVisionProjector(mmProjFile.path);
+        }
         emit(state.copyWith(localAIStatus: LocalAIStatus.ready));
         print('Local AI model loaded successfully');
       } else {
@@ -922,6 +949,11 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       emit(state.copyWith(localAIStatus: LocalAIStatus.loading));
       final success = await _drissyEngine.loadModel(modelFile.path);
       if (success) {
+        // Load vision projector if available
+        final mmProjFile = File('${dir.path}/$_mmProjFileName');
+        if (await mmProjFile.exists()) {
+          await _drissyEngine.loadVisionProjector(mmProjFile.path);
+        }
         emit(state.copyWith(localAIStatus: LocalAIStatus.ready));
         print('Local AI model loaded on home init');
       } else {
@@ -989,23 +1021,40 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     //Come up with Reply
     String? answer;
     try {
-      //Image
+      //Image — use on-device Drissy vision
       if (initialresultData.sourceImage != null) {
-        //reply for image
-        answer = await imageVercelGenerateReply(
-          initialresultData.userQuery,
-          [],
-          event.streamedText,
-          emit,
-          initialresultData.sourceImage!,
-          state.threadData.results
-              .getRange(0, state.threadData.results.length - 1)
-              .toList(),
-          initialresultData.extractedUrlData,
-          userData.city,
-          userData.region,
-          userData.country,
-        );
+        if (_drissyEngine.isLoaded && _drissyEngine.isVisionLoaded) {
+          // Write stored bytes to temp file for on-device vision
+          final tempDir = await Directory.systemTemp.createTemp('drissy_img');
+          final tempFile = File('${tempDir.path}/image.jpg');
+          await tempFile.writeAsBytes(initialresultData.sourceImage!);
+          try {
+            String finalContent = "";
+            await for (final token in _drissyEngine.answerWithImage(
+              query: initialresultData.userQuery,
+              imagePath: tempFile.path,
+              sources: [],
+            )) {
+              finalContent += token;
+              event.streamedText.value = finalContent;
+              emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+            }
+            answer = finalContent.isNotEmpty ? finalContent : null;
+          } catch (e) {
+            print('Drissy vision error: $e');
+            answer =
+                "Sorry, I couldn't analyze this image. Please try again.";
+            event.streamedText.value = answer!;
+            emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+          } finally {
+            try { await tempFile.delete(); await tempDir.delete(); } catch (_) {}
+          }
+        } else {
+          answer =
+              "Image analysis isn't available right now. Please make sure the AI model is loaded in settings.";
+          event.streamedText.value = answer!;
+          emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+        }
       }
       //Extracted Url
       else if (initialresultData.extractedUrlData?.link != "" &&
@@ -1741,7 +1790,8 @@ Rules:
 
     //String country = userData.countryCode.toLowerCase();
 
-    // Read image bytes if available
+    // Capture image path and bytes if available
+    final imagePath = state.selectedImage?.path;
     Uint8List? imageBytes;
     if (state.selectedImage != null) {
       try {
@@ -1808,8 +1858,8 @@ Rules:
     String? answer;
     List<LocalResultData> mapResults = [];
 
-    //Image Response
-    if (state.selectedImage != null) {
+    //Image Response — use on-device Drissy vision
+    if (imagePath != null) {
       emit(state.copyWith(
           status: HomePageStatus.success,
           threadData: updThreadData,
@@ -1821,28 +1871,39 @@ Rules:
           selectedImage: null,
           imageStatus: HomeImageStatus.unselected));
 
-      //Get user details using ipapi
-      final userData = await _getUserLocation();
       event.imageDescriptionNotifier.value = "";
 
-      print("asdasdas");
-      print("");
-
-      //reply for image
-      answer = await imageVercelGenerateReply(
-        query,
-        [],
-        event.streamedText,
-        emit,
-        resultData.sourceImage!,
-        state.threadData.results
-            .getRange(0, state.threadData.results.length - 1)
-            .toList(),
-        resultData.extractedUrlData,
-        userData.city,
-        userData.region,
-        userData.country,
-      );
+      if (_drissyEngine.isLoaded && _drissyEngine.isVisionLoaded) {
+        try {
+          String finalContent = "";
+          await for (final token in _drissyEngine.answerWithImage(
+            query: query,
+            imagePath: imagePath,
+            sources: [],
+          )) {
+            finalContent += token;
+            event.streamedText.value = finalContent;
+            emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+          }
+          if (finalContent.isNotEmpty) {
+            answer = finalContent;
+          } else {
+            answer = "Sorry, I couldn't analyze this image. Please try again.";
+            event.streamedText.value = answer!;
+          }
+          emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+        } catch (e) {
+          print('Drissy vision error: $e');
+          answer = "Sorry, I couldn't analyze this image. Please try again.";
+          event.streamedText.value = answer!;
+          emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+        }
+      } else {
+        answer =
+            "Image analysis isn't available right now. Please make sure the AI model is loaded in settings.";
+        event.streamedText.value = answer!;
+        emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+      }
     }
 
     //Extract url response
@@ -1893,26 +1954,37 @@ Rules:
             selectedImage: null,
             replyStatus: HomeReplyStatus.loading));
 
-        //Get user details
-        final userData = await _getUserLocation();
-
-        // If there's an image, use imageVercelGenerateReply
-        if (imageBytes != null) {
-          answer = await imageVercelGenerateChatReply(
-            query,
-            [],
-            event.streamedText,
-            emit,
-            imageBytes,
-            state.threadData.results
-                .getRange(0, state.threadData.results.length - 1)
-                .toList(),
-            resultData.extractedUrlData,
-            userData.city,
-            userData.region,
-            userData.country,
-          );
+        // If there's an image, use on-device Drissy vision
+        if (imagePath != null) {
+          if (_drissyEngine.isLoaded && _drissyEngine.isVisionLoaded) {
+            try {
+              String finalContent = "";
+              await for (final token in _drissyEngine.answerWithImage(
+                query: query,
+                imagePath: imagePath,
+                sources: [],
+              )) {
+                finalContent += token;
+                event.streamedText.value = finalContent;
+                emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+              }
+              answer = finalContent.isNotEmpty ? finalContent : null;
+            } catch (e) {
+              print('Drissy vision error: $e');
+              answer =
+                  "Sorry, I couldn't analyze this image. Please try again.";
+              event.streamedText.value = answer!;
+              emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+            }
+          } else {
+            answer =
+                "Image analysis isn't available right now. Please make sure the AI model is loaded in settings.";
+            event.streamedText.value = answer!;
+            emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+          }
         } else {
+          //Get user details
+          final userData = await _getUserLocation();
           // Search memory for relevant content to enhance the chat reply
           List<({String text, String sourceQuery, double score})>
               chatMemoryChunks = [];
@@ -1959,9 +2031,13 @@ ${memoryContext.isNotEmpty ? "\nMemory context:\n${memoryContext.map((m) => '${m
 ${event.imageDescription.isNotEmpty ? "\nImage description: ${event.imageDescription}" : ""}
 ${resultData.extractedUrlData != null && resultData.extractedUrlData!.snippet.isNotEmpty ? "\nExtracted URL: ${resultData.extractedUrlData!.snippet}" : ""}""";
 
-            final previousResults = state.threadData.results
+            final allPrevious = state.threadData.results
                 .getRange(0, state.threadData.results.length - 1)
                 .toList();
+            const maxHistory = 4;
+            final previousResults = allPrevious.length > maxHistory
+                ? allPrevious.sublist(allPrevious.length - maxHistory)
+                : allPrevious;
             final conversationMessages = <Map<String, String>>[];
             for (final item in previousResults) {
               conversationMessages.add({
@@ -1978,16 +2054,23 @@ ${resultData.extractedUrlData != null && resultData.extractedUrlData!.snippet.is
               'content': query,
             });
 
-            String finalContent = "";
-            await for (final token in _drissyEngine.chat(
-              systemMessage: chatSystemPrompt,
-              conversationMessages: conversationMessages,
-            )) {
-              finalContent += token;
-              event.streamedText.value = finalContent;
+            try {
+              String finalContent = "";
+              await for (final token in _drissyEngine.chat(
+                systemMessage: chatSystemPrompt,
+                conversationMessages: conversationMessages,
+              )) {
+                finalContent += token;
+                event.streamedText.value = finalContent;
+                emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+              }
+              answer = finalContent.isNotEmpty ? finalContent : null;
+            } catch (e) {
+              print('Drissy inference error: $e');
+              answer = 'Something went wrong generating a response. Please try again.';
+              event.streamedText.value = answer!;
               emit(state.copyWith(replyStatus: HomeReplyStatus.success));
             }
-            answer = finalContent.isNotEmpty ? finalContent : null;
           } else {
             answer = 'Local AI model not loaded. Please enable Local AI in settings.';
             event.streamedText.value = answer!;
@@ -2401,6 +2484,90 @@ ${resultData.extractedUrlData != null && resultData.extractedUrlData!.snippet.is
   }
 
   /// Check if a query is a simple factual question suitable for quick search
+  /// Use AI Gateway to condense enriched source snippets for on-device context.
+  /// Returns a single condensed string of the most relevant information.
+  Future<List<String>> _truncateSourcesViaGateway({
+    required String query,
+    required List<Map<String, String>> sources,
+    int maxSources = 6,
+    int targetCharsPerSource = 400,
+  }) async {
+    // Take top sources
+    final topSources = sources.take(maxSources).toList();
+    if (topSources.isEmpty) return [];
+
+    // Build a compact representation of sources for the LLM
+    final sourcesBlock = topSources.asMap().entries.map((e) {
+      final s = e.value;
+      return 'Source ${e.key + 1} [${s["title"]}]:\n${s["snippet"] ?? ""}';
+    }).join('\n\n');
+
+    try {
+      final url =
+          Uri.parse("https://ai-gateway.vercel.sh/v1/chat/completions");
+      final request = http.Request("POST", url);
+      request.headers.addAll({
+        "Content-Type": "application/json",
+        "Authorization": "Bearer ${dotenv.get("AI_GATEWAY_API_KEY")}",
+      });
+
+      request.body = jsonEncode({
+        "model": "google/gemini-2.5-flash",
+        "stream": false,
+        "messages": [
+          {
+            "role": "system",
+            "content":
+                "You are a source condensing assistant. Given a user query and web sources, extract ONLY the most relevant facts from each source. Output exactly one condensed snippet per source, separated by |||. Each snippet must be under $targetCharsPerSource characters. Keep key details: names, numbers, ratings, addresses, dates. Remove filler, ads, navigation text. If a source is irrelevant to the query, output SKIP for that source."
+          },
+          {
+            "role": "user",
+            "content": "Query: $query\n\n$sourcesBlock"
+          }
+        ],
+      });
+
+      final response = await httpClient.send(request);
+
+      if (response.statusCode == 200) {
+        final body = await response.stream.transform(utf8.decoder).join();
+        final data = jsonDecode(body);
+        final content =
+            (data['choices']?[0]?['message']?['content'] ?? '').toString();
+
+        final condensed = content
+            .split('|||')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty && s != 'SKIP')
+            .toList();
+
+        if (condensed.isNotEmpty) {
+          // Pair back with titles
+          final result = <String>[];
+          for (int i = 0; i < condensed.length && i < topSources.length; i++) {
+            if (condensed[i] != 'SKIP') {
+              result.add('${topSources[i]["title"]}: ${condensed[i]}');
+            }
+          }
+          print("AI Gateway condensed ${topSources.length} sources → ${result.length} snippets");
+          return result;
+        }
+      } else {
+        print("AI Gateway truncation failed: ${response.statusCode}");
+      }
+    } catch (e) {
+      print("Error truncating sources via AI Gateway: $e");
+    }
+
+    // Fallback: simple char truncation
+    return topSources.map((s) {
+      final snippet = (s["snippet"] ?? "").length > targetCharsPerSource
+          ? s["snippet"]!.substring(0, targetCharsPerSource)
+          : s["snippet"] ?? "";
+      return '${s["title"]}: $snippet';
+    }).toList();
+  }
+
   bool _isSimpleFactualQuery(String query) {
     final lower = query.toLowerCase().trim();
     final words = lower.split(RegExp(r'\s+'));
@@ -2448,7 +2615,8 @@ ${resultData.extractedUrlData != null && resultData.extractedUrlData!.snippet.is
 
     //String country = userData.countryCode.toLowerCase();
 
-    // Read image bytes if available
+    // Capture image path and bytes if available
+    final imagePath = state.selectedImage?.path;
     Uint8List? imageBytes;
     if (state.selectedImage != null) {
       try {
@@ -2610,10 +2778,99 @@ ${resultData.extractedUrlData != null && resultData.extractedUrlData!.snippet.is
       }
     }
 
+    // Chat mode: skip web search, generate AI reply directly (with optional image)
+    if (state.isChatModeActive) {
+      // Capture image path before clearing state
+      final chatImagePath = state.selectedImage?.path;
+
+      emit(state.copyWith(
+          status: HomePageStatus.success,
+          searchType: state.searchType == HomeSearchType.extractUrl
+              ? HomeSearchType.general
+              : state.searchType,
+          imageStatus: HomeImageStatus.unselected,
+          threadData: updThreadData,
+          loadingIndex: updThreadData.results.length - 1,
+          selectedImage: null,
+          replyStatus: HomeReplyStatus.loading));
+
+      event.imageDescriptionNotifier.value = "";
+
+      if (_drissyEngine.isLoaded) {
+        final userData = await _getUserLocation();
+        final hasVision = _drissyEngine.isVisionLoaded && chatImagePath != null;
+        final chatSystemPrompt =
+            """You are Drissy, a helpful, friendly AI assistant.
+
+Rules:
+- Always respond in Markdown format.
+- Be conversational and warm.
+- **Bold key insights** and important information.
+- Keep responses concise and optimized for mobile readability.
+- If the user asks something you don't know, be honest about it.
+${hasVision ? "- The user has shared an image. Describe and analyze it as part of your response." : ""}
+
+The user is located in ${userData.city}, ${userData.region}, ${userData.country}. The current date and time is ${DateTime.now()}.
+${!hasVision && event.imageDescription.isNotEmpty ? "\nImage description: ${event.imageDescription}" : ""}""";
+
+        final allPrevious = state.threadData.results
+            .getRange(0, state.threadData.results.length - 1)
+            .toList();
+        const maxHistory = 4;
+        final previousResults = allPrevious.length > maxHistory
+            ? allPrevious.sublist(allPrevious.length - maxHistory)
+            : allPrevious;
+        final conversationMessages = <Map<String, String>>[];
+        for (final item in previousResults) {
+          conversationMessages.add({
+            'role': 'user',
+            'content': item.userQuery,
+          });
+          conversationMessages.add({
+            'role': 'assistant',
+            'content': item.answer,
+          });
+        }
+        conversationMessages.add({
+          'role': 'user',
+          'content': query,
+        });
+
+        try {
+          String finalContent = "";
+          await for (final token in _drissyEngine.chat(
+            systemMessage: chatSystemPrompt,
+            conversationMessages: conversationMessages,
+            imagePath: hasVision ? chatImagePath : null,
+          )) {
+            finalContent += token;
+            event.streamedText.value = finalContent;
+            emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+          }
+          if (finalContent.isNotEmpty) {
+            answer = finalContent;
+          } else {
+            answer = 'Something went wrong generating a response. Please try again.';
+            event.streamedText.value = answer!;
+          }
+          emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+        } catch (e) {
+          print('Drissy inference error: $e');
+          answer = 'Something went wrong generating a response. Please try again.';
+          event.streamedText.value = answer!;
+          emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+        }
+      } else {
+        answer =
+            'Local AI model not loaded. Please enable Local AI in settings.';
+        event.streamedText.value = answer!;
+        emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+      }
+    }
     // Continue with search flow for non-chat action types
     //Get Search Results
-    //Image Response
-    if (state.selectedImage != null) {
+    //Image Response — use on-device Drissy vision
+    else if (imagePath != null) {
       emit(state.copyWith(
           status: HomePageStatus.success,
           threadData: updThreadData,
@@ -2627,24 +2884,37 @@ ${resultData.extractedUrlData != null && resultData.extractedUrlData!.snippet.is
 
       event.imageDescriptionNotifier.value = "";
 
-      print("asdasdas");
-      print("");
-
-      //reply for image
-      answer = await imageVercelGenerateReply(
-        query,
-        [],
-        event.streamedText,
-        emit,
-        resultData.sourceImage!,
-        state.threadData.results
-            .getRange(0, state.threadData.results.length - 1)
-            .toList(),
-        resultData.extractedUrlData,
-        city,
-        region,
-        country,
-      );
+      if (_drissyEngine.isLoaded && _drissyEngine.isVisionLoaded) {
+        try {
+          String finalContent = "";
+          await for (final token in _drissyEngine.answerWithImage(
+            query: query,
+            imagePath: imagePath,
+            sources: [],
+          )) {
+            finalContent += token;
+            event.streamedText.value = finalContent;
+            emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+          }
+          if (finalContent.isNotEmpty) {
+            answer = finalContent;
+          } else {
+            answer = "Sorry, I couldn't analyze this image. Please try again.";
+            event.streamedText.value = answer!;
+          }
+          emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+        } catch (e) {
+          print('Drissy vision error: $e');
+          answer = "Sorry, I couldn't analyze this image. Please try again.";
+          event.streamedText.value = answer!;
+          emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+        }
+      } else {
+        answer =
+            "Image analysis isn't available right now. Please make sure the AI model is loaded in settings.";
+        event.streamedText.value = answer!;
+        emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+      }
     } else {
       //Understand the query
       emit(
@@ -2702,7 +2972,7 @@ ${resultData.extractedUrlData != null && resultData.extractedUrlData!.snippet.is
                       })
                   .toList();
 
-              final batchResponse = await http.post(
+              final batchResponse = await httpClient.post(
                 Uri.parse('https://browser-api.drissea.com/extract-batch'),
                 headers: {
                   'Content-Type': 'application/json',
@@ -2715,7 +2985,6 @@ ${resultData.extractedUrlData != null && resultData.extractedUrlData!.snippet.is
                 final batchJson = jsonDecode(batchResponse.body);
                 final List<dynamic> batchResults = batchJson['results'] ?? [];
 
-                // Build a map of url -> extractedText and set of verified urls
                 final Map<String, String> enrichedSnippets = {};
                 final Set<String> verifiedUrls = {};
                 for (final item in batchResults) {
@@ -2729,7 +2998,6 @@ ${resultData.extractedUrlData != null && resultData.extractedUrlData!.snippet.is
                   }
                 }
 
-                // Replace excerpts with enriched text where available
                 extractedResults = extractedResults.map((r) {
                   final enriched = enrichedSnippets[r.url];
                   final isVerified = verifiedUrls.contains(r.url);
@@ -2921,30 +3189,37 @@ ${resultData.extractedUrlData != null && resultData.extractedUrlData!.snippet.is
 
       // Local AI: use on-device model
       if (_drissyEngine.isLoaded) {
-        // Trim sources for small on-device model: top 5, max 300 chars each
-        final trimmedSources = <String>[];
-        const maxSources = 5;
-        const maxSnippetChars = 300;
-        for (int i = 0;
-            i < formattedResults.length && i < maxSources;
-            i++) {
-          final s = formattedResults[i];
-          final snippet = (s["snippet"] ?? "").length > maxSnippetChars
-              ? s["snippet"]!.substring(0, maxSnippetChars)
-              : s["snippet"] ?? "";
-          trimmedSources.add('${s["title"]}: $snippet');
-        }
-
-        String finalContent = "";
-        await for (final token in _drissyEngine.answer(
+        // Use AI Gateway to intelligently condense enriched sources for on-device context
+        final trimmedSources = await _truncateSourcesViaGateway(
           query: query,
-          sources: trimmedSources,
-        )) {
-          finalContent += token;
-          event.streamedText.value = finalContent;
+          sources: formattedResults,
+          maxSources: 6,
+          targetCharsPerSource: 400,
+        );
+
+        try {
+          String finalContent = "";
+          await for (final token in _drissyEngine.answer(
+            query: query,
+            sources: trimmedSources,
+          )) {
+            finalContent += token;
+            event.streamedText.value = finalContent;
+            emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+          }
+          if (finalContent.isNotEmpty) {
+            answer = finalContent;
+          } else {
+            answer = 'Something went wrong generating a response. Please try again.';
+            event.streamedText.value = answer!;
+          }
+          emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+        } catch (e) {
+          print('Drissy inference error: $e');
+          answer = 'Something went wrong generating a response. Please try again.';
+          event.streamedText.value = answer!;
           emit(state.copyWith(replyStatus: HomeReplyStatus.success));
         }
-        answer = finalContent.isNotEmpty ? finalContent : null;
       } else {
         answer = 'Local AI model not loaded. Please enable Local AI in settings.';
         event.streamedText.value = answer!;
@@ -3096,6 +3371,7 @@ ${resultData.extractedUrlData != null && resultData.extractedUrlData!.snippet.is
     _cancelTaskGen = false;
     List<YoutubeVideoData> youtubeVideos = [];
 
+    final imagePath = state.selectedImage?.path;
     Uint8List? imageBytes;
     if (state.selectedImage != null) {
       try {
@@ -3241,8 +3517,8 @@ ${resultData.extractedUrlData != null && resultData.extractedUrlData!.snippet.is
       }
     }
 
-    // Image handling - same as getFastAnswer
-    if (state.selectedImage != null) {
+    // Image handling — use on-device Drissy vision
+    if (imagePath != null) {
       emit(state.copyWith(
           status: HomePageStatus.success,
           threadData: updThreadData,
@@ -3256,20 +3532,37 @@ ${resultData.extractedUrlData != null && resultData.extractedUrlData!.snippet.is
 
       event.imageDescriptionNotifier.value = "";
 
-      answer = await imageVercelGenerateReply(
-        query,
-        [],
-        event.streamedText,
-        emit,
-        resultData.sourceImage!,
-        state.threadData.results
-            .getRange(0, state.threadData.results.length - 1)
-            .toList(),
-        resultData.extractedUrlData,
-        city,
-        region,
-        country,
-      );
+      if (_drissyEngine.isLoaded && _drissyEngine.isVisionLoaded) {
+        try {
+          String finalContent = "";
+          await for (final token in _drissyEngine.answerWithImage(
+            query: query,
+            imagePath: imagePath,
+            sources: [],
+          )) {
+            finalContent += token;
+            event.streamedText.value = finalContent;
+            emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+          }
+          if (finalContent.isNotEmpty) {
+            answer = finalContent;
+          } else {
+            answer = "Sorry, I couldn't analyze this image. Please try again.";
+            event.streamedText.value = answer!;
+          }
+          emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+        } catch (e) {
+          print('Drissy vision error: $e');
+          answer = "Sorry, I couldn't analyze this image. Please try again.";
+          event.streamedText.value = answer!;
+          emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+        }
+      } else {
+        answer =
+            "Image analysis isn't available right now. Please make sure the AI model is loaded in settings.";
+        event.streamedText.value = answer!;
+        emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+      }
     } else {
       emit(state.copyWith(
         status: HomePageStatus.getSearchResults,
@@ -3494,16 +3787,29 @@ ${resultData.extractedUrlData != null && resultData.extractedUrlData!.snippet.is
           trimmedSources.add('${s["title"]}: $snippet');
         }
 
-        String finalContent = "";
-        await for (final token in _drissyEngine.answer(
-          query: query,
-          sources: trimmedSources,
-        )) {
-          finalContent += token;
-          event.streamedText.value = finalContent;
+        try {
+          String finalContent = "";
+          await for (final token in _drissyEngine.answer(
+            query: query,
+            sources: trimmedSources,
+          )) {
+            finalContent += token;
+            event.streamedText.value = finalContent;
+            emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+          }
+          if (finalContent.isNotEmpty) {
+            answer = finalContent;
+          } else {
+            answer = 'Something went wrong generating a response. Please try again.';
+            event.streamedText.value = answer!;
+          }
+          emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+        } catch (e) {
+          print('Drissy inference error: $e');
+          answer = 'Something went wrong generating a response. Please try again.';
+          event.streamedText.value = answer!;
           emit(state.copyWith(replyStatus: HomeReplyStatus.success));
         }
-        answer = finalContent.isNotEmpty ? finalContent : null;
       } else {
         answer = 'Local AI model not loaded. Please enable Local AI in settings.';
         event.streamedText.value = answer!;
@@ -3871,7 +4177,8 @@ Don't reveal any personal information you have in your context unless asked abou
     String drisseaApiHost = dotenv.get('API_HOST');
     _cancelTaskGen = false;
 
-    // Read image bytes if available
+    // Capture image path and bytes if available
+    final imagePath = state.selectedImage?.path;
     Uint8List? imageBytes;
     if (state.selectedImage != null) {
       try {
@@ -3956,8 +4263,8 @@ Don't reveal any personal information you have in your context unless asked abou
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now());
 
-    //Image Response
-    if (imageBytes != null) {
+    //Image Response — use on-device Drissy vision
+    if (imagePath != null) {
       emit(state.copyWith(
           status: HomePageStatus.success,
           threadData: updThreadData,
@@ -3966,24 +4273,38 @@ Don't reveal any personal information you have in your context unless asked abou
               ? HomeSearchType.general
               : state.searchType,
           replyStatus: HomeReplyStatus.loading));
-      print("asdasdas");
-      print("");
 
-      //reply for image
-      answer = await imageVercelGenerateReply(
-        query,
-        [],
-        event.streamedText,
-        emit,
-        resultData.sourceImage!,
-        state.threadData.results
-            .getRange(0, state.threadData.results.length - 1)
-            .toList(),
-        resultData.extractedUrlData,
-        userData.city,
-        userData.region,
-        userData.country,
-      );
+      if (_drissyEngine.isLoaded && _drissyEngine.isVisionLoaded) {
+        try {
+          String finalContent = "";
+          await for (final token in _drissyEngine.answerWithImage(
+            query: query,
+            imagePath: imagePath,
+            sources: [],
+          )) {
+            finalContent += token;
+            event.streamedText.value = finalContent;
+            emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+          }
+          if (finalContent.isNotEmpty) {
+            answer = finalContent;
+          } else {
+            answer = "Sorry, I couldn't analyze this image. Please try again.";
+            event.streamedText.value = answer!;
+          }
+          emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+        } catch (e) {
+          print('Drissy vision error: $e');
+          answer = "Sorry, I couldn't analyze this image. Please try again.";
+          event.streamedText.value = answer!;
+          emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+        }
+      } else {
+        answer =
+            "Image analysis isn't available right now. Please make sure the AI model is loaded in settings.";
+        event.streamedText.value = answer!;
+        emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+      }
     }
 
     //Extract url response
@@ -4759,7 +5080,9 @@ $formattedUserContext
     print("");
 
     try {
-      final streamedResponse = await httpClient.send(request);
+      final streamedResponse = await httpClient
+          .send(request)
+          .timeout(const Duration(seconds: 90));
       print("Response Status Code: ${streamedResponse.statusCode}");
 
       if (streamedResponse.statusCode != 200) {
@@ -4978,7 +5301,9 @@ $formattedUserContext
     print("");
 
     try {
-      final streamedResponse = await httpClient.send(request);
+      final streamedResponse = await httpClient
+          .send(request)
+          .timeout(const Duration(seconds: 90));
       print("Response Status Code: ${streamedResponse.statusCode}");
 
       if (streamedResponse.statusCode != 200) {
@@ -5186,7 +5511,9 @@ ${jsonEncode({
     print("");
 
     try {
-      final streamedResponse = await httpClient.send(request);
+      final streamedResponse = await httpClient
+          .send(request)
+          .timeout(const Duration(seconds: 90));
       print("Response Status Code: ${streamedResponse.statusCode}");
 
       if (streamedResponse.statusCode != 200) {
@@ -5574,7 +5901,9 @@ Don't reveal any personal information you have in your context unless asked abou
     print("");
 
     try {
-      final streamedResponse = await httpClient.send(request);
+      final streamedResponse = await httpClient
+          .send(request)
+          .timeout(const Duration(seconds: 90));
       print("Response Status Code: ${streamedResponse.statusCode}");
 
       if (streamedResponse.statusCode != 200) {
@@ -5851,7 +6180,9 @@ Don't reveal any personal information you have in your context unless asked abou
       request.body = body;
       print("📤 Request Body: $body");
 
-      final streamedResponse = await httpClient.send(request);
+      final streamedResponse = await httpClient
+          .send(request)
+          .timeout(const Duration(seconds: 90));
       print("Response Status Code: ${streamedResponse.statusCode}");
 
       if (streamedResponse.statusCode != 200) {
@@ -6066,7 +6397,9 @@ $formattedUserContext
     print("");
 
     try {
-      final streamedResponse = await httpClient.send(request);
+      final streamedResponse = await httpClient
+          .send(request)
+          .timeout(const Duration(seconds: 90));
       print("Response Status Code: ${streamedResponse.statusCode}");
 
       if (streamedResponse.statusCode != 200) {
@@ -6199,6 +6532,25 @@ $formattedUserContext
         ),
       ),
     );
+  }
+
+  Future<void> _deleteAllHistory(
+      HomeDeleteAllHistory event, Emitter<HomeState> emit) async {
+    try {
+      await AppDatabase().deleteAllThreads();
+      emit(state.copyWith(
+        threadHistory: [],
+        threadData: ThreadSessionData(
+          id: "",
+          isIncognito: false,
+          results: [],
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+        ),
+      ));
+    } catch (e) {
+      print("❌ Error deleting all history: $e");
+    }
   }
 
   Future<void> _getUserInfo(

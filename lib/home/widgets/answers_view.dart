@@ -186,6 +186,7 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
             builder: (context) {
               return GestureDetector(
                 onLongPressStart: (details) async {
+                  HapticFeedback.mediumImpact();
                   final position = details.globalPosition;
                   await showMenu(
                     context: context,

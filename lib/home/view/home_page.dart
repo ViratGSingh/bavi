@@ -8,7 +8,7 @@ import 'package:bavi/home/widgets/location_permission_sheet.dart';
 import 'package:bavi/home/widgets/web_view.dart';
 import 'package:bavi/home/widgets/google_search_webview.dart';
 // import 'package:bavi/home/widgets/deep_drissy_search_webview.dart';
-import 'package:bavi/home/widgets/mode_bottom_sheet.dart';
+import 'package:bavi/home/widgets/settings_bottom_sheet.dart';
 import 'package:bavi/models/short_video.dart';
 import 'package:bavi/models/thread.dart';
 import 'package:flutter/services.dart';
@@ -21,13 +21,9 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:icons_plus/icons_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:in_app_update/in_app_update.dart';
 import 'package:remixicon/remixicon.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:bavi/profile/view/auth_page.dart' show showAuthBottomSheet;
-import 'package:bavi/profile/view/profile_page.dart';
 
 class HomePage extends StatefulWidget {
   final String? query;
@@ -108,6 +104,8 @@ class _HomePageState extends State<HomePage>
   String _displayName = '';
   ValueNotifier<String> imageDescriptionNotifier = ValueNotifier<String>("");
 
+  bool _isLeftPillPressed = false;
+
   ValueNotifier<String> extractedUrlDescription = ValueNotifier<String>("");
   ValueNotifier<String> extractedUrlTitle = ValueNotifier<String>("");
   ValueNotifier<String> extractedUrl = ValueNotifier<String>("");
@@ -176,6 +174,7 @@ class _HomePageState extends State<HomePage>
     });
     initDeepLinks();
     _loadProfileData();
+    _checkShowKeyboardOnLaunch();
     // Add listener to auto-scroll when streaming text updates
     streamedText.addListener(_scrollToBottom);
   }
@@ -199,6 +198,16 @@ class _HomePageState extends State<HomePage>
       _profilePicUrl = prefs.getString('profile_pic_url') ?? '';
       _displayName = prefs.getString('displayName') ?? '';
     });
+  }
+
+  Future<void> _checkShowKeyboardOnLaunch() async {
+    final prefs = await SharedPreferences.getInstance();
+    final showKeyboard = prefs.getBool('show_keyboard_on_launch') ?? false;
+    if (showKeyboard) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        FocusScope.of(context).requestFocus(taskTextFieldFocusNode);
+      });
+    }
   }
 
   Widget _profileIconFallback() {
@@ -458,11 +467,13 @@ class _HomePageState extends State<HomePage>
                         showPrompt: Platform.isAndroid ? false : true,
                         child: Scaffold(
                           backgroundColor: Colors.white,
+                          drawerScrimColor: Colors.black.withValues(alpha: 0.2),
                           drawerEdgeDragWidth:
-                              MediaQuery.of(context).size.width * 0.25,
+                              MediaQuery.of(context).size.width,
                           drawer: Drawer(
                             width: MediaQuery.of(context).size.width * 0.85,
                             backgroundColor: Colors.white,
+                            elevation: 0,
                             child: HistoryPage(
                               sessions: state.threadHistory,
                               historyStatus: state.historyStatus,
@@ -501,421 +512,287 @@ class _HomePageState extends State<HomePage>
                             titleSpacing: 0,
                             backgroundColor: Colors.white,
                             surfaceTintColor: Colors.white,
-                            leadingWidth: 40,
                             elevation:
-                                state.status == HomePageStatus.idle ? 0 : 4,
+                                state.status == HomePageStatus.idle ? 0 : 0,
                             shadowColor: state.status == HomePageStatus.idle
                                 ? Colors.transparent
                                 : Colors.black.withOpacity(0.2),
-                            centerTitle: false,
-                            //state.status == HomePageStatus.idle ? true : false,
-                            leading: Padding(
-                              padding: const EdgeInsets.only(left: 0),
-                              child: InkWell(
-                                onTap: () async {
-                                  // Unfocus any text field and close keyboard completely
-                                  FocusManager.instance.primaryFocus?.unfocus();
-
-                                  // Wait a short moment to ensure keyboard is dismissed
-                                  await Future.delayed(
-                                      const Duration(milliseconds: 100));
-
-                                  // Navigate to History page with slide from left transition
-                                  final homeBloc = context.read<HomeBloc>();
-                                  Navigator.push(
-                                    context,
-                                    SlideFromLeftRoute(
-                                      page: BlocProvider.value(
-                                        value: homeBloc,
-                                        child: BlocBuilder<HomeBloc, HomeState>(
-                                          builder: (context, state) {
-                                            return HistoryPage(
-                                              sessions: state.threadHistory,
-                                              historyStatus:
-                                                  state.historyStatus,
-                                              onNewThread: () {
-                                                mixpanel
-                                                    .track("start_new_thread");
-                                                context.read<HomeBloc>().add(
-                                                      HomeStartNewThread(),
-                                                    );
-                                                taskTextController.clear();
-                                                setState(() {
-                                                  isTaskValid = false;
-                                                });
-                                              },
-                                              onSessionTap:
-                                                  (ThreadSessionData session) {
-                                                mixpanel
-                                                    .track("user_tap_thread");
-                                                Navigator.pop(context);
-                                                context.read<HomeBloc>().add(
-                                                      HomeRetrieveSearchData(
-                                                          session),
-                                                    );
-                                                Future.delayed(const Duration(
-                                                        milliseconds: 300))
-                                                    .then((onValue) {
-                                                  _scrollController.animateTo(
-                                                      _scrollController.position
-                                                          .maxScrollExtent,
-                                                      duration: const Duration(
-                                                          milliseconds: 300),
-                                                      curve: Curves.easeOut);
-                                                });
-                                              },
-                                            );
-                                          },
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                },
-                                child: Container(
-                                  width: 32,
-                                  height: 32,
-                                  decoration: const BoxDecoration(
-                                    shape: BoxShape.circle,
-                                  ),
-                                  padding:
-                                      const EdgeInsets.fromLTRB(1, 0, 2, 0),
-                                  child: const Center(
-                                    child: Icon(
-                                      Iconsax.menu_1_outline,
-                                      color: Colors.black,
-                                      size: 20,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
+                            automaticallyImplyLeading: false,
                             title: Padding(
-                              padding: EdgeInsets.only(
-                                  left: state.status == HomePageStatus.idle
-                                      ? 0
-                                      : 5),
-                              child: InkWell(
-                                onTap: () async {
-                                  // context.read<HomeBloc>().add(
-                                  //       HomeCancelTaskGen(),
-                                  //     );
-                                  // taskTextController.clear();
-                                  // setState(() {
-                                  //   isTaskValid = false;
-                                  // });
-                                  // mixpanel.track("close_search");
-                                },
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    state.status == HomePageStatus.idle
-                                        ? Text(
-                                            '',
-                                            style: TextStyle(
-                                              color: Colors.black,
-                                              fontSize: 24,
-                                              fontFamily: 'BagelFatOne',
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          )
-                                        : Text(
-                                            'Thread',
-                                            style: TextStyle(
-                                              color: Colors.black,
-                                              fontSize: 16,
-                                              fontFamily: 'Poppins',
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                            textHeightBehavior:
-                                                TextHeightBehavior(
-                                              applyHeightToFirstAscent: false,
-                                              applyHeightToLastDescent: false,
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 12),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  // Left pill: Settings + Chat History
+                                  AnimatedScale(
+                                    scale: _isLeftPillPressed ? 0.9 : 1.0,
+                                    duration: const Duration(milliseconds: 120),
+                                    curve: Curves.easeOut,
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade100,
+                                        borderRadius: BorderRadius.circular(24),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(
+                                                _isLeftPillPressed ? 0.04 : 0.08),
+                                            blurRadius:
+                                                _isLeftPillPressed ? 2 : 8,
+                                            offset: Offset(
+                                                0, _isLeftPillPressed ? 1 : 3),
+                                          ),
+                                        ],
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          // Settings button
+                                          GestureDetector(
+                                            onTapDown: (_) => setState(
+                                                () => _isLeftPillPressed = true),
+                                            onTapUp: (_) => setState(
+                                                () => _isLeftPillPressed = false),
+                                            onTapCancel: () => setState(
+                                                () => _isLeftPillPressed = false),
+                                            onTap: () {
+                                              HapticFeedback.mediumImpact();
+                                              mixpanel.track("open_settings");
+                                              showModalBottomSheet(
+                                                context: context,
+                                                isScrollControlled: true,
+                                                backgroundColor:
+                                                    Colors.transparent,
+                                                builder:
+                                                    (bottomSheetContext) =>
+                                                        BlocProvider.value(
+                                                  value: context
+                                                      .read<HomeBloc>(),
+                                                  child:
+                                                      SettingsBottomSheet(
+                                                    onDeleteHistory: () {
+                                                      context.read<HomeBloc>().add(HomeDeleteAllHistory());
+                                                    },
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                            onLongPress: () {
+                                              HapticFeedback.heavyImpact();
+                                            },
+                                            child: Container(
+                                              width: 42,
+                                              height: 42,
+                                              decoration: const BoxDecoration(
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: Icon(
+                                                Iconsax.setting_2_outline,
+                                                color: Colors.black,
+                                                size: 20,
+                                              ),
                                             ),
                                           ),
-                                    Visibility(
-                                      visible: state.isIncognito &&
-                                          state.status != HomePageStatus.idle,
-                                      child: Text(
-                                        'Incognito Mode',
-                                        style: TextStyle(
-                                          color: Colors.grey.shade600,
-                                          fontSize: 12,
-                                          fontFamily: 'Poppins',
-                                        ),
-                                        textHeightBehavior: TextHeightBehavior(
-                                          applyHeightToFirstAscent: false,
-                                          applyHeightToLastDescent: false,
-                                        ),
-                                      ),
-                                    ),
-                                    Visibility(
-                                      visible:
-                                          false, // state.status != HomePageStatus.idle,
-                                      child: Padding(
-                                        padding: const EdgeInsets.only(left: 6),
-                                        child: Container(
-                                          width: 28,
-                                          height: 28,
-                                          child: Center(
-                                            child: Icon(
-                                              Iconsax.edit_outline,
-                                              color: Colors.black,
-                                              size: 20,
+                                          // Chat history button
+                                          GestureDetector(
+                                            onTapDown: (_) => setState(
+                                                () => _isLeftPillPressed = true),
+                                            onTapUp: (_) => setState(
+                                                () => _isLeftPillPressed = false),
+                                            onTapCancel: () => setState(
+                                                () => _isLeftPillPressed = false),
+                                            onTap: () async {
+                                              HapticFeedback.lightImpact();
+                                              mixpanel.track("open_history");
+                                              final homeBloc =
+                                                  context.read<HomeBloc>();
+                                              FocusManager.instance.primaryFocus
+                                                  ?.unfocus();
+                                              await Future.delayed(
+                                                  const Duration(
+                                                      milliseconds: 100));
+                                              if (!mounted) return;
+                                              Navigator.push(
+                                                context,
+                                                SlideFromLeftRoute(
+                                                  page: BlocProvider.value(
+                                                    value: homeBloc,
+                                                    child: BlocBuilder<HomeBloc,
+                                                        HomeState>(
+                                                      builder:
+                                                          (context, state) {
+                                                        return HistoryPage(
+                                                          sessions: state
+                                                              .threadHistory,
+                                                          historyStatus: state
+                                                              .historyStatus,
+                                                          onNewThread: () {
+                                                            mixpanel.track(
+                                                                "start_new_thread");
+                                                            context
+                                                                .read<
+                                                                    HomeBloc>()
+                                                                .add(
+                                                                  HomeStartNewThread(),
+                                                                );
+                                                            taskTextController
+                                                                .clear();
+                                                            setState(() {
+                                                              isTaskValid =
+                                                                  false;
+                                                            });
+                                                          },
+                                                          onSessionTap:
+                                                              (ThreadSessionData
+                                                                  session) {
+                                                            mixpanel.track(
+                                                                "user_tap_thread");
+                                                            Navigator.pop(
+                                                                context);
+                                                            context
+                                                                .read<
+                                                                    HomeBloc>()
+                                                                .add(
+                                                                  HomeRetrieveSearchData(
+                                                                      session),
+                                                                );
+                                                            Future.delayed(
+                                                                    const Duration(
+                                                                        milliseconds:
+                                                                            300))
+                                                                .then(
+                                                                    (onValue) {
+                                                              _scrollController
+                                                                  .animateTo(
+                                                                      _scrollController
+                                                                          .position
+                                                                          .maxScrollExtent,
+                                                                      duration: const Duration(
+                                                                          milliseconds:
+                                                                              300),
+                                                                      curve: Curves
+                                                                          .easeOut);
+                                                            });
+                                                          },
+                                                        );
+                                                      },
+                                                    ),
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                            onLongPress: () {
+                                              HapticFeedback.mediumImpact();
+                                            },
+                                            child: Container(
+                                              width: 42,
+                                              height: 42,
+                                              decoration: const BoxDecoration(
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: Icon(
+                                                Icons.history_rounded,
+                                                color: Colors.grey.shade700,
+                                                size: 22,
+                                              ),
                                             ),
                                           ),
-                                        ),
+                                        ],
                                       ),
                                     ),
-                                  ],
-                                ),
+                                  ),
+
+                                  // // Center: Model selector
+                                  // Expanded(
+                                  //   child: GestureDetector(
+                                  //     onTap: () {
+                                  //       HapticFeedback.selectionClick();
+                                  //       mixpanel.track("open_model_selector");
+                                  //       showModalBottomSheet(
+                                  //         context: context,
+                                  //         shape: const RoundedRectangleBorder(
+                                  //           borderRadius: BorderRadius.vertical(
+                                  //               top: Radius.circular(20)),
+                                  //         ),
+                                  //         builder: (_) => ModeBottomSheet(
+                                  //           selectedModel: state.selectedModel,
+                                  //           localAIStatus: state.localAIStatus,
+                                  //           localAIDownloadProgress:
+                                  //               state.localAIDownloadProgress,
+                                  //           onModelSelected: (model) {
+                                  //             HapticFeedback.selectionClick();
+                                  //             context.read<HomeBloc>().add(
+                                  //                   HomeModelSelect(model),
+                                  //                 );
+                                  //           },
+                                  //         ),
+                                  //       );
+                                  //     },
+                                  //     child: Row(
+                                  //       mainAxisAlignment:
+                                  //           MainAxisAlignment.center,
+                                  //       mainAxisSize: MainAxisSize.min,
+                                  //       children: [
+                                  //         Flexible(
+                                  //           child: Text(
+                                  //             state.selectedModel.name[0]
+                                  //                     .toUpperCase() +
+                                  //                 state.selectedModel.name
+                                  //                     .substring(1),
+                                  //             style: const TextStyle(
+                                  //               fontFamily: 'Poppins',
+                                  //               fontSize: 16,
+                                  //               fontWeight: FontWeight.w600,
+                                  //               color: Colors.black,
+                                  //             ),
+                                  //             overflow: TextOverflow.ellipsis,
+                                  //           ),
+                                  //         ),
+                                  //         const SizedBox(width: 4),
+                                  //         Icon(
+                                  //           Icons.chevron_right_rounded,
+                                  //           color: Colors.grey.shade500,
+                                  //           size: 20,
+                                  //         ),
+                                  //       ],
+                                  //     ),
+                                  //   ),
+                                  // ),
+
+                                  // Right: Compose / New thread button
+                                  GestureDetector(
+                                    onTap: () {
+                                      HapticFeedback.lightImpact();
+                                      mixpanel.track("start_new_thread");
+                                      context.read<HomeBloc>().add(
+                                            HomeStartNewThread(),
+                                          );
+                                      taskTextController.clear();
+                                      setState(() {
+                                        isTaskValid = false;
+                                      });
+                                    },
+                                    onLongPress: () {
+                                      HapticFeedback.heavyImpact();
+                                    },
+                                    child: Container(
+                                      width: 42,
+                                      height: 42,
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade100,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        Iconsax.edit_outline,
+                                        color: 
+                                        state.status==HomePageStatus.idle? Colors.grey.shade600: Colors.black,
+                                        size: 18,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-
-                            // InkWell(
-                            //   onTap: () async {
-
-                            //                   context.read<HomeBloc>().add(
-                            //                         HomeAttemptGoogleSignIn(),
-                            //                       );
-                            //                   mixpanel.track("sign_in");
-                            //     // context.read<HomeBloc>().add(
-                            //     //       HomeCancelTaskGen(),
-                            //     //     );
-                            //     // mixpanel.track("close_search");
-                            //   },
-                            //   child: Row(
-                            //     mainAxisSize: MainAxisSize.min,
-                            //     children: [
-                            //       state.replyStatus == HomeReplyStatus.loading
-                            //           ? SizedBox(
-                            //               width: 32,
-                            //               height: 32,
-                            //               child: Stack(
-                            //                 alignment: Alignment.center,
-                            //                 children: [
-                            //                   ClipRRect(
-                            //                     borderRadius: BorderRadius.circular(40),
-                            //                     child: Container(
-                            //                       width: 32,
-                            //                       height: 32,
-                            //                       decoration: BoxDecoration(
-                            //                           borderRadius:
-                            //                               BorderRadius.circular(40),
-                            //                           color: Color(0xFF8A2BE2)),
-                            //                       child: Image.asset(
-                            //                         "assets/images/logo/icon.png",
-                            //                         fit: BoxFit.cover,
-                            //                       ),
-                            //                     ),
-                            //                   ),
-                            //                   Container(
-                            //                     width: 32,
-                            //                     height: 32,
-                            //                     decoration: BoxDecoration(
-                            //                       borderRadius: BorderRadius.circular(40),
-                            //                     ),
-                            //                     child: CircularProgressIndicator(
-                            //                       color: Color(0xFFDFFF00),
-                            //                     ),
-                            //                   ),
-                            //                 ],
-                            //               ),
-                            //             )
-                            //           : Padding(
-                            //               padding: const EdgeInsets.only(right: 5),
-                            //               child: InkWell(
-                            //                 onTap: () {
-                            //                   context.read<HomeBloc>().add(
-                            //                         HomeAttemptGoogleSignIn(),
-                            //                       );
-                            //                   mixpanel.track("sign_in");
-                            //                 },
-                            //                 child: CircularAvatarWithShimmer(
-                            //                     imageUrl: state.userData.profilePicUrl),
-                            //               ),
-                            //             ),
-
-                            //       // Column(
-                            //       //   crossAxisAlignment: CrossAxisAlignment.start,
-                            //       //   children: [
-                            //       //     Text(
-                            //       //       state.userData.fullname!=""?state.userData.fullname:'Guest',
-                            //       //       style: TextStyle(
-                            //       //         color: Colors.black,
-                            //       //         fontSize: 14,
-                            //       //         fontFamily: 'Poppins',
-                            //       //         fontWeight: FontWeight.w600,
-                            //       //       ),
-                            //       //     ),
-                            //       //     Text(
-                            //       //       state.userData.username != "" ? state.userData.email.split("@").first : state.userData.email.split("@").first,
-                            //       //       style: TextStyle(
-                            //       //         color: Colors.black,
-                            //       //         fontSize: 12,
-                            //       //         fontFamily: 'Poppins',
-                            //       //         fontWeight: FontWeight.w400,
-                            //       //       ),
-                            //       //     ),
-                            //       //     // Text(
-                            //       //     //   'Drissea',
-                            //       //     //   style: TextStyle(
-                            //       //     //     color: Colors.black,
-                            //       //     //     fontSize: 32,
-                            //       //     //     fontFamily: 'Jua',
-                            //       //     //     fontWeight: FontWeight.w500,
-                            //       //     //   ),
-                            //       //     // ),
-                            //       //   ],
-                            //       // ),
-                            //       // Visibility(
-                            //       //   visible: false,//state.status != HomePageStatus.idle,
-                            //       //   child: Padding(
-                            //       //     padding: const EdgeInsets.only(left: 6),
-                            //       //     child: Container(
-                            //       //       width: 28,
-                            //       //       height: 28,
-                            //       //       child: Center(
-                            //       //         child: Icon(
-                            //       //           Iconsax.edit_outline,
-                            //       //           color: Colors.black,
-                            //       //           size: 20,
-                            //       //         ),
-                            //       //       ),
-                            //       //     ),
-                            //       //   ),
-                            //       // ),
-                            //     ],
-                            //   ),
-                            // ),
-                            actions: [
-                              Padding(
-                                padding: const EdgeInsets.only(right: 8),
-                                child: state.status == HomePageStatus.idle
-                                    ? SizedBox.shrink()
-                                    //  GestureDetector(
-                                    //     onTap: () async {
-                                    //       final isGuest =
-                                    //           _profilePicUrl.isEmpty &&
-                                    //               (_displayName.isEmpty ||
-                                    //                   _displayName == 'Guest');
-                                    //       if (isGuest) {
-                                    //         final result =
-                                    //             await showAuthBottomSheet(
-                                    //                 context);
-                                    //         if (result) {
-                                    //           _loadProfileData();
-                                    //         }
-                                    //       } else {
-                                    //         await Navigator.push(
-                                    //           context,
-                                    //           MaterialPageRoute(
-                                    //             builder: (_) =>
-                                    //                 const ProfilePage(),
-                                    //           ),
-                                    //         );
-                                    //         _loadProfileData();
-                                    //       }
-                                    //     },
-                                    //     child: _profilePicUrl.isNotEmpty
-                                    //         ? CircleAvatar(
-                                    //             radius: 16,
-                                    //             backgroundColor:
-                                    //                 const Color(0xFFF3F4F6),
-                                    //             child: ClipOval(
-                                    //               child: CachedNetworkImage(
-                                    //                 imageUrl: _profilePicUrl,
-                                    //                 width: 32,
-                                    //                 height: 32,
-                                    //                 fit: BoxFit.cover,
-                                    //                 errorWidget: (_, __, ___) =>
-                                    //                     _profileIconFallback(),
-                                    //               ),
-                                    //             ),
-                                    //           )
-                                    //         : _profileIconFallback(),
-                                    //   )
-                                    : GestureDetector(
-                                        onTap: () {
-                                          HapticFeedback.lightImpact();
-
-                                          mixpanel.track("start_new_thread");
-                                          context.read<HomeBloc>().add(
-                                                HomeStartNewThread(),
-                                              );
-                                          taskTextController.clear();
-                                          setState(() {
-                                            isTaskValid = false;
-                                          });
-
-                                          //Navigator.pop(context);
-                                        },
-                                        child: Container(
-                                          width: 42,
-                                          height: 42,
-                                          decoration: BoxDecoration(
-                                            color: Colors.white,
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: Icon(
-                                            Iconsax.edit_outline,
-                                            color: Colors.grey.shade700,
-                                            size: 18,
-                                          ),
-                                        ),
-                                      ),
-                              ),
-                              Visibility(
-                                visible: state.status != HomePageStatus.idle,
-                                child: Padding(
-                                    padding: EdgeInsets.only(right: 6),
-                                    child: InkWell(
-                                      onTap: () async {
-                                        final String url =
-                                            "https://drissea.com/thread/${state.threadData.id}";
-                                        await Clipboard.setData(
-                                            ClipboardData(text: url));
-                                        if (context.mounted) {
-                                          // _showSnackBar(
-                                          //     context, "Link copied to clipboard");
-                                          ScaffoldMessenger.of(context)
-                                              .showSnackBar(
-                                            SnackBar(
-                                              backgroundColor: Color(
-                                                  0xFF8A2BE2), // Purple background
-                                              content: Text(
-                                                'Copied to clipboard',
-                                                style: TextStyle(
-                                                  color: Color(
-                                                      0xFFDFFF00), // Neon green text
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                              duration: Duration(seconds: 2),
-                                            ),
-                                          );
-                                        }
-                                        mixpanel.track("share_thread");
-                                      },
-                                      child: Container(
-                                        width: 32,
-                                        height: 32,
-                                        decoration: BoxDecoration(
-                                            // borderRadius: BorderRadius.circular(18),
-                                            // color: Color(0xFFDFFF00),
-                                            // border: Border.all()
-                                            ),
-                                        child: Center(
-                                          child: Icon(
-                                            Iconsax.send_2_outline,
-                                            color: Colors.black,
-                                            size: 20,
-                                          ),
-                                        ),
-                                      ),
-                                    )),
-                              ),
-                            ],
                           ),
                           // bottomSheet: Container(
                           //   padding:
@@ -1628,237 +1505,141 @@ class _HomePageState extends State<HomePage>
                                     children: [
                                       Row(
                                         children: [
-                                          // // Deep Drissy toggle chip
-                                          // GestureDetector(
-                                          //   onTap: () {
-                                          //     context
-                                          //         .read<HomeBloc>()
-                                          //         .add(HomeToggleDeepDrissy());
-                                          //   },
-                                          //   child: AnimatedContainer(
-                                          //     duration: const Duration(
-                                          //         milliseconds: 300),
-                                          //     curve: Curves.easeInOut,
-                                          //     height: 32,
-                                          //     padding:
-                                          //         const EdgeInsets.symmetric(
-                                          //             horizontal: 12),
-                                          //     decoration: BoxDecoration(
-                                          //       color: state.deepDrissyStatus ==
-                                          //               HomeDeepDrissyStatus
-                                          //                   .enabled
-                                          //           ? const Color(0xFFE8D5FF)
-                                          //           : Colors.grey
-                                          //               .withOpacity(0.1),
-                                          //       borderRadius:
-                                          //           BorderRadius.circular(26),
-                                          //       border: state
-                                          //                   .deepDrissyStatus ==
-                                          //               HomeDeepDrissyStatus
-                                          //                   .enabled
-                                          //           ? Border.all(
-                                          //               color: const Color(
-                                          //                       0xFF8A2BE2)
-                                          //                   .withOpacity(0.3))
-                                          //           : null,
-                                          //     ),
-                                          //     child: Row(
-                                          //       mainAxisSize:
-                                          //           MainAxisSize.min,
-                                          //       children: [
-                                          //         Icon(
-                                          //           Icons.auto_awesome,
-                                          //           size: 16,
-                                          //           color: state
-                                          //                       .deepDrissyStatus ==
-                                          //                   HomeDeepDrissyStatus
-                                          //                       .enabled
-                                          //               ? const Color(
-                                          //                   0xFF8A2BE2)
-                                          //               : Colors.black54,
-                                          //         ),
-                                          //         const SizedBox(width: 6),
-                                          //         Text(
-                                          //           "Deep Drissy",
-                                          //           style: TextStyle(
-                                          //             color: state
-                                          //                         .deepDrissyStatus ==
-                                          //                     HomeDeepDrissyStatus
-                                          //                         .enabled
-                                          //                 ? const Color(
-                                          //                     0xFF8A2BE2)
-                                          //                 : Colors.black54,
-                                          //             fontSize: 13,
-                                          //             fontWeight:
-                                          //                 FontWeight.w600,
-                                          //           ),
-                                          //         ),
-                                          //       ],
-                                          //     ),
-                                          //   ),
-                                          // ),
-                                          // const SizedBox(width: 8),
-                                          // // Local AI chip — opens model picker
-                                          // GestureDetector(
-                                          //   onTap: () {
-                                          //     showModalBottomSheet(
-                                          //       context: context,
-                                          //       isScrollControlled: true,
-                                          //       backgroundColor:
-                                          //           Colors.transparent,
-                                          //       builder: (_) =>
-                                          //           ModeBottomSheet(
-                                          //         selectedModel:
-                                          //             state.selectedModel,
-                                          //         localAIStatus:
-                                          //             state.localAIStatus,
-                                          //         localAIDownloadProgress: state
-                                          //             .localAIDownloadProgress,
-                                          //         onModelSelected: (model) {
-                                          //           context
-                                          //               .read<HomeBloc>()
-                                          //               .add(HomeModelSelect(
-                                          //                   model));
-                                          //         },
-                                          //       ),
-                                          //     );
-                                          //   },
-                                          //   child: AnimatedContainer(
-                                          //     duration: const Duration(
-                                          //         milliseconds: 300),
-                                          //     curve: Curves.easeInOut,
-                                          //     height: 32,
-                                          //     padding:
-                                          //         const EdgeInsets.symmetric(
-                                          //             horizontal: 12),
-                                          //     decoration: BoxDecoration(
-                                          //       color: state.selectedModel ==
-                                          //               HomeModel.localAI
-                                          //           ? const Color(0xFFE8D5FF)
-                                          //           : Colors.grey
-                                          //               .withOpacity(0.1),
-                                          //       borderRadius:
-                                          //           BorderRadius.circular(26),
-                                          //       border: state.selectedModel ==
-                                          //               HomeModel.localAI
-                                          //           ? Border.all(
-                                          //               color: const Color(
-                                          //                       0xFF8A2BE2)
-                                          //                   .withOpacity(0.3))
-                                          //           : null,
-                                          //     ),
-                                          //     child: Row(
-                                          //       mainAxisSize:
-                                          //           MainAxisSize.min,
-                                          //       children: [
-                                          //         Icon(
-                                          //           Iconsax.mobile_outline,
-                                          //           size: 16,
-                                          //           color: state.selectedModel ==
-                                          //                   HomeModel.localAI
-                                          //               ? const Color(
-                                          //                   0xFF8A2BE2)
-                                          //               : Colors.black54,
-                                          //         ),
-                                          //         const SizedBox(width: 6),
-                                          //         Text(
-                                          //           state.localAIStatus ==
-                                          //                   LocalAIStatus
-                                          //                       .downloading
-                                          //               ? "AI ${(state.localAIDownloadProgress * 100).toInt()}%"
-                                          //               : state.localAIStatus ==
-                                          //                       LocalAIStatus
-                                          //                           .loading
-                                          //                   ? "Loading..."
-                                          //                   : state.selectedModel ==
-                                          //                           HomeModel
-                                          //                               .localAI
-                                          //                       ? "Local AI"
-                                          //                       : "Models",
-                                          //           style: TextStyle(
-                                          //             color: state.selectedModel ==
-                                          //                     HomeModel.localAI
-                                          //                 ? const Color(
-                                          //                     0xFF8A2BE2)
-                                          //                 : Colors.black54,
-                                          //             fontSize: 13,
-                                          //             fontWeight:
-                                          //                 FontWeight.w600,
-                                          //           ),
-                                          //         ),
-                                          //       ],
-                                          //     ),
-                                          //   ),
-                                          // ),
-                                          // const SizedBox(width: 8),
-                                          // // Search toggle chip
-                                          // GestureDetector(
-                                          //   onTap: () {
-                                          //     context
-                                          //         .read<HomeBloc>()
-                                          //         .add(
-                                          //             HomeToggleGeneralStatus());
-                                          //   },
-                                          //   child: AnimatedContainer(
-                                          //     duration: const Duration(
-                                          //         milliseconds: 300),
-                                          //     curve: Curves.easeInOut,
-                                          //     height: 32,
-                                          //     padding:
-                                          //         const EdgeInsets.symmetric(
-                                          //             horizontal: 12),
-                                          //     decoration: BoxDecoration(
-                                          //       color: state.generalStatus ==
-                                          //               HomeGeneralStatus
-                                          //                   .enabled
-                                          //           ? Colors.grey
-                                          //               .withOpacity(0.1)
-                                          //           : Colors.grey
-                                          //               .withOpacity(0.05),
-                                          //       borderRadius:
-                                          //           BorderRadius.circular(26),
-                                          //       border: state
-                                          //                   .generalStatus ==
-                                          //               HomeGeneralStatus
-                                          //                   .enabled
-                                          //           ? Border.all(
-                                          //               color: Colors.grey
-                                          //                   .withOpacity(0.3))
-                                          //           : null,
-                                          //     ),
-                                          //     child: Row(
-                                          //       mainAxisSize:
-                                          //           MainAxisSize.min,
-                                          //       children: [
-                                          //         Icon(
-                                          //           Icons.language,
-                                          //           size: 16,
-                                          //           color:
-                                          //               state.generalStatus ==
-                                          //                       HomeGeneralStatus
-                                          //                           .enabled
-                                          //                   ? Colors.black
-                                          //                   : Colors.black38,
-                                          //         ),
-                                          //         const SizedBox(width: 6),
-                                          //         Text(
-                                          //           "Search",
-                                          //           style: TextStyle(
-                                          //             color: state
-                                          //                         .generalStatus ==
-                                          //                     HomeGeneralStatus
-                                          //                         .enabled
-                                          //                 ? Colors.black
-                                          //                 : Colors.black38,
-                                          //             fontSize: 13,
-                                          //             fontWeight:
-                                          //                 FontWeight.w600,
-                                          //           ),
-                                          //         ),
-                                          //       ],
-                                          //     ),
-                                          //   ),
-                                          // ),
+                                          // + button to open sources bottom sheet (image picker)
+                                          GestureDetector(
+                                            onTap: () {
+                                              showModalBottomSheet(
+                                                context: context,
+                                                isScrollControlled: true,
+                                                backgroundColor:
+                                                    Colors.transparent,
+                                                builder: (bottomSheetContext) =>
+                                                    BlocProvider.value(
+                                                  value: context
+                                                      .read<HomeBloc>(),
+                                                  child: SourcesBottomSheet(
+                                                    onImageSelected:
+                                                        (image) {
+                                                      context
+                                                          .read<HomeBloc>()
+                                                          .add(
+                                                            HomeImageSelected(
+                                                              image,
+                                                              imageDescriptionNotifier,
+                                                            ),
+                                                          );
+                                                    },
+                                                    onToggleMap: () {
+                                                      context
+                                                          .read<HomeBloc>()
+                                                          .add(HomeToggleMapStatus());
+                                                    },
+                                                    onToggleYoutube: () {
+                                                      context
+                                                          .read<HomeBloc>()
+                                                          .add(HomeToggleYoutubeStatus());
+                                                    },
+                                                    onToggleInstagram: () {
+                                                      context
+                                                          .read<HomeBloc>()
+                                                          .add(HomeToggleInstagramStatus());
+                                                    },
+                                                    isMapEnabled:
+                                                        state.mapStatus ==
+                                                            HomeMapStatus
+                                                                .enabled,
+                                                    isYoutubeEnabled:
+                                                        state.youtubeStatus ==
+                                                            HomeYoutubeStatus
+                                                                .enabled,
+                                                    isInstagramEnabled:
+                                                        state.instagramStatus ==
+                                                            HomeInstagramStatus
+                                                                .enabled,
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                            child: Container(
+                                              height: 32,
+                                              width: 32,
+                                              decoration: BoxDecoration(
+                                                color: Colors.grey
+                                                    .withOpacity(0.1),
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: const Center(
+                                                child: Icon(
+                                                  Icons.add,
+                                                  size: 20,
+                                                  color: Colors.black54,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          // Search mode chip
+                                          GestureDetector(
+                                            onTap: () {
+                                              context
+                                                  .read<HomeBloc>()
+                                                  .add(
+                                                      HomeToggleChatMode());
+                                            },
+                                            child: AnimatedContainer(
+                                              duration: const Duration(
+                                                  milliseconds: 300),
+                                              curve: Curves.easeInOut,
+                                              height: 32,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 12),
+                                              decoration: BoxDecoration(
+                                                color: !state.isChatModeActive
+                                                    ? const Color(0xFFE8D5FF)
+                                                    : Colors.grey
+                                                        .withOpacity(0.1),
+                                                borderRadius:
+                                                    BorderRadius.circular(26),
+                                                border: !state
+                                                        .isChatModeActive
+                                                    ? Border.all(
+                                                        color: const Color(
+                                                                0xFF8A2BE2)
+                                                            .withOpacity(0.3))
+                                                    : null,
+                                              ),
+                                              child: Row(
+                                                mainAxisSize:
+                                                    MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    Icons.language,
+                                                    size: 16,
+                                                    color: !state
+                                                            .isChatModeActive
+                                                        ? const Color(
+                                                            0xFF8A2BE2)
+                                                        : Colors.black54,
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  Text(
+                                                    "Search",
+                                                    style: TextStyle(
+                                                      color: !state
+                                                              .isChatModeActive
+                                                          ? const Color(
+                                                              0xFF8A2BE2)
+                                                          : Colors.black54,
+                                                      fontSize: 13,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
                                         ],
                                       ),
                                       Row(
@@ -2193,9 +1974,9 @@ class _HomePageState extends State<HomePage>
                                                                   fontSize: 56,
                                                                   fontFamily:
                                                                       'BagelFatOne',
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w600,
+                                                                  // fontWeight:
+                                                                  //     FontWeight
+                                                                  //         .w600,
                                                                   height: 1,
                                                                 ),
                                                               ),
@@ -2233,9 +2014,9 @@ class _HomePageState extends State<HomePage>
                                                               fontSize: 56,
                                                               fontFamily:
                                                                   'BagelFatOne',
-                                                              fontWeight:
-                                                                  FontWeight
-                                                                      .w600,
+                                                              // fontWeight:
+                                                              //     FontWeight
+                                                              //         .w600,
                                                               height: 1,
                                                             ),
                                                           ),

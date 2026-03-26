@@ -53,7 +53,9 @@ class _AiSetupScreenState extends State<AiSetupScreen> {
       buildWhen: (prev, curr) =>
           prev.localAIStatus != curr.localAIStatus ||
           prev.localAIDownloadProgress != curr.localAIDownloadProgress ||
-          prev.localAITotalBytes != curr.localAITotalBytes,
+          prev.localAITotalBytes != curr.localAITotalBytes ||
+          prev.localAIVisionTotalBytes != curr.localAIVisionTotalBytes ||
+          prev.localAIDownloadPhase != curr.localAIDownloadPhase,
       listenWhen: (prev, curr) => prev.localAIStatus != curr.localAIStatus,
       listener: (context, homeState) {
         if (homeState.localAIStatus == LocalAIStatus.downloading ||
@@ -70,7 +72,8 @@ class _AiSetupScreenState extends State<AiSetupScreen> {
       builder: (context, homeState) {
         final status = homeState.localAIStatus;
         final progress = homeState.localAIDownloadProgress;
-        final totalBytes = homeState.localAITotalBytes;
+        final isVisionPhase = homeState.localAIDownloadPhase.contains('vision');
+        final totalBytes = isVisionPhase ? homeState.localAIVisionTotalBytes : homeState.localAITotalBytes;
 
         return Column(
           children: [
@@ -117,7 +120,7 @@ class _AiSetupScreenState extends State<AiSetupScreen> {
                                   horizontal: 10, vertical: 4),
                               decoration: BoxDecoration(
                                 color: const Color(0xFF8A2BE2)
-                                    .withValues(alpha: 0.08),
+                                    .withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: const Text(
@@ -126,7 +129,7 @@ class _AiSetupScreenState extends State<AiSetupScreen> {
                                   fontFamily: 'Poppins',
                                   fontSize: 11,
                                   fontWeight: FontWeight.w700,
-                                  color: Color(0xFF6B21A8),
+                                  color: Color(0xFF8A2BE2),
                                   letterSpacing: 1.5,
                                 ),
                               ),
@@ -134,86 +137,71 @@ class _AiSetupScreenState extends State<AiSetupScreen> {
                           ],
                         ),
                         const SizedBox(height: 16),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                             Row(
-                                                    mainAxisSize:
-                                                        MainAxisSize.min,
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .center,
-                                                    children: [
-                                                      // D with chat icon inside
-                                                      Stack(
-                                                        clipBehavior: Clip.none,
-                                                        alignment:
-                                                            Alignment.center,
-                                                        children: [
-                                                          Text(
-                                                            'D',
-                                                            style: TextStyle(
-                                                              color: Color(
-                                                                  0xFF8A2BE2),
-                                                              fontSize: 56,
-                                                              fontFamily:
-                                                                  'BagelFatOne',
-                                                              // fontWeight:
-                                                              //     FontWeight
-                                                              //         .w600,
-                                                              height: 1,
-                                                            ),
-                                                          ),
-                                                          Container(
-                                                            color: Color(
-                                                                0xFF8A2BE2),
-                                                            width: 20,
-                                                            height: 30,
-                                                            child: SizedBox
-                                                                .shrink(),
-                                                          ),
-                                                          // Yellow chat bubble icon positioned inside D's counter
-                                                          Positioned(
-                                                            top: 24,
-                                                            left: 14,
-                                                            child: CustomPaint(
-                                                              size:
-                                                                  Size(10, 18),
-                                                              painter:
-                                                                  ChatBubblePainter(
-                                                                color: Color(
-                                                                    0xFFDFFF00),
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                      // rissy text
-                                                      Text(
-                                                        'rissy',
-                                                        style: TextStyle(
-                                                          color:
-                                                              Color(0xFF8A2BE2),
-                                                          fontSize: 56,
-                                                          fontFamily:
-                                                              'BagelFatOne',
-                                                          // fontWeight:
-                                                          //     FontWeight.w600,
-                                                          height: 1,
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                            const Text(
-                              ' Qwen',
-                              style: TextStyle(
-                                fontFamily: 'BagelFatOne',
-                                fontSize: 56,
-                                color: Color(0xFF8A2BE2),
-                                height: 1.1,
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  // D with chat icon inside
+                                  Stack(
+                                    clipBehavior: Clip.none,
+                                    alignment: Alignment.center,
+                                    children: [
+                                      Text(
+                                        'D',
+                                        style: TextStyle(
+                                          color: Color(0xFF8A2BE2),
+                                          fontSize: 56,
+                                          fontFamily: 'BagelFatOne',
+                                          height: 1,
+                                        ),
+                                      ),
+                                      Container(
+                                        color: Color(0xFF8A2BE2),
+                                        width: 20,
+                                        height: 30,
+                                        child: SizedBox.shrink(),
+                                      ),
+                                      // Yellow chat bubble icon positioned inside D's counter
+                                      Positioned(
+                                        top: 24,
+                                        left: 14,
+                                        child: CustomPaint(
+                                          size: Size(10, 18),
+                                          painter: ChatBubblePainter(
+                                            color: Color(0xFFDFFF00),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  // rissy text
+                                  Text(
+                                    'rissy',
+                                    style: TextStyle(
+                                      color: Color(0xFF8A2BE2),
+                                      fontSize: 56,
+                                      fontFamily: 'BagelFatOne',
+                                      height: 1,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
-                          ],
+                              const Text(
+                                ' Qwen',
+                                style: TextStyle(
+                                  fontFamily: 'BagelFatOne',
+                                  fontSize: 56,
+                                  color: Color(0xFF8A2BE2),
+                                  height: 1.1,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                         const SizedBox(height: 8),
                         // Text(
@@ -237,7 +225,7 @@ class _AiSetupScreenState extends State<AiSetupScreen> {
                               child: _StatPill(
                                 icon: Icons.shield_outlined,
                                 label: 'Private',
-                                sublabel: 'On your device',
+                                sublabel: 'on your device',
                               ),
                             ),
                             SizedBox(width: 8),
@@ -245,7 +233,7 @@ class _AiSetupScreenState extends State<AiSetupScreen> {
                               child: _StatPill(
                                 icon: Icons.bolt_rounded,
                                 label: 'Fast',
-                                sublabel: 'Instant answers',
+                                sublabel: 'answers',
                               ),
                             ),
                             SizedBox(width: 8),
@@ -253,7 +241,7 @@ class _AiSetupScreenState extends State<AiSetupScreen> {
                               child: _StatPill(
                                 icon: Icons.image_outlined,
                                 label: 'Multimodal',
-                                sublabel: 'Text + images',
+                                sublabel: 'text + images',
                               ),
                             ),
                           ],
@@ -325,7 +313,7 @@ class _AiSetupScreenState extends State<AiSetupScreen> {
             ),
             // Bottom section — download action
             Expanded(
-              flex: 25,
+              flex: 20,
               child: Container(
                 width: double.infinity,
                 decoration: const BoxDecoration(
@@ -336,7 +324,7 @@ class _AiSetupScreenState extends State<AiSetupScreen> {
                   ),
                 ),
                 transform: Matrix4.translationValues(0, -28, 0),
-                padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
                 child: Column(
                   children: [
                     if (status == LocalAIStatus.idle ||
@@ -347,7 +335,7 @@ class _AiSetupScreenState extends State<AiSetupScreen> {
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontFamily: 'Poppins',
-                          fontSize: 28,
+                          fontSize: 24,
                           fontWeight: FontWeight.w700,
                           color: Colors.black,
                         ),
@@ -360,7 +348,7 @@ class _AiSetupScreenState extends State<AiSetupScreen> {
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontFamily: 'Poppins',
-                          fontSize: 14,
+                          fontSize: 12,
                           color: status == LocalAIStatus.noStorage
                               ? Colors.redAccent
                               : Colors.grey.shade600,
@@ -379,11 +367,13 @@ class _AiSetupScreenState extends State<AiSetupScreen> {
                       ],
                     ],
                     if (status == LocalAIStatus.downloading) ...[
-                      const Text(
-                        'Downloading model...',
-                        style: TextStyle(
+                      Text(
+                        homeState.localAIDownloadPhase.isNotEmpty
+                            ? homeState.localAIDownloadPhase
+                            : 'Downloading model...',
+                        style: const TextStyle(
                           fontFamily: 'Poppins',
-                          fontSize: 22,
+                          fontSize: 20,
                           fontWeight: FontWeight.w700,
                           color: Colors.black,
                         ),
@@ -438,7 +428,7 @@ class _AiSetupScreenState extends State<AiSetupScreen> {
                                   _loadingTips[_currentTip],
                                   style: TextStyle(
                                     fontFamily: 'Poppins',
-                                    fontSize: 13,
+                                    fontSize: 12,
                                     fontWeight: FontWeight.w400,
                                     color: Colors.grey.shade600,
                                     height: 1.4,

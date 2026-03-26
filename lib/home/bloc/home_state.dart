@@ -119,6 +119,8 @@ final class HomeState extends Equatable {
     this.localAIStatus = LocalAIStatus.idle,
     this.localAIDownloadProgress = 0.0,
     this.localAITotalBytes = 0,
+    this.localAIVisionTotalBytes = 0,
+    this.localAIDownloadPhase = '',
   })  : userData = userData ??
             UserProfileInfo(
               email: "NA",
@@ -191,6 +193,8 @@ final class HomeState extends Equatable {
   final LocalAIStatus localAIStatus;
   final double localAIDownloadProgress;
   final int localAITotalBytes;
+  final int localAIVisionTotalBytes;
+  final String localAIDownloadPhase;
 
   HomeState copyWith({
     String? sessionId,
@@ -238,6 +242,8 @@ final class HomeState extends Equatable {
     LocalAIStatus? localAIStatus,
     double? localAIDownloadProgress,
     int? localAITotalBytes,
+    int? localAIVisionTotalBytes,
+    String? localAIDownloadPhase,
   }) {
     return HomeState(
       editQuery: editQuery ?? this.editQuery,
@@ -297,6 +303,9 @@ final class HomeState extends Equatable {
       localAIDownloadProgress:
           localAIDownloadProgress ?? this.localAIDownloadProgress,
       localAITotalBytes: localAITotalBytes ?? this.localAITotalBytes,
+      localAIVisionTotalBytes: localAIVisionTotalBytes ?? this.localAIVisionTotalBytes,
+      localAIDownloadPhase:
+          localAIDownloadPhase ?? this.localAIDownloadPhase,
     );
   }
 
@@ -346,5 +355,7 @@ final class HomeState extends Equatable {
         localAIStatus,
         localAIDownloadProgress,
         localAITotalBytes,
+        localAIVisionTotalBytes,
+        localAIDownloadPhase,
       ];
 }

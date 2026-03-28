@@ -16,7 +16,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:mixpanel_flutter/mixpanel_flutter.dart';
+// import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
@@ -28,8 +28,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:bavi/services/answer_memory_service.dart';
 import 'package:bavi/services/drissy_engine.dart';
 import 'package:bavi/services/storage_checker.dart';
-import 'package:bavi/services/profile_stats_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+// import 'package:bavi/services/profile_stats_service.dart';
+// import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 part 'home_event.dart';
 part 'home_state.dart';
@@ -187,13 +187,13 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     }
   }
 
-  late Mixpanel mixpanel;
-  Future<void> initMixpanel() async {
-    // initialize Mixpanel
-    mixpanel = await Mixpanel.init(dotenv.get("MIXPANEL_PROJECT_KEY"),
-        trackAutomaticEvents: false);
-    mixpanel.track("home_view");
-  }
+  // late Mixpanel mixpanel;
+  // Future<void> initMixpanel() async {
+  //   // initialize Mixpanel
+  //   mixpanel = await Mixpanel.init(dotenv.get("MIXPANEL_PROJECT_KEY"),
+  //       trackAutomaticEvents: false);
+  //   mixpanel.track("home_view");
+  // }
 
   Future<void> _requestLocationPermission(
     HomeRequestLocationPermission event,
@@ -535,49 +535,26 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
 
   Future<String> _describeImageWithAI(List<int> imageBytes) async {
     try {
-      final base64Image = base64Encode(imageBytes);
-      final url = Uri.parse("https://ai-gateway.vercel.sh/v1/chat/completions");
-
-      final request = http.Request("POST", url);
-      request.headers.addAll({
-        "Content-Type": "application/json",
-        "Authorization": "Bearer ${dotenv.get("AI_GATEWAY_API_KEY")}",
-      });
-
-      request.body = jsonEncode({
-        "model": "google/gemini-2.5-flash-image",
-        "stream": false,
-        "messages": [
-          {
-            "role": "user",
-            "content": [
-              {"type": "text", "text": "Describe this image in detail."},
-              {
-                "type": "image_url",
-                "image_url": {"url": "data:image/jpeg;base64,$base64Image"}
-              }
-            ]
-          }
-        ],
-      });
-
-      final response = await httpClient.send(request).timeout(
-        const Duration(seconds: 30),
-      );
-
-      if (response.statusCode == 200) {
-        final body = await response.stream
-            .transform(utf8.decoder)
-            .join()
-            .timeout(const Duration(seconds: 30));
-        final data = jsonDecode(body);
-        final description = data['choices']?[0]?['message']?['content'] ??
-            "No description available";
-        return description;
-      } else {
-        print("DEBUG: Image description failed: ${response.statusCode}");
-        return "Failed to describe image";
+      if (!_drissyEngine.isLoaded || !_drissyEngine.isVisionLoaded) {
+        return "Image description not available (vision model not loaded)";
       }
+      final tempDir = await getTemporaryDirectory();
+      final tempFile = File('${tempDir.path}/describe_image_${DateTime.now().millisecondsSinceEpoch}.jpg');
+      await tempFile.writeAsBytes(imageBytes);
+
+      String result = "";
+      await for (final token in _drissyEngine.chat(
+        systemMessage: "You are a helpful assistant that describes images in detail. Describe what you see clearly and concisely.",
+        conversationMessages: [
+          {'role': 'user', 'content': 'Describe this image in detail.'},
+        ],
+        imagePath: tempFile.path,
+      )) {
+        result += token;
+      }
+
+      try { await tempFile.delete(); } catch (_) {}
+      return result.isNotEmpty ? result : "No description available";
     } catch (e) {
       print("DEBUG: Image description error: $e");
       return "Error describing image";
@@ -946,6 +923,14 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         state.localAIStatus == LocalAIStatus.downloading) {
       return;
     }
+
+    // Engine is a singleton — if the model was already loaded (e.g. during
+    // onboarding), just update the state without reloading.
+    if (_drissyEngine.isLoaded) {
+      emit(state.copyWith(localAIStatus: LocalAIStatus.ready));
+      return;
+    }
+
     try {
       final dir = await getApplicationDocumentsDirectory();
       final modelFile = File('${dir.path}/$_modelFileName');
@@ -1001,7 +986,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
           threadData: fetchedSessionData,
           loadingIndex: fetchedSessionData.results.length),
     );
-    mixpanel.track("fetch_saved_session");
+    // mixpanel.track("fetch_saved_session");
   }
 
   //Refresh Reply
@@ -1134,7 +1119,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
             threadData: updThreadData,
             loadingIndex: event.index),
       );
-      await updateSession(updThreadData, state.threadData.id);
+      // await updateSession(updThreadData, state.threadData.id);
     } catch (err) {
       emit(state.copyWith(
           replyStatus: HomeReplyStatus.success, loadingIndex: event.index));
@@ -2371,13 +2356,13 @@ ${resultData.extractedUrlData != null && resultData.extractedUrlData!.snippet.is
         imageStatus: HomeImageStatus.unselected));
     event.imageDescriptionNotifier.value = "";
 
-    if (updThreadData.results.length == 1) {
-      await createSession(updThreadData, threadId,
-          skipMemoryProcessing: state.isChatModeActive);
-    } else {
-      await updateSession(updThreadData, state.threadData.id,
-          skipMemoryProcessing: state.isChatModeActive);
-    }
+    // if (updThreadData.results.length == 1) {
+    //   await createSession(updThreadData, threadId,
+    //       skipMemoryProcessing: state.isChatModeActive);
+    // } else {
+    //   await updateSession(updThreadData, state.threadData.id,
+    //       skipMemoryProcessing: state.isChatModeActive);
+    // }
 
     // Refresh history
     add(HomeInitialUserData());
@@ -2508,60 +2493,36 @@ ${resultData.extractedUrlData != null && resultData.extractedUrlData!.snippet.is
     }).join('\n\n');
 
     try {
-      final url =
-          Uri.parse("https://ai-gateway.vercel.sh/v1/chat/completions");
-      final request = http.Request("POST", url);
-      request.headers.addAll({
-        "Content-Type": "application/json",
-        "Authorization": "Bearer ${dotenv.get("AI_GATEWAY_API_KEY")}",
-      });
+      if (_drissyEngine.isLoaded) {
+        final content = await _drissyEngine.complete(
+          systemMessage:
+              "You are a source condensing assistant. Given a user query and web sources, extract ONLY the most relevant facts from each source. Output exactly one condensed snippet per source, separated by |||. Each snippet must be under $targetCharsPerSource characters. Keep key details: names, numbers, ratings, addresses, dates. Remove filler, ads, navigation text. If a source is irrelevant to the query, output SKIP for that source.",
+          userMessage: "Query: $query\n\n$sourcesBlock",
+          maxTokens: 600,
+          temperature: 0.3,
+        );
 
-      request.body = jsonEncode({
-        "model": "google/gemini-2.5-flash",
-        "stream": false,
-        "messages": [
-          {
-            "role": "system",
-            "content":
-                "You are a source condensing assistant. Given a user query and web sources, extract ONLY the most relevant facts from each source. Output exactly one condensed snippet per source, separated by |||. Each snippet must be under $targetCharsPerSource characters. Keep key details: names, numbers, ratings, addresses, dates. Remove filler, ads, navigation text. If a source is irrelevant to the query, output SKIP for that source."
-          },
-          {
-            "role": "user",
-            "content": "Query: $query\n\n$sourcesBlock"
-          }
-        ],
-      });
+        if (content != null && content.isNotEmpty) {
+          final condensed = content
+              .split('|||')
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty && s != 'SKIP')
+              .toList();
 
-      final response = await httpClient.send(request);
-
-      if (response.statusCode == 200) {
-        final body = await response.stream.transform(utf8.decoder).join();
-        final data = jsonDecode(body);
-        final content =
-            (data['choices']?[0]?['message']?['content'] ?? '').toString();
-
-        final condensed = content
-            .split('|||')
-            .map((s) => s.trim())
-            .where((s) => s.isNotEmpty && s != 'SKIP')
-            .toList();
-
-        if (condensed.isNotEmpty) {
-          // Pair back with titles
-          final result = <String>[];
-          for (int i = 0; i < condensed.length && i < topSources.length; i++) {
-            if (condensed[i] != 'SKIP') {
-              result.add('${topSources[i]["title"]}: ${condensed[i]}');
+          if (condensed.isNotEmpty) {
+            final result = <String>[];
+            for (int i = 0; i < condensed.length && i < topSources.length; i++) {
+              if (condensed[i] != 'SKIP') {
+                result.add('${topSources[i]["title"]}: ${condensed[i]}');
+              }
             }
+            print("On-device AI condensed ${topSources.length} sources -> ${result.length} snippets");
+            return result;
           }
-          print("AI Gateway condensed ${topSources.length} sources → ${result.length} snippets");
-          return result;
         }
-      } else {
-        print("AI Gateway truncation failed: ${response.statusCode}");
       }
     } catch (e) {
-      print("Error truncating sources via AI Gateway: $e");
+      print("Error truncating sources via on-device AI: $e");
     }
 
     // Fallback: simple char truncation
@@ -3319,13 +3280,13 @@ ${!hasVision && event.imageDescription.isNotEmpty ? "\nImage description: ${even
       summary: titleSummary['summary'],
     );
 
-    if (updThreadData.results.length == 1) {
-      await createSession(updThreadData, threadId,
-          skipMemoryProcessing: state.isChatModeActive);
-    } else {
-      await updateSession(updThreadData, state.threadData.id,
-          skipMemoryProcessing: state.isChatModeActive);
-    }
+    // if (updThreadData.results.length == 1) {
+    //   await createSession(updThreadData, threadId,
+    //       skipMemoryProcessing: state.isChatModeActive);
+    // } else {
+    //   await updateSession(updThreadData, state.threadData.id,
+    //       skipMemoryProcessing: state.isChatModeActive);
+    // }
 
     // Refresh history
     add(HomeInitialUserData());
@@ -3335,9 +3296,6 @@ ${!hasVision && event.imageDescription.isNotEmpty ? "\nImage description: ${even
   /// Uses AI Gateway and includes last 3 messages for context.
   Future<List<String>> _generateMultipleSearchQueries(String query) async {
     try {
-      final url =
-          Uri.parse("https://ai-gateway.vercel.sh/v1/chat/completions");
-
       // Build context from last 3 messages
       final previousResults = state.threadData.results;
       final recentResults = previousResults.length > 3
@@ -3354,42 +3312,16 @@ ${!hasVision && event.imageDescription.isNotEmpty ? "\nImage description: ${even
             "Previous messages for context:\n${contextLines.join('\n')}\n\n";
       }
 
-      final request = http.Request("POST", url);
-      request.headers.addAll({
-        "Content-Type": "application/json",
-        "Authorization": "Bearer ${dotenv.get("AI_GATEWAY_API_KEY")}",
-      });
+      if (_drissyEngine.isLoaded) {
+        final content = await _drissyEngine.complete(
+          systemMessage:
+              "You are a search query generator. You ONLY output comma-separated Google search queries. You never answer questions. You never explain anything.",
+          userMessage: "Generate 3 to 5 comma-separated Google search queries for the following. Output ONLY the queries, nothing else.\n${contextBlock} Current User Message: $query\nOutput:",
+          maxTokens: 150,
+          temperature: 0.2,
+        );
 
-      request.body = jsonEncode({
-        "model": "google/gemini-2.5-flash-lite",
-        "stream": false,
-        "messages": [
-          {
-            "role": "system",
-            "content":
-                "You generate Google search queries. Given a user question and optional conversation context, output 3 to 5 comma-separated search queries. Output ONLY the queries separated by commas. No explanations, no URLs, no numbering, no markdown."
-          },
-          {
-            "role": "user",
-            "content": "${contextBlock}Current question: $query"
-          }
-        ],
-      });
-
-      final response = await httpClient.send(request).timeout(
-            const Duration(seconds: 15),
-          );
-
-      if (response.statusCode == 200) {
-        final body = await response.stream
-            .transform(utf8.decoder)
-            .join()
-            .timeout(const Duration(seconds: 10));
-        final data = jsonDecode(body);
-        final content =
-            data['choices']?[0]?['message']?['content'] as String? ?? "";
-
-        if (content.isNotEmpty) {
+        if (content != null && content.isNotEmpty) {
           List<String> result = content
               .split(',')
               .map((q) => q.replaceAll(RegExp(r'https?://\S+'), '').trim())
@@ -3403,9 +3335,6 @@ ${!hasVision && event.imageDescription.isNotEmpty ? "\nImage description: ${even
             return result;
           }
         }
-      } else {
-        print(
-            "Error generating search queries: status ${response.statusCode}");
       }
     } catch (e) {
       print("Error generating multiple search queries: $e");
@@ -3925,271 +3854,15 @@ ${!hasVision && event.imageDescription.isNotEmpty ? "\nImage description: ${even
       summary: titleSummary['summary'],
     );
 
-    if (updThreadData.results.length == 1) {
-      await createSession(updThreadData, threadId,
-          skipMemoryProcessing: state.isChatModeActive);
-    } else {
-      await updateSession(updThreadData, state.threadData.id,
-          skipMemoryProcessing: state.isChatModeActive);
-    }
+    // if (updThreadData.results.length == 1) {
+    //   await createSession(updThreadData, threadId,
+    //       skipMemoryProcessing: state.isChatModeActive);
+    // } else {
+    //   await updateSession(updThreadData, state.threadData.id,
+    //       skipMemoryProcessing: state.isChatModeActive);
+    // }
 
     add(HomeInitialUserData());
-  }
-
-  /// Deep Drissy answer generation with higher token limit and enhanced prompt
-  Future<String?> vercelDeepDrissyGenerateReply(
-    String query,
-    List<Map<String, String>> results,
-    ValueNotifier<String> streamedText,
-    Emitter<HomeState> emit,
-    String imageDescription,
-    List<ThreadResultData> previousResults,
-    ExtractedUrlResultData? extractedUrlData,
-    String city,
-    String region,
-    String country,
-  ) async {
-    final generateAnswerStartTime = DateTime.now();
-    streamedText.value = "";
-
-    int totalTokens = 0;
-    List<Map<String, String>> formattedSources = [];
-    for (final result in results) {
-      if (result["title"] == null ||
-          result["url"] == null ||
-          result["snippet"] == null) {
-        continue;
-      }
-      int tokens = ((result["title"]!.length +
-              result["url"]!.length +
-              result["snippet"]!.length) ~/
-          4);
-      if (totalTokens + tokens > 200000) {
-        break;
-      }
-      formattedSources.add({
-        "title": result["title"]!,
-        "url": result["url"]!,
-        "snippet": result["snippet"]!,
-      });
-      totalTokens += tokens;
-    }
-
-    String formattedUserContext = city == "" && region == "" && country == ""
-        ? "The current date and time is ${DateTime.now()}."
-        : "The user is located in $city, $region, $country. The current date and time is ${DateTime.now()}.";
-
-    bool isChat = formattedSources.isEmpty;
-    final systemPrompt = """
-You are Drissea, a private, conversational, and insightful answer engine operating in Deep Research mode. You do not save user data and keep as much processing as possible strictly on-device.
-
-${isChat ? "" : """
-You are in DEEP RESEARCH mode. You have been provided with results from multiple diverse search queries to comprehensively address the user's question.
-
-Rules:
-- Always answer in Markdown.
-- Write in-depth, nuanced paragraphs — NOT a list of headlines or bullet-point summaries. Each section should have substantial prose that explains context, reasoning, and details. Think long-form article, not listicle.
-- Use headings sparingly to organize major sections. Under each heading, write full paragraphs with flowing narrative. Bullet points should only be used for truly list-like content (e.g., ingredients, specs, steps), not as a substitute for explanation.
-- Always **bold key insights** and highlight notable places, dishes, or experiences.
-- For any place, food item, or experience that was featured in a source, wrap the main word or phrase in this format: `[text to show](<link>)` (e.g., Try the **[Dum Pukht Biryani](https://example.com/food)**).
-- **Be Conversational**: Write naturally, like a knowledgeable friend. Avoid robotic phrases like "based on search results" or "these sources say."
-- Only use the sources that directly answer the query.
-- If no strong or direct matches are found, gracefully say: _"There isn't a perfect match for that, but here are a few options that might still interest you."_
-- Do not repeat the question or use generic filler lines.
-- Go deep: explain the *why* behind things, provide historical context, compare different perspectives, discuss tradeoffs, and surface non-obvious insights. Don't just state facts — analyze them.
-- Synthesize information across multiple sources into a cohesive narrative rather than summarizing each source separately.
-- If the query consists primarily of a URL (e.g., youtube.com/...), use the provided content from the extracted URL to summarize what the page or video is about.
-
-"""}
-Use the following user context for additional personalization (if relevant):
-$formattedUserContext
-
-Don't reveal any personal information you have in your context unless asked about it.
-""";
-
-    String modelName;
-    switch (state.selectedModel) {
-      case HomeModel.deepseek:
-        modelName = "deepseek/deepseek-v3.2";
-        break;
-      case HomeModel.gemini:
-        modelName = "google/gemini-2.5-flash";
-        break;
-      case HomeModel.claude:
-        modelName = "anthropic/claude-haiku-4.5";
-        break;
-      case HomeModel.openAI:
-        modelName = "openai/gpt-5-nano";
-        break;
-      case HomeModel.flashThink:
-        modelName = "google/gemini-2.0-flash-thinking-exp";
-        break;
-      case HomeModel.localAI:
-        modelName = "deepseek/deepseek-v3.2";
-        break;
-    }
-
-    final url =
-        Uri.parse("https://ai-gateway.vercel.sh/v1/chat/completions");
-
-    final request = http.Request("POST", url);
-    request.headers.addAll({
-      "Content-Type": "application/json",
-      "Authorization": "Bearer ${dotenv.get("AI_GATEWAY_API_KEY")}",
-    });
-
-    request.body = jsonEncode({
-      "model": modelName,
-      "stream": true,
-      "max_tokens": 32768,
-      "messages": [
-        {"role": "system", "content": systemPrompt},
-        ...previousResults.expand((item) => [
-              {
-                "role": "user",
-                "content": item.sourceImageDescription != ""
-                    ? "${item.userQuery} | Here's the image description:${item.sourceImageDescription}"
-                    : item.userQuery
-              },
-              {
-                "role": "assistant",
-                "content": item.answer,
-              },
-            ]),
-        {
-          "role": "user",
-          "content": [
-            {
-              "type": "text",
-              "text":
-                  "$query ${imageDescription == "" ? "" : "| Here's the image description: $imageDescription"}  ${extractedUrlData?.snippet == "" ? "" : "| Here's the extracted url page description: ${extractedUrlData?.snippet}"}"
-                      .trim()
-            },
-          ]
-        },
-        isChat == false
-            ? {
-                "role": "user",
-                "content":
-                    jsonEncode(city == "" && region == "" && country == ""
-                        ? {
-                            "results": formattedSources,
-                            "date": DateTime.now().toIso8601String(),
-                            "day": DateTime.now().day,
-                            "month": DateTime.now().month,
-                            "year": DateTime.now().year,
-                            "hour": DateTime.now().hour,
-                            "minute": DateTime.now().minute,
-                            "second": DateTime.now().second,
-                            "timezone": DateTime.now().timeZoneName,
-                          }
-                        : {
-                            "results": formattedSources,
-                            "city": city,
-                            "region": region,
-                            "country": country,
-                            "date": DateTime.now().toIso8601String(),
-                            "day": DateTime.now().day,
-                            "month": DateTime.now().month,
-                            "year": DateTime.now().year,
-                            "hour": DateTime.now().hour,
-                            "minute": DateTime.now().minute,
-                            "second": DateTime.now().second,
-                            "timezone": DateTime.now().timeZoneName,
-                          })
-              }
-            : {
-                "role": "user",
-                "content":
-                    jsonEncode(city == "" && region == "" && country == ""
-                        ? {
-                            "date": DateTime.now().toIso8601String(),
-                            "day": DateTime.now().day,
-                            "month": DateTime.now().month,
-                            "year": DateTime.now().year,
-                            "hour": DateTime.now().hour,
-                            "minute": DateTime.now().minute,
-                            "second": DateTime.now().second,
-                            "timezone": DateTime.now().timeZoneName,
-                          }
-                        : {
-                            "city": city,
-                            "region": region,
-                            "country": country,
-                            "date": DateTime.now().toIso8601String(),
-                            "day": DateTime.now().day,
-                            "month": DateTime.now().month,
-                            "year": DateTime.now().year,
-                            "hour": DateTime.now().hour,
-                            "minute": DateTime.now().minute,
-                            "second": DateTime.now().second,
-                            "timezone": DateTime.now().timeZoneName,
-                          })
-              }
-      ],
-    });
-
-    print("Deep Drissy: Starting streaming request ($modelName)...");
-
-    try {
-      final streamedResponse = await httpClient.send(request);
-      print(
-          "Deep Drissy Response Status: ${streamedResponse.statusCode}");
-
-      if (streamedResponse.statusCode != 200) {
-        final body = await streamedResponse.stream
-            .transform(utf8.decoder)
-            .join();
-        print("Deep Drissy Error: $body");
-        return null;
-      }
-
-      final stream = streamedResponse.stream
-          .transform(utf8.decoder)
-          .transform(const LineSplitter());
-
-      String finalContent = "";
-      print(
-          "Deep Drissy TTFT:${DateTime.now().difference(generateAnswerStartTime).inMilliseconds}");
-
-      await for (final line in stream) {
-        if (!line.startsWith("data:")) continue;
-        final chunk = line.substring(5).trim();
-        if (chunk == "[DONE]") continue;
-
-        try {
-          final decoded = jsonDecode(chunk);
-          final delta = decoded["choices"]?[0]?["delta"];
-          if (delta == null) continue;
-
-          if (delta["content"] != null) {
-            final chunkText = delta["content"];
-            streamedText.value += chunkText;
-            finalContent += chunkText;
-            emit(state.copyWith(
-                replyStatus: HomeReplyStatus.success));
-          }
-        } catch (e) {
-          print("Deep Drissy streaming parse error: $e");
-        }
-      }
-
-      if (finalContent.isNotEmpty) {
-        if (finalContent.contains("</think>")) {
-          final parts = finalContent.split("</think>");
-          finalContent = parts.length > 1
-              ? parts.sublist(1).join("</think>").trim()
-              : parts[0].trim();
-        }
-        return finalContent;
-      } else {
-        print("Deep Drissy: Streaming failed or empty content");
-        return null;
-      }
-    } catch (e) {
-      print("Deep Drissy request failed: $e");
-      return null;
-    }
   }
 
   /// Function to search using SerpAPI Google results for Instagram Reels
@@ -4668,7 +4341,7 @@ Don't reveal any personal information you have in your context unless asked abou
         editStatus: HomeEditStatus.idle));
     event.imageDescriptionNotifier.value = "";
 
-    await updateSession(updThreadData, state.threadData.id);
+    // await updateSession(updThreadData, state.threadData.id);
 
     // Refresh history
     add(HomeInitialUserData());
@@ -4969,449 +4642,6 @@ ${jsonEncode(userContext)}
     }
   }
 
-  // Generate a reply from Vercel AI SDK API given a query and search results.
-  Future<String?> imageVercelGenerateChatReply(
-    String query,
-    List<Map<String, String>> results,
-    ValueNotifier<String> streamedText,
-    Emitter<HomeState> emit,
-    Uint8List imageData,
-    List<ThreadResultData> previousResults,
-    ExtractedUrlResultData? extractedUrlData,
-    String city,
-    String region,
-    String country,
-  ) async {
-    streamedText.value = "";
-    // Step 1: Format sources with token counting, skip if would exceed 125,000 tokens.
-    int totalTokens = 0;
-    List<Map<String, String>> formattedSources = [];
-    for (final result in results) {
-      if (result["title"] == null ||
-          result["url"] == null ||
-          result["snippet"] == null) {
-        continue;
-      }
-      // Simple token estimate: 1 token ≈ 4 chars
-      int tokens = ((result["title"]!.length +
-              result["url"]!.length +
-              result["snippet"]!.length) ~/
-          4);
-      if (totalTokens + tokens > 125000) {
-        break;
-      }
-      formattedSources.add({
-        "title": result["title"]!,
-        "url": result["url"]!,
-        "snippet": result["snippet"]!,
-      });
-      totalTokens += tokens;
-    }
-
-    // Step 2: IP lookup and user context
-    String formattedUserContext =
-        "The user is located in $city, $region, $country. The current date and time is ${DateTime.now()}.";
-
-    // Step 3: Build systemPrompt
-    final systemPrompt = """
-You are a friendly and knowledgeable conversational assistant. You engage in natural, helpful dialogue with users, analyzing any images they share and providing thoughtful, personalized responses.
-
-Rules:
-- Always respond in Markdown format.
-- Be conversational and warm - respond as a helpful friend would.
-- When analyzing images, describe what you see clearly and answer any questions about them.
-- **Bold key insights** and important information to make responses scannable.
-- Use bullet points or numbered lists when presenting multiple items or steps.
-- Keep responses concise and optimized for mobile readability.
-- Never use phrases like "As an AI" or "I don't have personal opinions" - just be helpful and natural.
-- If the user shares an image, acknowledge it and provide relevant observations or answers based on what you see.
-- Draw on the conversation history to maintain context and provide coherent follow-up responses.
-- If you're unsure about something in an image, say so honestly rather than guessing.
-- Be proactive in offering helpful suggestions or related information when appropriate.
-
-User context for personalization:
-$formattedUserContext
-""";
-
-    // Step 4: Determine Model
-    // Force Gemini Flash for image analysis as requested
-    String modelName = "google/gemini-2.5-flash-image";
-
-    // Step 5: Make the streaming API request to Vercel AI SDK Gateway
-    // Correct Vercel AI Gateway URL found via search.
-    final url = Uri.parse("https://ai-gateway.vercel.sh/v1/chat/completions");
-
-    final request = http.Request("POST", url);
-    request.headers.addAll({
-      "Content-Type": "application/json",
-      "Authorization": "Bearer ${dotenv.get("AI_GATEWAY_API_KEY")}",
-    });
-
-    request.body = jsonEncode({
-      "model": modelName,
-      "stream": true,
-      "messages": [
-        {"role": "system", "content": systemPrompt},
-        // Add previous queries and answers as context
-        ...previousResults.expand((item) => [
-              {
-                "role": "user",
-                "content": item.sourceImageDescription != ""
-                    ? "${item.userQuery} | Here's the image description:${item.sourceImageDescription}"
-                    : item.userQuery
-              },
-              {
-                "role": "assistant",
-                "content": item.isSearchMode
-                    ? jsonEncode({
-                        "previous_web_results": item.web
-                            .map((inf) => {
-                                  "title": inf.title,
-                                  "url": inf.link,
-                                  "snippet": inf.snippet,
-                                })
-                            .toList(),
-                      })
-                    : item.answer,
-              },
-            ]),
-
-        {
-          "role": "user",
-          "content": [
-            {
-              "type": "text",
-              "text":
-                  "$query  ${extractedUrlData?.snippet == "" ? "" : "| Here's the extracted url page description: ${extractedUrlData?.snippet}"}"
-                      .trim()
-            },
-            {
-              "type": "image_url",
-              "image_url": {
-                "url": "data:image/jpeg;base64,${base64Encode(imageData)}"
-              }
-            }
-          ]
-        },
-
-        {
-          "role": "user",
-          "content": jsonEncode({
-            "results": formattedSources,
-            "city": city,
-            "region": region,
-            "country": country,
-          })
-        }
-      ],
-    });
-    print("");
-    print("Starting streaming request to Vercel AI SDK ($modelName)...");
-    print("");
-
-    try {
-      final streamedResponse = await httpClient
-          .send(request)
-          .timeout(const Duration(seconds: 90));
-      print("Response Status Code: ${streamedResponse.statusCode}");
-
-      if (streamedResponse.statusCode != 200) {
-        final body =
-            await streamedResponse.stream.transform(utf8.decoder).join();
-        print("❌ Error Body: $body");
-        if (body.contains("OIDC")) {
-          print(
-              "⚠️ Vercel AI Gateway Auth Error: The Gateway attempted OIDC verification because the provided API Key was either missing or invalid.");
-          print(
-              "   - Ensure 'AI_GATEWAY_API_KEY' in your .env file is a valid Vercel AI Gateway API Key (starts with 'vak_').");
-          print(
-              "   - Do NOT use provider keys (like 'sk-...') directly with the Vercel AI Gateway URL.");
-        }
-        return null;
-      }
-
-      final stream = streamedResponse.stream.transform(utf8.decoder);
-
-      String finalContent = "";
-      String buffer = "";
-      print("Listening to stream...");
-
-      await for (final rawChunk in stream) {
-        // print("Raw Chunk: $rawChunk"); // DEBUG: Print raw chunk
-        try {
-          String cleaned = rawChunk.trim();
-          final lines = cleaned.split("\n");
-
-          for (final line in lines) {
-            String l = line.trim();
-            if (!l.startsWith("data:")) continue;
-
-            l = l.substring(5).trim(); // Remove "data:"
-            if (l == "[DONE]") continue;
-
-            buffer += l;
-
-            try {
-              final decoded = jsonDecode(buffer);
-              buffer = ""; // reset after successful parse
-
-              final delta = decoded["choices"]?[0]?["delta"];
-              if (delta == null) continue;
-
-              if (delta["content"] != null) {
-                emit(state.copyWith(replyStatus: HomeReplyStatus.success));
-                final chunkText = delta["content"];
-                streamedText.value += chunkText;
-                finalContent += chunkText;
-              }
-            } catch (e) {
-              continue;
-            }
-          }
-        } catch (e) {
-          print("Streaming parse error: $e");
-        }
-      }
-
-      if (finalContent.isNotEmpty) {
-        if (finalContent.contains("</think>")) {
-          final parts = finalContent.split("</think>");
-          finalContent = parts.length > 1
-              ? parts.sublist(1).join("</think>").trim()
-              : parts[0].trim();
-        }
-        return finalContent;
-      } else {
-        print("❌ Streaming failed or empty content");
-        return null;
-      }
-    } catch (e) {
-      print("❌ Vercel AI SDK Request failed: $e");
-      return null;
-    }
-  }
-
-  // Generate a reply from Vercel AI SDK API given a query and search results.
-  Future<String?> imageVercelGenerateReply(
-    String query,
-    List<Map<String, String>> results,
-    ValueNotifier<String> streamedText,
-    Emitter<HomeState> emit,
-    Uint8List imageData,
-    List<ThreadResultData> previousResults,
-    ExtractedUrlResultData? extractedUrlData,
-    String city,
-    String region,
-    String country,
-  ) async {
-    streamedText.value = "";
-    // Step 1: Format sources with token counting, skip if would exceed 125,000 tokens.
-    int totalTokens = 0;
-    List<Map<String, String>> formattedSources = [];
-    for (final result in results) {
-      if (result["title"] == null ||
-          result["url"] == null ||
-          result["snippet"] == null) {
-        continue;
-      }
-      // Simple token estimate: 1 token ≈ 4 chars
-      int tokens = ((result["title"]!.length +
-              result["url"]!.length +
-              result["snippet"]!.length) ~/
-          4);
-      if (totalTokens + tokens > 125000) {
-        break;
-      }
-      formattedSources.add({
-        "title": result["title"]!,
-        "url": result["url"]!,
-        "snippet": result["snippet"]!,
-      });
-      totalTokens += tokens;
-    }
-
-    // Step 2: IP lookup and user context
-    String formattedUserContext =
-        "The user is located in $city, $region, $country. The current date and time is ${DateTime.now()}.";
-
-    // Step 3: Build systemPrompt
-    final systemPrompt = """
-You are a helpful, concise, and insightful assistant. You answer user questions using a list of web sources, each with a title, url, and snippet.
-
-Rules:
-- Always answer in Markdown.
-- Structure your response with clear headings and bullet points as needed.
-- Always **bold key insights** and highlight notable places, dishes, or experiences.
-- For any place, food item, or experience that was featured in a source, wrap the main word or phrase in this format: `[text to show](<link>)` (e.g., Try the **[Dum Pukht Biryani](https://example.com/food)**).
-- Write naturally as if you're recommending or informing—never say “based on search results” or “these sources say.”
-- Only use the sources that directly answer the query.
-- If no strong or direct matches are found, gracefully say: _“There isn’t a perfect match for that, but here are a few options that might still interest you.”_
-- Do not repeat the question or use generic filler lines.
-- Keep your language short, engaging, and optimized for mobile readability.
-- If the query consists primarily of a URL (e.g., youtube.com/...), use the provided content from the extracted URL to summarize what the page or video is about.
-
-You may use the following user context for additional personalization (if relevant):
-$formattedUserContext
-""";
-
-    // Step 4: Determine Model
-    // Force Gemini Flash for image analysis as requested
-    String modelName = "google/gemini-2.5-flash-image";
-
-    // Step 5: Make the streaming API request to Vercel AI SDK Gateway
-    // Correct Vercel AI Gateway URL found via search.
-    final url = Uri.parse("https://ai-gateway.vercel.sh/v1/chat/completions");
-
-    final request = http.Request("POST", url);
-    request.headers.addAll({
-      "Content-Type": "application/json",
-      "Authorization": "Bearer ${dotenv.get("AI_GATEWAY_API_KEY")}",
-    });
-
-    request.body = jsonEncode({
-      "model": modelName,
-      "stream": true,
-      "messages": [
-        {"role": "system", "content": systemPrompt},
-        // Add previous queries and answers as context
-        ...previousResults.expand((item) => [
-              {
-                "role": "user",
-                "content": item.sourceImageDescription != ""
-                    ? "${item.userQuery} | Here's the image description:${item.sourceImageDescription}"
-                    : item.userQuery
-              },
-              {
-                "role": "assistant",
-                "content": item.isSearchMode
-                    ? jsonEncode({
-                        "previous_web_results": item.web
-                            .map((inf) => {
-                                  "title": inf.title,
-                                  "url": inf.link,
-                                  "snippet": inf.snippet,
-                                })
-                            .toList(),
-                      })
-                    : item.answer,
-              },
-            ]),
-
-        {
-          "role": "user",
-          "content": [
-            {
-              "type": "text",
-              "text":
-                  "$query  ${extractedUrlData?.snippet == "" ? "" : "| Here's the extracted url page description: ${extractedUrlData?.snippet}"}"
-                      .trim()
-            },
-            {
-              "type": "image_url",
-              "image_url": {
-                "url": "data:image/jpeg;base64,${base64Encode(imageData)}"
-              }
-            }
-          ]
-        },
-
-        {
-          "role": "user",
-          "content": jsonEncode({
-            "results": formattedSources,
-            "city": city,
-            "region": region,
-            "country": country,
-          })
-        }
-      ],
-    });
-    print("");
-    print("Starting streaming request to Vercel AI SDK ($modelName)...");
-    print("");
-
-    try {
-      final streamedResponse = await httpClient
-          .send(request)
-          .timeout(const Duration(seconds: 90));
-      print("Response Status Code: ${streamedResponse.statusCode}");
-
-      if (streamedResponse.statusCode != 200) {
-        final body =
-            await streamedResponse.stream.transform(utf8.decoder).join();
-        print("❌ Error Body: $body");
-        if (body.contains("OIDC")) {
-          print(
-              "⚠️ Vercel AI Gateway Auth Error: The Gateway attempted OIDC verification because the provided API Key was either missing or invalid.");
-          print(
-              "   - Ensure 'AI_GATEWAY_API_KEY' in your .env file is a valid Vercel AI Gateway API Key (starts with 'vak_').");
-          print(
-              "   - Do NOT use provider keys (like 'sk-...') directly with the Vercel AI Gateway URL.");
-        }
-        return null;
-      }
-
-      final stream = streamedResponse.stream.transform(utf8.decoder);
-
-      String finalContent = "";
-      String buffer = "";
-      print("Listening to stream...");
-
-      await for (final rawChunk in stream) {
-        // print("Raw Chunk: $rawChunk"); // DEBUG: Print raw chunk
-        try {
-          String cleaned = rawChunk.trim();
-          final lines = cleaned.split("\n");
-
-          for (final line in lines) {
-            String l = line.trim();
-            if (!l.startsWith("data:")) continue;
-
-            l = l.substring(5).trim(); // Remove "data:"
-            if (l == "[DONE]") continue;
-
-            buffer += l;
-
-            try {
-              final decoded = jsonDecode(buffer);
-              buffer = ""; // reset after successful parse
-
-              final delta = decoded["choices"]?[0]?["delta"];
-              if (delta == null) continue;
-
-              if (delta["content"] != null) {
-                emit(state.copyWith(replyStatus: HomeReplyStatus.success));
-                final chunkText = delta["content"];
-                streamedText.value += chunkText;
-                finalContent += chunkText;
-              }
-            } catch (e) {
-              continue;
-            }
-          }
-        } catch (e) {
-          print("Streaming parse error: $e");
-        }
-      }
-
-      if (finalContent.isNotEmpty) {
-        if (finalContent.contains("</think>")) {
-          final parts = finalContent.split("</think>");
-          finalContent = parts.length > 1
-              ? parts.sublist(1).join("</think>").trim()
-              : parts[0].trim();
-        }
-        return finalContent;
-      } else {
-        print("❌ Streaming failed or empty content");
-        return null;
-      }
-    } catch (e) {
-      print("❌ Vercel AI SDK Request failed: $e");
-      return null;
-    }
-  }
-
   Future<String?> vercelGenerateReply(
     String query,
     List<Map<String, String>> results,
@@ -5626,7 +4856,7 @@ ${jsonEncode({
         """Rewrite the QUERY by replacing pronouns and references using the CONTEXT. Output ONLY the rewritten query. No explanation.""";
 
     final userMessage =
-        """CONTEXT:\n${contextLines.join('\n')}\n\nQUERY: $query\n\nREWRITTEN QUERY:""";
+        """Rewrite the QUERY by replacing pronouns and references using the CONTEXT. Output ONLY the rewritten query. No explanation. \nCONTEXT:\n${contextLines.join('\n')}\n\nQUERY: $query\n\nREWRITTEN QUERY:""";
 
     try {
       if (_drissyEngine.isLoaded) {
@@ -5752,7 +4982,8 @@ Generate a title and summary for this thread.""";
   ) async {
     final generateAnswerStartTime = DateTime.now();
     streamedText.value = "";
-    // Step 1: Format sources with token counting, skip if would exceed 125,000 tokens.
+
+    // Step 1: Format sources with token counting for on-device context window
     int totalTokens = 0;
     List<Map<String, String>> formattedSources = [];
     for (final result in results) {
@@ -5761,12 +4992,11 @@ Generate a title and summary for this thread.""";
           result["snippet"] == null) {
         continue;
       }
-      // Simple token estimate: 1 token ≈ 4 chars
       int tokens = ((result["title"]!.length +
               result["url"]!.length +
               result["snippet"]!.length) ~/
           4);
-      if (totalTokens + tokens > 125000) {
+      if (totalTokens + tokens > 4000) {
         break;
       }
       formattedSources.add({
@@ -5777,208 +5007,93 @@ Generate a title and summary for this thread.""";
       totalTokens += tokens;
     }
 
-    // Step 2: IP lookup and user context
+    // Step 2: User context
     String formattedUserContext = city == "" && region == "" && country == ""
         ? "The current date and time is ${DateTime.now()}."
         : "The user is located in $city, $region, $country. The current date and time is ${DateTime.now()}.";
 
     // Step 3: Build systemPrompt
     bool isChat = formattedSources.isEmpty;
-    final systemPrompt = """
-You are Drissea, a private, conversational, and insightful answer engine. You do not save user data and keep as much processing as possible strictly on-device. 
+    final systemPrompt = """You are Drissea, a private, conversational, and insightful answer engine. You do not save user data and keep as much processing as possible strictly on-device.
 
-${isChat ? "" : """
-You answer user questions using a list of web sources, each with a title, url, and snippet.
+${isChat ? "" : """You answer user questions using a list of web sources, each with a title, url, and snippet.
 Rules:
 - Always answer in Markdown.
 - Structure your response with clear headings and bullet points as needed.
 - Always **bold key insights** and highlight notable places, dishes, or experiences.
-- For any place, food item, or experience that was featured in a source, wrap the main word or phrase in this format: `[text to show](<link>)` (e.g., Try the **[Dum Pukht Biryani](https://example.com/food)**).
-- **Be Conversational**: Write naturally, like a knowledgeable friend. Avoid robotic phrases like “based on search results” or “these sources say.”
+- For any place, food item, or experience that was featured in a source, wrap the main word or phrase in this format: [text to show](<link>).
+- **Be Conversational**: Write naturally, like a knowledgeable friend. Avoid robotic phrases like "based on search results" or "these sources say."
 - Only use the sources that directly answer the query.
-- If no strong or direct matches are found, gracefully say: _“There isn’t a perfect match for that, but here are a few options that might still interest you.”_
+- If no strong or direct matches are found, gracefully say: _"There isn't a perfect match for that, but here are a few options that might still interest you."_
 - Do not repeat the question or use generic filler lines.
 - Keep your language engaging, be as detailed and exhaustive as possible, ensuring no relevant detail from the sources is omitted, while still maintaining clarity and readability.
 - If the query consists primarily of a URL (e.g., youtube.com/...), use the provided content from the extracted URL to summarize what the page or video is about.
 
-"""}
-Use the following user context for additional personalization (if relevant):
+"""}Use the following user context for additional personalization (if relevant):
 $formattedUserContext
 
 Don't reveal any personal information you have in your context unless asked about it.
 """;
 
-    // Step 4: Determine Model
-    String modelName = "deepseek/deepseek-v3.2";
-     
+    // Step 4: Build conversation messages for on-device model
+    // Trim to last 4 messages for context window
+    final recentPrevious = previousResults.length > 4
+        ? previousResults.sublist(previousResults.length - 4)
+        : previousResults;
 
-    // Step 5: Make the streaming API request to Vercel AI SDK Gateway
-    // Correct Vercel AI Gateway URL found via search.
-    final url = Uri.parse("https://ai-gateway.vercel.sh/v1/chat/completions");
+    final conversationMessages = <Map<String, String>>[];
 
-    final request = http.Request("POST", url);
-    request.headers.addAll({
-      "Content-Type": "application/json",
-      "Authorization": "Bearer ${dotenv.get("AI_GATEWAY_API_KEY")}",
+    for (final item in recentPrevious) {
+      conversationMessages.add({
+        'role': 'user',
+        'content': item.sourceImageDescription != ""
+            ? "${item.userQuery} | Here's the image description: ${item.sourceImageDescription}"
+            : item.userQuery,
+      });
+      conversationMessages.add({
+        'role': 'assistant',
+        'content': item.answer,
+      });
+    }
+
+    // Build the current user message with sources embedded
+    String currentUserMessage = query;
+    if (imageDescription.isNotEmpty) {
+      currentUserMessage += " | Here's the image description: $imageDescription";
+    }
+    if (extractedUrlData?.snippet != null && extractedUrlData!.snippet!.isNotEmpty) {
+      currentUserMessage += " | Here's the extracted url page description: ${extractedUrlData.snippet}";
+    }
+
+    if (!isChat && formattedSources.isNotEmpty) {
+      final sourcesText = formattedSources
+          .asMap()
+          .entries
+          .map((e) => 'Source ${e.key + 1} [${e.value["title"]}] (${e.value["url"]}):\n${e.value["snippet"]}')
+          .join('\n\n');
+      currentUserMessage += "\n\nWeb Sources:\n$sourcesText";
+    }
+
+    conversationMessages.add({
+      'role': 'user',
+      'content': currentUserMessage,
     });
 
-    request.body = jsonEncode({
-      "model": modelName,
-      "stream": true,
-      "messages": [
-        {"role": "system", "content": systemPrompt},
-        // Add previous queries and answers as context
-        ...previousResults.expand((item) => [
-              {
-                "role": "user",
-                "content": item.sourceImageDescription != ""
-                    ? "${item.userQuery} | Here's the image description:${item.sourceImageDescription}"
-                    : item.userQuery
-              },
-              {
-                "role": "assistant",
-                "content":
-                    // item.isSearchMode
-                    //     ? jsonEncode({
-                    //         "previous_web_results": item.web
-                    //             .map((inf) => {
-                    //                   "title": inf.title,
-                    //                   "url": inf.link,
-                    //                   "snippet": inf.snippet,
-                    //                 })
-                    //             .toList(),
-                    //       })
-                    //     :
-                    item.answer,
-              },
-            ]),
-
-        {
-          "role": "user",
-          "content": [
-            {
-              "type": "text",
-              "text":
-                  "$query ${imageDescription == "" ? "" : "| Here's the image description: $imageDescription"}  ${extractedUrlData?.snippet == "" ? "" : "| Here's the extracted url page description: ${extractedUrlData?.snippet}"}"
-                      .trim()
-            },
-          ]
-        },
-
-        isChat == false
-            ? {
-                "role": "user",
-                "content":
-                    jsonEncode(city == "" && region == "" && country == ""
-                        ? {
-                            "results": formattedSources,
-                            "date": DateTime.now().toIso8601String(),
-                            "day": DateTime.now().day,
-                            "month": DateTime.now().month,
-                            "year": DateTime.now().year,
-                            "hour": DateTime.now().hour,
-                            "minute": DateTime.now().minute,
-                            "second": DateTime.now().second,
-                            "timezone": DateTime.now().timeZoneName,
-                          }
-                        : {
-                            "results": formattedSources,
-                            "city": city,
-                            "region": region,
-                            "country": country,
-                            "date": DateTime.now().toIso8601String(),
-                            "day": DateTime.now().day,
-                            "month": DateTime.now().month,
-                            "year": DateTime.now().year,
-                            "hour": DateTime.now().hour,
-                            "minute": DateTime.now().minute,
-                            "second": DateTime.now().second,
-                            "timezone": DateTime.now().timeZoneName,
-                          })
-              }
-            : {
-                "role": "user",
-                "content":
-                    jsonEncode(city == "" && region == "" && country == ""
-                        ? {
-                            "date": DateTime.now().toIso8601String(),
-                            "day": DateTime.now().day,
-                            "month": DateTime.now().month,
-                            "year": DateTime.now().year,
-                            "hour": DateTime.now().hour,
-                            "minute": DateTime.now().minute,
-                            "second": DateTime.now().second,
-                            "timezone": DateTime.now().timeZoneName,
-                          }
-                        : {
-                            "city": city,
-                            "region": region,
-                            "country": country,
-                            "date": DateTime.now().toIso8601String(),
-                            "day": DateTime.now().day,
-                            "month": DateTime.now().month,
-                            "year": DateTime.now().year,
-                            "hour": DateTime.now().hour,
-                            "minute": DateTime.now().minute,
-                            "second": DateTime.now().second,
-                            "timezone": DateTime.now().timeZoneName,
-                          })
-              }
-      ],
-    });
     print("");
-    print("Starting streaming request to Vercel AI SDK (\$modelName)...");
+    print("Starting on-device streaming request...");
     print("");
 
     try {
-      final streamedResponse = await httpClient
-          .send(request)
-          .timeout(const Duration(seconds: 90));
-      print("Response Status Code: ${streamedResponse.statusCode}");
-
-      if (streamedResponse.statusCode != 200) {
-        final body =
-            await streamedResponse.stream.transform(utf8.decoder).join();
-        print("❌ Error Body: \$body");
-        if (body.contains("OIDC")) {
-          print(
-              "⚠️ Vercel AI Gateway Auth Error: The Gateway attempted OIDC verification because the provided API Key was either missing or invalid.");
-          print(
-              "   - Ensure 'AI_GATEWAY_API_KEY' in your .env file is a valid Vercel AI Gateway API Key (starts with 'vak_').");
-          print(
-              "   - Do NOT use provider keys (like 'sk-...') directly with the Vercel AI Gateway URL.");
-        }
-        return null;
-      }
-
-      final stream = streamedResponse.stream
-          .transform(utf8.decoder)
-          .transform(const LineSplitter());
-
       String finalContent = "";
-      print("Listening to stream...");
-      print(
-          "TTFT:${DateTime.now().difference(generateAnswerStartTime).inMilliseconds}");
+      print("TTFT: ${DateTime.now().difference(generateAnswerStartTime).inMilliseconds}");
 
-      await for (final line in stream) {
-        if (!line.startsWith("data:")) continue;
-        final chunk = line.substring(5).trim();
-        if (chunk == "[DONE]") continue;
-
-        try {
-          final decoded = jsonDecode(chunk);
-          final delta = decoded["choices"]?[0]?["delta"];
-          if (delta == null) continue;
-
-          if (delta["content"] != null) {
-            final chunkText = delta["content"];
-            streamedText.value += chunkText;
-            finalContent += chunkText;
-            emit(state.copyWith(replyStatus: HomeReplyStatus.success));
-          }
-        } catch (e) {
-          print("Streaming parse error: \$e");
-        }
+      await for (final token in _drissyEngine.chat(
+        systemMessage: systemPrompt,
+        conversationMessages: conversationMessages,
+      )) {
+        finalContent += token;
+        streamedText.value = finalContent;
+        emit(state.copyWith(replyStatus: HomeReplyStatus.success));
       }
 
       if (finalContent.isNotEmpty) {
@@ -5990,11 +5105,11 @@ Don't reveal any personal information you have in your context unless asked abou
         }
         return finalContent;
       } else {
-        print("❌ Streaming failed or empty content");
+        print("On-device streaming returned empty content");
         return null;
       }
     } catch (e) {
-      print("❌ Vercel AI SDK Request failed: \$e");
+      print("On-device generation failed: $e");
       return null;
     }
   }
@@ -6270,244 +5385,6 @@ Don't reveal any personal information you have in your context unless asked abou
     }
   }
 
-  // Generate a reply from Drissea API given a query and search results.
-  // Generate a reply from Vercel AI SDK API given a query and search results.
-  Future<String?> vercelGenerateChatReply(
-    String query,
-    List<Map<String, String>> results,
-    ValueNotifier<String> streamedText,
-    Emitter<HomeState> emit,
-    String imageDescription,
-    List<ThreadResultData> previousResults,
-    ExtractedUrlResultData? extractedUrlData,
-    String city,
-    String region,
-    String country,
-  ) async {
-    streamedText.value = "";
-    // Step 1: Format sources with token counting, skip if would exceed 125,000 tokens.
-    int totalTokens = 0;
-    List<Map<String, String>> formattedSources = [];
-    for (final result in results) {
-      if (result["title"] == null ||
-          result["url"] == null ||
-          result["snippet"] == null) {
-        continue;
-      }
-      // Simple token estimate: 1 token ≈ 4 chars
-      int tokens = ((result["title"]!.length +
-              result["url"]!.length +
-              result["snippet"]!.length) ~/
-          4);
-      if (totalTokens + tokens > 125000) {
-        break;
-      }
-      formattedSources.add({
-        "title": result["title"]!,
-        "url": result["url"]!,
-        "snippet": result["snippet"]!,
-      });
-      totalTokens += tokens;
-    }
-
-    // Step 2: IP lookup and user context
-    String formattedUserContext =
-        "The user is located in $city, $region, $country. The current date and time is ${DateTime.now()}.";
-
-    // Step 3: Build systemPrompt
-    final systemPrompt = """
-You are a personal memory assistant that helps users recall and explore information from their saved memories. Your primary purpose is to help users remember things they've previously searched, learned, or saved.
-
-Rules:
-- Always respond in Markdown format.
-- **ONLY use information from the provided memory_recall_results** - do NOT make up or hallucinate any information.
-- If the memory results don't contain relevant information, honestly say "I don't have that in your memories" rather than guessing.
-- Be conversational and warm - respond as a helpful friend would.
-- When analyzing images, describe what you see clearly and answer any questions about them.
-- **Bold key insights** and important information to make responses scannable.
-- Use bullet points or numbered lists when presenting multiple items or steps.
-- Keep responses concise and optimized for mobile readability.
-- Draw on the conversation history and memory results to maintain context.
-- When recalling memories, cite the source or context when available.
-- If you're unsure about something, say so honestly rather than guessing.
-- Never fabricate information that isn't in the user's memories.
-
-User context for personalization:
-$formattedUserContext
-""";
-
-    // Step 4: Determine Model
-    String modelName;
-    switch (state.selectedModel) {
-      case HomeModel.deepseek:
-        modelName = "deepseek/deepseek-v3.2";
-        break;
-      case HomeModel.gemini:
-        modelName = "google/gemini-2.5-flash";
-        break;
-      case HomeModel.claude:
-        modelName = "anthropic/claude-haiku-4.5";
-        break;
-      case HomeModel.openAI:
-        modelName = "openai/gpt-5-nano";
-        break;
-      case HomeModel.flashThink:
-        modelName =
-            "google/gemini-2.0-flash-thinking-exp"; // Placeholder or appropriate model
-        break;
-      case HomeModel.localAI:
-        modelName = "deepseek/deepseek-v3.2";
-        break;
-    }
-
-    // Step 5: Make the streaming API request to Vercel AI SDK Gateway
-    // Correct Vercel AI Gateway URL found via search.
-    final url = Uri.parse("https://ai-gateway.vercel.sh/v1/chat/completions");
-
-    final request = http.Request("POST", url);
-    request.headers.addAll({
-      "Content-Type": "application/json",
-      "Authorization": "Bearer ${dotenv.get("AI_GATEWAY_API_KEY")}",
-    });
-
-    request.body = jsonEncode({
-      "model": modelName,
-      "stream": true,
-      "messages": [
-        {"role": "system", "content": systemPrompt},
-        // Add previous queries and answers as context
-        ...previousResults.expand((item) => [
-              {
-                "role": "user",
-                "content": item.sourceImageDescription != ""
-                    ? "${item.userQuery} | Here's the image description:${item.sourceImageDescription}"
-                    : item.userQuery
-              },
-              {
-                "role": "assistant",
-                "content": item.isSearchMode
-                    ? jsonEncode({
-                        "memory_recall_results": item.web
-                            .map((inf) => {
-                                  "title": inf.title,
-                                  "url": inf.link,
-                                  "snippet": inf.snippet,
-                                })
-                            .toList(),
-                      })
-                    : item.answer,
-              },
-            ]),
-
-        {
-          "role": "user",
-          "content": [
-            {
-              "type": "text",
-              "text":
-                  "$query ${imageDescription == "" ? "" : "| Here's the image description: $imageDescription"}  ${extractedUrlData?.snippet == "" ? "" : "| Here's the extracted url page description: ${extractedUrlData?.snippet}"}"
-                      .trim()
-            },
-          ]
-        },
-
-        {
-          "role": "user",
-          "content": jsonEncode({
-            "results": formattedSources,
-            "city": city,
-            "region": region,
-            "country": country,
-          })
-        }
-      ],
-    });
-    print("");
-    print("Starting streaming request to Vercel AI SDK ($modelName)...");
-    print("");
-
-    try {
-      final streamedResponse = await httpClient
-          .send(request)
-          .timeout(const Duration(seconds: 90));
-      print("Response Status Code: ${streamedResponse.statusCode}");
-
-      if (streamedResponse.statusCode != 200) {
-        final body =
-            await streamedResponse.stream.transform(utf8.decoder).join();
-        print("❌ Error Body: $body");
-        if (body.contains("OIDC")) {
-          print(
-              "⚠️ Vercel AI Gateway Auth Error: The Gateway attempted OIDC verification because the provided API Key was either missing or invalid.");
-          print(
-              "   - Ensure 'AI_GATEWAY_API_KEY' in your .env file is a valid Vercel AI Gateway API Key (starts with 'vak_').");
-          print(
-              "   - Do NOT use provider keys (like 'sk-...') directly with the Vercel AI Gateway URL.");
-        }
-        return null;
-      }
-
-      final stream = streamedResponse.stream.transform(utf8.decoder);
-
-      String finalContent = "";
-      String buffer = "";
-      print("Listening to stream...");
-
-      await for (final rawChunk in stream) {
-        // print("Raw Chunk: $rawChunk"); // DEBUG: Print raw chunk
-        try {
-          String cleaned = rawChunk.trim();
-          final lines = cleaned.split("\n");
-
-          for (final line in lines) {
-            String l = line.trim();
-            if (!l.startsWith("data:")) continue;
-
-            l = l.substring(5).trim(); // Remove "data:"
-            if (l == "[DONE]") continue;
-
-            buffer += l;
-
-            try {
-              final decoded = jsonDecode(buffer);
-              buffer = ""; // reset after successful parse
-
-              final delta = decoded["choices"]?[0]?["delta"];
-              if (delta == null) continue;
-
-              if (delta["content"] != null) {
-                emit(state.copyWith(replyStatus: HomeReplyStatus.success));
-                final chunkText = delta["content"];
-                streamedText.value += chunkText;
-                finalContent += chunkText;
-              }
-            } catch (e) {
-              continue;
-            }
-          }
-        } catch (e) {
-          print("Streaming parse error: $e");
-        }
-      }
-
-      if (finalContent.isNotEmpty) {
-        if (finalContent.contains("</think>")) {
-          final parts = finalContent.split("</think>");
-          finalContent = parts.length > 1
-              ? parts.sublist(1).join("</think>").trim()
-              : parts[0].trim();
-        }
-        return finalContent;
-      } else {
-        print("❌ Streaming failed or empty content");
-        return null;
-      }
-    } catch (e) {
-      print("❌ Vercel AI SDK Request failed: $e");
-      return null;
-    }
-  }
-
   //Get relevant search query from task
   bool _cancelTaskGen = false;
   //Cancel Gen Task
@@ -6586,7 +5463,7 @@ $formattedUserContext
   Future<void> _getUserInfo(
       HomeInitialUserData event, Emitter<HomeState> emit) async {
     if (state.historyStatus == HomeHistoryStatus.loading) {
-      initMixpanel();
+      // initMixpanel();
     }
 
     // 1. Load local data first for instant display
@@ -6651,7 +5528,7 @@ $formattedUserContext
 
   Future<String?> createSession(ThreadSessionData sessionData, String sessionId,
       {bool skipMemoryProcessing = false}) async {
-    final FirebaseFirestore firestore = FirebaseFirestore.instance;
+    // final FirebaseFirestore firestore = FirebaseFirestore.instance;
     try {
       final thread = ThreadsCompanion.insert(
         id: drift.Value(sessionId),
@@ -6668,36 +5545,36 @@ $formattedUserContext
       print(sessionData.toJson());
       print("aa");
 
-      final firestoreData = sessionData.toJson();
-      firestoreData['createdAt'] = sessionData.createdAt;
-      firestoreData['updatedAt'] = sessionData.updatedAt;
-      firestoreData['results'] = sessionData.results.map((e) {
-        final data = e.toJson();
-        data['createdAt'] = e.createdAt;
-        data['updatedAt'] = e.updatedAt;
-        return data;
-      }).toList();
+      // final firestoreData = sessionData.toJson();
+      // firestoreData['createdAt'] = sessionData.createdAt;
+      // firestoreData['updatedAt'] = sessionData.updatedAt;
+      // firestoreData['results'] = sessionData.results.map((e) {
+      //   final data = e.toJson();
+      //   data['createdAt'] = e.createdAt;
+      //   data['updatedAt'] = e.updatedAt;
+      //   return data;
+      // }).toList();
 
-      // Tag thread with userId if logged in
-      final prefs = await SharedPreferences.getInstance();
-      final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
-      final email = prefs.getString('email') ?? '';
-      if (isLoggedIn && email.isNotEmpty) {
-        final userQuery = await firestore
-            .collection('users')
-            .where('email', isEqualTo: email)
-            .limit(1)
-            .get();
-        if (userQuery.docs.isNotEmpty) {
-          firestoreData['userId'] = userQuery.docs.first.id;
-        }
-      }
+      // // Tag thread with userId if logged in
+      // final prefs = await SharedPreferences.getInstance();
+      // final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+      // final email = prefs.getString('email') ?? '';
+      // if (isLoggedIn && email.isNotEmpty) {
+      //   final userQuery = await firestore
+      //       .collection('users')
+      //       .where('email', isEqualTo: email)
+      //       .limit(1)
+      //       .get();
+      //   if (userQuery.docs.isNotEmpty) {
+      //     firestoreData['userId'] = userQuery.docs.first.id;
+      //   }
+      // }
 
-      await firestore.collection("threads").doc(sessionId).set(firestoreData);
-      print("✅ Session created/updated in Firestore with ID: $sessionId");
+      // await firestore.collection("threads").doc(sessionId).set(firestoreData);
+      // print("✅ Session created/updated in Firestore with ID: $sessionId");
 
-      // Fire-and-forget: update profile stats in background
-      ProfileStatsService.updateStatsInBackground();
+      // // Fire-and-forget: update profile stats in background
+      // ProfileStatsService.updateStatsInBackground();
 
       return sessionId;
     } catch (e) {
@@ -6793,7 +5670,7 @@ $formattedUserContext
 
   Future<String?> updateSession(ThreadSessionData sessionData, String sessionId,
       {bool skipMemoryProcessing = false}) async {
-    final FirebaseFirestore firestore = FirebaseFirestore.instance;
+    // final FirebaseFirestore firestore = FirebaseFirestore.instance;
     try {
       final thread = ThreadsCompanion(
         id: drift.Value(sessionId),
@@ -6805,44 +5682,44 @@ $formattedUserContext
       await AppDatabase().updateThread(sessionId, thread);
       print("✅ Session updated in local database with ID: $sessionId");
 
-      final docRef = firestore.collection("threads").doc(sessionId);
-      final docSnapshot = await docRef.get();
+      // final docRef = firestore.collection("threads").doc(sessionId);
+      // final docSnapshot = await docRef.get();
 
-      final firestoreData = sessionData.toJson();
-      firestoreData['createdAt'] = sessionData.createdAt;
-      firestoreData['updatedAt'] = Timestamp.now();
-      firestoreData['results'] = sessionData.results.map((e) {
-        final data = e.toJson();
-        data['createdAt'] = e.createdAt;
-        data['updatedAt'] = e.updatedAt;
-        return data;
-      }).toList();
+      // final firestoreData = sessionData.toJson();
+      // firestoreData['createdAt'] = sessionData.createdAt;
+      // firestoreData['updatedAt'] = Timestamp.now();
+      // firestoreData['results'] = sessionData.results.map((e) {
+      //   final data = e.toJson();
+      //   data['createdAt'] = e.createdAt;
+      //   data['updatedAt'] = e.updatedAt;
+      //   return data;
+      // }).toList();
 
-      // Tag thread with userId if logged in
-      final prefs = await SharedPreferences.getInstance();
-      final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
-      final email = prefs.getString('email') ?? '';
-      if (isLoggedIn && email.isNotEmpty) {
-        final userQuery = await firestore
-            .collection('users')
-            .where('email', isEqualTo: email)
-            .limit(1)
-            .get();
-        if (userQuery.docs.isNotEmpty) {
-          firestoreData['userId'] = userQuery.docs.first.id;
-        }
-      }
+      // // Tag thread with userId if logged in
+      // final prefs = await SharedPreferences.getInstance();
+      // final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+      // final email = prefs.getString('email') ?? '';
+      // if (isLoggedIn && email.isNotEmpty) {
+      //   final userQuery = await firestore
+      //       .collection('users')
+      //       .where('email', isEqualTo: email)
+      //       .limit(1)
+      //       .get();
+      //   if (userQuery.docs.isNotEmpty) {
+      //     firestoreData['userId'] = userQuery.docs.first.id;
+      //   }
+      // }
 
-      if (docSnapshot.exists) {
-        await docRef.update(firestoreData);
-        print("✅ Session updated successfully with ID: $sessionId");
-      } else {
-        await docRef.set(firestoreData);
-        print("🆕 Session created with ID: $sessionId");
-      }
+      // if (docSnapshot.exists) {
+      //   await docRef.update(firestoreData);
+      //   print("✅ Session updated successfully with ID: $sessionId");
+      // } else {
+      //   await docRef.set(firestoreData);
+      //   print("🆕 Session created with ID: $sessionId");
+      // }
 
-      // Fire-and-forget: update profile stats in background
-      ProfileStatsService.updateStatsInBackground();
+      // // Fire-and-forget: update profile stats in background
+      // ProfileStatsService.updateStatsInBackground();
 
       // Process and cache the latest answer for memory system (fire-and-forget, isolated)
       // Skip if chat mode is active

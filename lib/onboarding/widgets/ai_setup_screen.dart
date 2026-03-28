@@ -339,10 +339,40 @@ class _AiSetupScreenState extends State<AiSetupScreen> {
                         ),
                       ),
                       const SizedBox(height: 6),
-                      Text(
+                      Text.rich(
                         status == LocalAIStatus.noStorage
-                            ? 'Not enough storage on your device. Free up at least 2 GB to download the model.'
-                            : 'This requires a 1.86 GB download.\nWe recommend using Wi-Fi.',
+                            ? const TextSpan(
+                                text:
+                                    'Not enough storage on your device. Free up at least 2 GB to download the model.',
+                              )
+                            : TextSpan(
+                                children: [
+                                  TextSpan(text: 'This requires a ',
+                                  style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 14,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text: '1.86 GB',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontFamily: 'Poppins',
+                                      fontSize: 14,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                  ),
+                                   TextSpan(
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 14,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                      text:
+                                          ' download.\nWe recommend using Wi-Fi.'),
+                                ],
+                              ),
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontFamily: 'Poppins',
@@ -394,7 +424,7 @@ class _AiSetupScreenState extends State<AiSetupScreen> {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              '${(progress * 1855).toInt()} MB of 1855 MB',
+                              '${(progress * 1.86).toStringAsFixed(2)} GB of 1.86 GB',
                               style: TextStyle(
                                 fontFamily: 'Poppins',
                                 fontSize: 14,

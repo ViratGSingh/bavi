@@ -2,6 +2,10 @@ import 'dart:io' show Platform;
 import 'package:llamadart/llamadart.dart';
 
 class DrissyEngine {
+  static final DrissyEngine _instance = DrissyEngine._internal();
+  factory DrissyEngine() => _instance;
+  DrissyEngine._internal();
+
   LlamaEngine? _engine;
   bool _isLoaded = false;
   bool _isVisionLoaded = false;

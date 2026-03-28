@@ -106,7 +106,7 @@ final class HomeState extends Equatable {
     this.instagramStatus = HomeInstagramStatus.enabled,
     this.generalStatus = HomeGeneralStatus.enabled,
     this.showLocationRationale = false,
-    this.isChatModeActive = true,
+    this.isChatModeActive = false,
     this.userCity = "",
     this.userRegion = "",
     this.userCountry = "",
@@ -121,6 +121,7 @@ final class HomeState extends Equatable {
     this.localAITotalBytes = 0,
     this.localAIVisionTotalBytes = 0,
     this.localAIDownloadPhase = '',
+    this.condensingSources = const [],
   })  : userData = userData ??
             UserProfileInfo(
               email: "NA",
@@ -195,6 +196,7 @@ final class HomeState extends Equatable {
   final int localAITotalBytes;
   final int localAIVisionTotalBytes;
   final String localAIDownloadPhase;
+  final List<Map<String, String>> condensingSources;
 
   HomeState copyWith({
     String? sessionId,
@@ -244,6 +246,7 @@ final class HomeState extends Equatable {
     int? localAITotalBytes,
     int? localAIVisionTotalBytes,
     String? localAIDownloadPhase,
+    List<Map<String, String>>? condensingSources,
   }) {
     return HomeState(
       editQuery: editQuery ?? this.editQuery,
@@ -306,6 +309,7 @@ final class HomeState extends Equatable {
       localAIVisionTotalBytes: localAIVisionTotalBytes ?? this.localAIVisionTotalBytes,
       localAIDownloadPhase:
           localAIDownloadPhase ?? this.localAIDownloadPhase,
+      condensingSources: condensingSources ?? this.condensingSources,
     );
   }
 
@@ -357,5 +361,6 @@ final class HomeState extends Equatable {
         localAITotalBytes,
         localAIVisionTotalBytes,
         localAIDownloadPhase,
+        condensingSources,
       ];
 }

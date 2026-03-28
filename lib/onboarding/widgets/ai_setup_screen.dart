@@ -342,7 +342,7 @@ class _AiSetupScreenState extends State<AiSetupScreen> {
                       Text(
                         status == LocalAIStatus.noStorage
                             ? 'Not enough storage on your device. Free up at least 2 GB to download the model.'
-                            : 'This requires a ~1.7 GB download.\nWe recommend using Wi-Fi.',
+                            : 'This requires a 1.86 GB download.\nWe recommend using Wi-Fi.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontFamily: 'Poppins',

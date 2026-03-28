@@ -34,6 +34,7 @@ class ThreadAnswerView extends StatefulWidget {
   final Function(String url) onLinkTap;
   final ExtractedUrlResultData? extractedUrlData;
   final String? deepDrissyReadingStatus;
+  final List<Map<String, String>> condensingSources;
   const ThreadAnswerView({
     super.key,
     required this.youtubeVideos,
@@ -52,6 +53,7 @@ class ThreadAnswerView extends StatefulWidget {
     required this.onLinkTap,
     this.extractedUrlData,
     this.deepDrissyReadingStatus,
+    this.condensingSources = const [],
   });
 
   @override
@@ -294,6 +296,7 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
         widget.status != HomePageStatus.success ||
                 widget.replyStatus != HomeReplyStatus.success
             ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   AnswerLoader(
                     loaderText: widget.deepDrissyReadingStatus != null
@@ -302,10 +305,18 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
                                 ? "Understanding"
                                 : widget.status == HomePageStatus.getSearchResults
                                     ? "Reading"
-                                    : "Thinking",
+                                    : widget.condensingSources.isNotEmpty
+                                        ? "Reading sources"
+                                        : "Thinking",
                   ),
+                  if (widget.condensingSources.isNotEmpty) ...[
+                    SizedBox(height: 16),
+                    SourceCondensingList(sources: widget.condensingSources),
+                  ],
                   SizedBox(
-                    height: MediaQuery.of(context).size.height / 3,
+                    height: widget.condensingSources.isNotEmpty
+                        ? 40
+                        : MediaQuery.of(context).size.height / 3,
                   )
                 ],
               )
@@ -1082,6 +1093,193 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
             color: Colors.grey.shade100,
           ),
       ],
+    );
+  }
+}
+
+class SourceCondensingList extends StatefulWidget {
+  final List<Map<String, String>> sources;
+  const SourceCondensingList({super.key, required this.sources});
+
+  @override
+  State<SourceCondensingList> createState() => _SourceCondensingListState();
+}
+
+class _SourceCondensingListState extends State<SourceCondensingList>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _pulseController;
+  int _activeIndex = 0;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+
+    // Cycle through sources to show reading progress
+    if (widget.sources.length > 1) {
+      _timer = Timer.periodic(const Duration(milliseconds: 1800), (_) {
+        if (mounted) {
+          setState(() {
+            _activeIndex = (_activeIndex + 1) % widget.sources.length;
+          });
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  String _extractDomain(String url) {
+    try {
+      final uri = Uri.parse(url);
+      return uri.host.replaceFirst('www.', '');
+    } catch (_) {
+      return url;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: List.generate(widget.sources.length, (index) {
+        final source = widget.sources[index];
+        final title = source["title"] ?? "";
+        final url = source["url"] ?? "";
+        final domain = _extractDomain(url);
+        final isActive = index == _activeIndex;
+
+        return AnimatedBuilder(
+          animation: _pulseController,
+          builder: (context, child) {
+            final opacity = isActive
+                ? 0.6 + (_pulseController.value * 0.4)
+                : 0.35;
+
+            return AnimatedOpacity(
+              opacity: opacity,
+              duration: const Duration(milliseconds: 400),
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: isActive
+                      ? const Color(0xFF8A2BE2).withValues(alpha: 0.05)
+                      : Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isActive
+                        ? const Color(0xFF8A2BE2).withValues(alpha: 0.15)
+                        : Colors.grey.shade200,
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    // Source number badge
+                    Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: isActive
+                            ? const Color(0xFF8A2BE2).withValues(alpha: 0.12)
+                            : Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(7),
+                      ),
+                      child: Center(
+                        child: Text(
+                          "${index + 1}",
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: isActive
+                                ? const Color(0xFF8A2BE2)
+                                : Colors.grey.shade500,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    // Title and domain
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontFamily: 'Poppins',
+                              fontWeight: FontWeight.w600,
+                              color: isActive
+                                  ? Colors.black87
+                                  : Colors.grey.shade500,
+                              height: 1.3,
+                            ),
+                          ),
+                          if (domain.isNotEmpty && !url.startsWith("memory://"))
+                            Text(
+                              domain,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontFamily: 'Poppins',
+                                color: isActive
+                                    ? const Color(0xFF8A2BE2).withValues(alpha: 0.7)
+                                    : Colors.grey.shade400,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Reading indicator
+                    if (isActive)
+                      Shimmer.fromColors(
+                        baseColor: const Color(0xFF8A2BE2),
+                        highlightColor: const Color(0xFF8A2BE2).withValues(alpha: 0.3),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF8A2BE2).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            "Reading",
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontFamily: 'Poppins',
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF8A2BE2),
+                            ),
+                          ),
+                        ),
+                      )
+                    else
+                      Icon(
+                        Icons.check_circle_rounded,
+                        size: 14,
+                        color: Colors.grey.shade300,
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      }),
     );
   }
 }

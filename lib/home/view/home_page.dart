@@ -7,7 +7,7 @@ import 'package:bavi/home/widgets/sources_bottom_sheet.dart';
 import 'package:bavi/home/widgets/location_permission_sheet.dart';
 import 'package:bavi/home/widgets/web_view.dart';
 import 'package:bavi/home/widgets/google_search_webview.dart';
-// import 'package:bavi/home/widgets/deep_drissy_search_webview.dart';
+import 'package:bavi/home/widgets/deep_drissy_search_webview.dart';
 import 'package:bavi/home/widgets/settings_bottom_sheet.dart';
 import 'package:bavi/models/short_video.dart';
 import 'package:bavi/models/thread.dart';
@@ -106,6 +106,8 @@ class _HomePageState extends State<HomePage>
   ValueNotifier<String> imageDescriptionNotifier = ValueNotifier<String>("");
 
   bool _isLeftPillPressed = false;
+  bool _isSettingsIconPressed = false;
+  bool _isHistoryIconPressed = false;
 
   ValueNotifier<String> extractedUrlDescription = ValueNotifier<String>("");
   ValueNotifier<String> extractedUrlTitle = ValueNotifier<String>("");
@@ -418,30 +420,28 @@ class _HomePageState extends State<HomePage>
                   );
             }
           },
-          // Deep Drissy webview listener commented out
-          // child: BlocListener<HomeBloc, HomeState>(
-          //   listenWhen: (previous, current) =>
-          //       previous.deepDrissyWebSearchQueries !=
-          //           current.deepDrissyWebSearchQueries &&
-          //       current.deepDrissyWebSearchQueries != null,
-          //   listener: (context, state) async {
-          //     final results =
-          //         await Navigator.push<List<ExtractedResultInfo>>(
-          //       context,
-          //       MaterialPageRoute(
-          //         builder: (_) => DeepDrissySearchWebView(
-          //           queries: state.deepDrissyWebSearchQueries!,
-          //         ),
-          //       ),
-          //     );
-          //     if (context.mounted) {
-          //       context.read<HomeBloc>().add(
-          //             HomeDeepDrissyWebSearchResultsReceived(
-          //                 results ?? []),
-          //           );
-          //     }
-          //   },
-          //   child:
+          child: BlocListener<HomeBloc, HomeState>(
+            listenWhen: (previous, current) =>
+                previous.deepDrissyWebSearchQueries !=
+                    current.deepDrissyWebSearchQueries &&
+                current.deepDrissyWebSearchQueries != null,
+            listener: (context, state) async {
+              final results =
+                  await Navigator.push<List<ExtractedResultInfo>>(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => DeepDrissySearchWebView(
+                    queries: state.deepDrissyWebSearchQueries!,
+                  ),
+                ),
+              );
+              if (context.mounted) {
+                context.read<HomeBloc>().add(
+                      HomeDeepDrissyWebSearchResultsReceived(
+                          results ?? []),
+                    );
+              }
+            },
             child: BlocListener<HomeBloc, HomeState>(
             listenWhen: (previous, current) =>
                 previous.showLocationRationale !=
@@ -550,12 +550,18 @@ class _HomePageState extends State<HomePage>
                                         children: [
                                           // Settings button
                                           GestureDetector(
-                                            onTapDown: (_) => setState(
-                                                () => _isLeftPillPressed = true),
-                                            onTapUp: (_) => setState(
-                                                () => _isLeftPillPressed = false),
-                                            onTapCancel: () => setState(
-                                                () => _isLeftPillPressed = false),
+                                            onTapDown: (_) => setState(() {
+                                              _isLeftPillPressed = true;
+                                              _isSettingsIconPressed = true;
+                                            }),
+                                            onTapUp: (_) => setState(() {
+                                              _isLeftPillPressed = false;
+                                              _isSettingsIconPressed = false;
+                                            }),
+                                            onTapCancel: () => setState(() {
+                                              _isLeftPillPressed = false;
+                                              _isSettingsIconPressed = false;
+                                            }),
                                             onTap: () {
                                               HapticFeedback.mediumImpact();
                                               mixpanel.track("open_settings");
@@ -581,27 +587,38 @@ class _HomePageState extends State<HomePage>
                                             onLongPress: () {
                                               HapticFeedback.heavyImpact();
                                             },
-                                            child: Container(
-                                              width: 42,
-                                              height: 42,
-                                              decoration: const BoxDecoration(
-                                                shape: BoxShape.circle,
-                                              ),
-                                              child: Icon(
-                                                Iconsax.setting_2_outline,
-                                                color: Colors.black,
-                                                size: 20,
+                                            child: AnimatedScale(
+                                              scale: _isSettingsIconPressed ? 0.75 : 1.0,
+                                              duration: const Duration(milliseconds: 120),
+                                              curve: Curves.easeInOut,
+                                              child: Container(
+                                                width: 42,
+                                                height: 42,
+                                                decoration: const BoxDecoration(
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: Icon(
+                                                  Iconsax.setting_2_outline,
+                                                  color: Colors.black,
+                                                  size: 20,
+                                                ),
                                               ),
                                             ),
                                           ),
                                           // Chat history button
                                           GestureDetector(
-                                            onTapDown: (_) => setState(
-                                                () => _isLeftPillPressed = true),
-                                            onTapUp: (_) => setState(
-                                                () => _isLeftPillPressed = false),
-                                            onTapCancel: () => setState(
-                                                () => _isLeftPillPressed = false),
+                                            onTapDown: (_) => setState(() {
+                                              _isLeftPillPressed = true;
+                                              _isHistoryIconPressed = true;
+                                            }),
+                                            onTapUp: (_) => setState(() {
+                                              _isLeftPillPressed = false;
+                                              _isHistoryIconPressed = false;
+                                            }),
+                                            onTapCancel: () => setState(() {
+                                              _isLeftPillPressed = false;
+                                              _isHistoryIconPressed = false;
+                                            }),
                                             onTap: () async {
                                               HapticFeedback.lightImpact();
                                               mixpanel.track("open_history");
@@ -685,16 +702,21 @@ class _HomePageState extends State<HomePage>
                                             onLongPress: () {
                                               HapticFeedback.mediumImpact();
                                             },
-                                            child: Container(
-                                              width: 42,
-                                              height: 42,
-                                              decoration: const BoxDecoration(
-                                                shape: BoxShape.circle,
-                                              ),
-                                              child: Icon(
-                                                Icons.history_rounded,
-                                                color: Colors.grey.shade700,
-                                                size: 22,
+                                            child: AnimatedScale(
+                                              scale: _isHistoryIconPressed ? 0.75 : 1.0,
+                                              duration: const Duration(milliseconds: 120),
+                                              curve: Curves.easeInOut,
+                                              child: Container(
+                                                width: 42,
+                                                height: 42,
+                                                decoration: const BoxDecoration(
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: Icon(
+                                                  Icons.history_rounded,
+                                                  color: Colors.grey.shade700,
+                                                  size: 22,
+                                                ),
                                               ),
                                             ),
                                           ),
@@ -1503,8 +1525,10 @@ class _HomePageState extends State<HomePage>
                                   Row(
                                     mainAxisAlignment:
                                         MainAxisAlignment.spaceBetween,
+                                    crossAxisAlignment: CrossAxisAlignment.end,
                                     children: [
                                       Row(
+                                        crossAxisAlignment: CrossAxisAlignment.end,
                                         children: [
                                           // + button to open sources bottom sheet (image picker)
                                           GestureDetector(
@@ -1579,71 +1603,43 @@ class _HomePageState extends State<HomePage>
                                             ),
                                           ),
                                           const SizedBox(width: 8),
-                                          // Search mode chip
-                                          GestureDetector(
-                                            onTap: () {
-                                              context
-                                                  .read<HomeBloc>()
-                                                  .add(
-                                                      HomeToggleChatMode());
+                                          // Tools button with animated popup
+                                          _ToolsMenuButton(
+                                            isChatActive: state.isChatModeActive,
+                                            isSearchActive: !state.isChatModeActive,
+                                            isDeepSearchActive: state.deepDrissyStatus == HomeDeepDrissyStatus.enabled,
+                                            onChatSelected: () {
+                                              // Switch to chat mode, disable search & deep search
+                                              if (!state.isChatModeActive) {
+                                                context.read<HomeBloc>().add(HomeToggleChatMode());
+                                              }
+                                              if (state.deepDrissyStatus == HomeDeepDrissyStatus.enabled) {
+                                                context.read<HomeBloc>().add(HomeToggleDeepDrissy());
+                                              }
                                             },
-                                            child: AnimatedContainer(
-                                              duration: const Duration(
-                                                  milliseconds: 300),
-                                              curve: Curves.easeInOut,
-                                              height: 32,
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 12),
-                                              decoration: BoxDecoration(
-                                                color: !state.isChatModeActive
-                                                    ? const Color(0xFFE8D5FF)
-                                                    : Colors.grey
-                                                        .withOpacity(0.1),
-                                                borderRadius:
-                                                    BorderRadius.circular(26),
-                                                border: !state
-                                                        .isChatModeActive
-                                                    ? Border.all(
-                                                        color: const Color(
-                                                                0xFF8A2BE2)
-                                                            .withOpacity(0.3))
-                                                    : null,
-                                              ),
-                                              child: Row(
-                                                mainAxisSize:
-                                                    MainAxisSize.min,
-                                                children: [
-                                                  Icon(
-                                                    Icons.language,
-                                                    size: 16,
-                                                    color: !state
-                                                            .isChatModeActive
-                                                        ? const Color(
-                                                            0xFF8A2BE2)
-                                                        : Colors.black54,
-                                                  ),
-                                                  const SizedBox(width: 6),
-                                                  Text(
-                                                    "Search",
-                                                    style: TextStyle(
-                                                      color: !state
-                                                              .isChatModeActive
-                                                          ? const Color(
-                                                              0xFF8A2BE2)
-                                                          : Colors.black54,
-                                                      fontSize: 13,
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
+                                            onSearchToggle: () {
+                                              // Enable search, disable deep search
+                                              if (state.isChatModeActive) {
+                                                context.read<HomeBloc>().add(HomeToggleChatMode());
+                                              }
+                                              if (state.deepDrissyStatus == HomeDeepDrissyStatus.enabled) {
+                                                context.read<HomeBloc>().add(HomeToggleDeepDrissy());
+                                              }
+                                            },
+                                            onDeepSearchToggle: () {
+                                              // Enable deep search + search mode
+                                              if (state.deepDrissyStatus == HomeDeepDrissyStatus.disabled) {
+                                                context.read<HomeBloc>().add(HomeToggleDeepDrissy());
+                                              }
+                                              if (state.isChatModeActive) {
+                                                context.read<HomeBloc>().add(HomeToggleChatMode());
+                                              }
+                                            },
                                           ),
                                         ],
                                       ),
                                       Row(
+                                        crossAxisAlignment: CrossAxisAlignment.end,
                                         children: [
                                           // Padding(
                                           //     padding: const EdgeInsets.only(right: 12),
@@ -1682,11 +1678,11 @@ class _HomePageState extends State<HomePage>
                                                       state.replyStatus !=
                                                           HomeReplyStatus
                                                               .loading)
-                                              ? IconButton(
-                                                  padding: EdgeInsets.zero,
-                                                  visualDensity: VisualDensity(
-                                                      horizontal: -4),
-                                                  onPressed: () {
+                                              ? InkWell(
+                                                  // padding: EdgeInsets.zero,
+                                                  // visualDensity: VisualDensity(
+                                                  //     horizontal: -4),
+                                                  onTap: () {
                                                     FocusScope.of(context)
                                                         .unfocus();
 
@@ -1770,19 +1766,18 @@ class _HomePageState extends State<HomePage>
                                                         } else {
                                                           taskTextController
                                                               .text = "";
-                                                          // Deep Drissy commented out — always use HomeGetAnswer
-                                                          // if (state.deepDrissyStatus ==
-                                                          //     HomeDeepDrissyStatus.enabled) {
-                                                          //   context.read<HomeBloc>().add(
-                                                          //     HomeDeepDrissyGetAnswer(
-                                                          //       taskText, streamedText,
-                                                          //       extractedUrlDescription, extractedUrlTitle,
-                                                          //       extractedUrl, extractedImageUrl,
-                                                          //       imageDescriptionNotifier.value,
-                                                          //       imageDescriptionNotifier,
-                                                          //     ),
-                                                          //   );
-                                                          // } else {
+                                                          if (state.deepDrissyStatus ==
+                                                              HomeDeepDrissyStatus.enabled) {
+                                                            context.read<HomeBloc>().add(
+                                                              HomeDeepDrissyGetAnswer(
+                                                                taskText, streamedText,
+                                                                extractedUrlDescription, extractedUrlTitle,
+                                                                extractedUrl, extractedImageUrl,
+                                                                imageDescriptionNotifier.value,
+                                                                imageDescriptionNotifier,
+                                                              ),
+                                                            );
+                                                          } else {
                                                             context
                                                                 .read<
                                                                     HomeBloc>()
@@ -1799,7 +1794,7 @@ class _HomePageState extends State<HomePage>
                                                                     imageDescriptionNotifier,
                                                                   ),
                                                                 );
-                                                          // }
+                                                          }
                                                         }
                                                         setState(() {
                                                           isTaskValid = false;
@@ -1824,7 +1819,9 @@ class _HomePageState extends State<HomePage>
                                                       }
                                                     }
                                                   },
-                                                  icon: Container(
+                                                  child: Container(
+                                                    width: 32,
+                                                    height: 32,
                                                     margin: EdgeInsets.only(
                                                         left: 0, bottom: 0),
                                                     decoration: BoxDecoration(
@@ -1833,7 +1830,7 @@ class _HomePageState extends State<HomePage>
                                                           : Color(0xFFC99DF2),
                                                       shape: BoxShape.circle,
                                                     ),
-                                                    padding: EdgeInsets.all(10),
+                                                    padding: EdgeInsets.all(0),
                                                     child: Icon(
                                                       Icons.send,
                                                       color: Color(0xFFDFFF00),
@@ -1841,11 +1838,11 @@ class _HomePageState extends State<HomePage>
                                                     ),
                                                   ),
                                                 )
-                                              : IconButton(
-                                                  padding: EdgeInsets.zero,
-                                                  visualDensity: VisualDensity(
-                                                      horizontal: -4),
-                                                  onPressed: () {
+                                              : InkWell(
+                                                  // padding: EdgeInsets.zero,
+                                                  // visualDensity: VisualDensity(
+                                                  //     horizontal: -4),
+                                                  onTap: () {
                                                     FocusScope.of(context)
                                                         .unfocus();
                                                     context
@@ -1857,14 +1854,17 @@ class _HomePageState extends State<HomePage>
                                                         .track("cancel_search");
                                                     isTaskValid = false;
                                                   },
-                                                  icon: Container(
+                                                  child: Container(
+
+                                                    width: 32,
+                                                    height: 32,
                                                     margin: EdgeInsets.only(
                                                         left: 0, bottom: 0),
                                                     decoration: BoxDecoration(
                                                       color: Color(0xFF8A2BE2),
                                                       shape: BoxShape.circle,
                                                     ),
-                                                    padding: EdgeInsets.all(10),
+                                                    padding: EdgeInsets.all(0),
                                                     child: Icon(
                                                       Icons.stop,
                                                       color: Color(0xFFDFFF00),
@@ -2391,6 +2391,12 @@ class _HomePageState extends State<HomePage>
                                                                       ? state
                                                                           .deepDrissyReadingStatus
                                                                       : null,
+                                                              condensingSources:
+                                                                  state.loadingIndex ==
+                                                                          index
+                                                                      ? state
+                                                                          .condensingSources
+                                                                      : const [],
                                                             );
                                                           }),
                                                   if (index <
@@ -2418,7 +2424,7 @@ class _HomePageState extends State<HomePage>
               );
             }),
           ), // Close inner BlocListener for location
-        // ), // Close BlocListener for deepDrissyWebSearchQueries
+        ), // Close BlocListener for deepDrissyWebSearchQueries
         ), // Close BlocListener for webSearchQuery
       ), // Close outer BlocListener for OCR
       ), // Close BlocListener for localAI error
@@ -2468,4 +2474,250 @@ class ChatBubblePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _ToolsMenuButton extends StatefulWidget {
+  final bool isChatActive;
+  final bool isSearchActive;
+  final bool isDeepSearchActive;
+  final VoidCallback onChatSelected;
+  final VoidCallback onSearchToggle;
+  final VoidCallback onDeepSearchToggle;
+
+  const _ToolsMenuButton({
+    required this.isChatActive,
+    required this.isSearchActive,
+    required this.isDeepSearchActive,
+    required this.onChatSelected,
+    required this.onSearchToggle,
+    required this.onDeepSearchToggle,
+  });
+
+  @override
+  State<_ToolsMenuButton> createState() => _ToolsMenuButtonState();
+}
+
+class _ToolsMenuButtonState extends State<_ToolsMenuButton>
+    with SingleTickerProviderStateMixin {
+  bool _isOpen = false;
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _fadeAnimation;
+  final LayerLink _layerLink = LayerLink();
+  OverlayEntry? _overlayEntry;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 200),
+      vsync: this,
+    );
+    _scaleAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOutBack,
+    );
+    _fadeAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOut,
+    );
+  }
+
+  @override
+  void dispose() {
+    _removeOverlay();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _removeOverlay() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+  }
+
+  void _toggle() {
+    if (_isOpen) {
+      _controller.reverse().then((_) {
+        _removeOverlay();
+      });
+    } else {
+      _showOverlay();
+      _controller.forward();
+    }
+    setState(() {
+      _isOpen = !_isOpen;
+    });
+  }
+
+  void _showOverlay() {
+    _overlayEntry = OverlayEntry(
+      builder: (context) => GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: _toggle,
+        child: Stack(
+          children: [
+            CompositedTransformFollower(
+              link: _layerLink,
+              targetAnchor: Alignment.topLeft,
+              followerAnchor: Alignment.bottomLeft,
+              offset: const Offset(0, -8),
+              child: FadeTransition(
+                opacity: _fadeAnimation,
+                child: SizeTransition(
+                  sizeFactor: _scaleAnimation,
+                  axisAlignment: 1.0,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.12),
+                          blurRadius: 12,
+                          offset: const Offset(0, -2),
+                        ),
+                      ],
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildMenuItem(
+                          icon: Icons.chat_bubble_outline,
+                          label: "Chat",
+                          isActive: widget.isChatActive && !widget.isSearchActive && !widget.isDeepSearchActive,
+                          onTap: () {
+                            widget.onChatSelected();
+                            _toggle();
+                          },
+                        ),
+                        _buildMenuItem(
+                          icon: Icons.language,
+                          label: "Browse",
+                          isActive: widget.isSearchActive && !widget.isDeepSearchActive,
+                          onTap: () {
+                            widget.onSearchToggle();
+                            _toggle();
+                          },
+                        ),
+                        _buildMenuItem(
+                          icon: Icons.auto_awesome,
+                          label: "Deep Browse",
+                          isActive: widget.isDeepSearchActive,
+                          onTap: () {
+                            widget.onDeepSearchToggle();
+                            _toggle();
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    Overlay.of(context).insert(_overlayEntry!);
+  }
+
+  String get _activeLabel {
+    if (widget.isDeepSearchActive) return "Deep Browse";
+    if (widget.isChatActive && !widget.isSearchActive) return "Chat";
+    return "Browse";
+  }
+
+  IconData get _activeIcon {
+    if (widget.isDeepSearchActive) return Icons.auto_awesome;
+    if (widget.isChatActive && !widget.isSearchActive) return Icons.chat_bubble_outline;
+    return Icons.language;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return CompositedTransformTarget(
+      link: _layerLink,
+      child: GestureDetector(
+        onTap: _toggle,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFE8D5FF),
+            borderRadius: BorderRadius.circular(26),
+            border: Border.all(
+                color: const Color(0xFF8A2BE2).withOpacity(0.3)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                _activeIcon,
+                size: 16,
+                color: const Color(0xFF8A2BE2),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                _activeLabel,
+                style: const TextStyle(
+                  color: Color(0xFF8A2BE2),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMenuItem({
+    required IconData icon,
+    required String label,
+    required bool isActive,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: isActive
+                  ? const Color(0xFF8A2BE2)
+                  : Colors.black54,
+            ),
+            const SizedBox(width: 10),
+            Text(
+              label,
+              style: TextStyle(
+                color: isActive
+                    ? const Color(0xFF8A2BE2)
+                    : Colors.black87,
+                fontSize: 14,
+                fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+              ),
+            ),
+            if (isActive) ...[
+              const SizedBox(width: 8),
+              Icon(
+                Icons.check_circle,
+                size: 16,
+                color: const Color(0xFF8A2BE2),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }

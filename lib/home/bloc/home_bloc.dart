@@ -2924,7 +2924,7 @@ ${!hasVision && event.imageDescription.isNotEmpty ? "\nImage description: ${even
       //Understand the query
       emit(
         state.copyWith(
-          status: HomePageStatus.getSearchResults,
+          status: HomePageStatus.generateQuery,
           imageStatus: HomeImageStatus.unselected,
           threadData: updThreadData,
           loadingIndex: updThreadData.results.length - 1,
@@ -2941,6 +2941,8 @@ ${!hasVision && event.imageDescription.isNotEmpty ? "\nImage description: ${even
         print("📝 Original query: $query");
         print("📝 Rewritten query: $searchQuery");
       }
+
+      emit(state.copyWith(status: HomePageStatus.getSearchResults));
 
       try {
         // --- Web search via Google WebView ---
@@ -3194,6 +3196,10 @@ ${!hasVision && event.imageDescription.isNotEmpty ? "\nImage description: ${even
 
       // Local AI: use on-device model
       if (_drissyEngine.isLoaded) {
+        // Emit sources being condensed so UI can show reading progress
+        final topSources = formattedResults.take(6).toList();
+        emit(state.copyWith(condensingSources: topSources));
+
         // Use AI Gateway to intelligently condense enriched sources for on-device context
         final trimmedSources = await _truncateSourcesViaGateway(
           query: query,
@@ -3201,6 +3207,9 @@ ${!hasVision && event.imageDescription.isNotEmpty ? "\nImage description: ${even
           maxSources: 6,
           targetCharsPerSource: 400,
         );
+
+        // Clear condensing sources after condensing is done
+        emit(state.copyWith(condensingSources: const []));
 
         try {
           String finalContent = "";
@@ -3323,35 +3332,80 @@ ${!hasVision && event.imageDescription.isNotEmpty ? "\nImage description: ${even
   }
 
   /// Generate multiple search queries from user input for Deep Drissy mode
+  /// Uses AI Gateway and includes last 3 messages for context.
   Future<List<String>> _generateMultipleSearchQueries(String query) async {
     try {
-      if (_drissyEngine.isLoaded) {
-        final content = await _drissyEngine.complete(
-          systemMessage:
-              "You are a search query generator. Given a user question, generate 3-5 diverse Google search queries that together comprehensively address different aspects of the question. Return ONLY a JSON array of strings, nothing else. Example: [\"query 1\", \"query 2\", \"query 3\"]",
-          userMessage: query,
-          maxTokens: 300,
-          temperature: 0.3,
-        );
+      final url =
+          Uri.parse("https://ai-gateway.vercel.sh/v1/chat/completions");
 
-        if (content != null && content.isNotEmpty) {
-          String jsonStr = content;
-          if (jsonStr.contains("```")) {
-            jsonStr = jsonStr
-                .replaceAll(RegExp(r'```json\s*'), '')
-                .replaceAll(RegExp(r'```\s*'), '')
-                .trim();
+      // Build context from last 3 messages
+      final previousResults = state.threadData.results;
+      final recentResults = previousResults.length > 3
+          ? previousResults.sublist(previousResults.length - 3)
+          : previousResults;
+      final contextLines = recentResults
+          .map((r) => r.userQuery)
+          .where((q) => q.isNotEmpty)
+          .toList();
+
+      String contextBlock = "";
+      if (contextLines.isNotEmpty) {
+        contextBlock =
+            "Previous messages for context:\n${contextLines.join('\n')}\n\n";
+      }
+
+      final request = http.Request("POST", url);
+      request.headers.addAll({
+        "Content-Type": "application/json",
+        "Authorization": "Bearer ${dotenv.get("AI_GATEWAY_API_KEY")}",
+      });
+
+      request.body = jsonEncode({
+        "model": "google/gemini-2.5-flash-lite",
+        "stream": false,
+        "messages": [
+          {
+            "role": "system",
+            "content":
+                "You generate Google search queries. Given a user question and optional conversation context, output 3 to 5 comma-separated search queries. Output ONLY the queries separated by commas. No explanations, no URLs, no numbering, no markdown."
+          },
+          {
+            "role": "user",
+            "content": "${contextBlock}Current question: $query"
           }
+        ],
+      });
 
-          final List<dynamic> queries = jsonDecode(jsonStr);
-          final result =
-              queries.map((q) => q.toString().trim()).toList();
-          print(
-              "Deep Drissy: Generated ${result.length} search queries: $result");
-          return result;
+      final response = await httpClient.send(request).timeout(
+            const Duration(seconds: 15),
+          );
+
+      if (response.statusCode == 200) {
+        final body = await response.stream
+            .transform(utf8.decoder)
+            .join()
+            .timeout(const Duration(seconds: 10));
+        final data = jsonDecode(body);
+        final content =
+            data['choices']?[0]?['message']?['content'] as String? ?? "";
+
+        if (content.isNotEmpty) {
+          List<String> result = content
+              .split(',')
+              .map((q) => q.replaceAll(RegExp(r'https?://\S+'), '').trim())
+              .where((q) => q.isNotEmpty && q.length > 3)
+              .take(5)
+              .toList();
+
+          if (result.isNotEmpty) {
+            print(
+                "Deep Drissy: Generated ${result.length} search queries: $result");
+            return result;
+          }
         }
       } else {
-        print("Error generating multiple search queries: local AI not loaded");
+        print(
+            "Error generating search queries: status ${response.statusCode}");
       }
     } catch (e) {
       print("Error generating multiple search queries: $e");
@@ -3570,7 +3624,7 @@ ${!hasVision && event.imageDescription.isNotEmpty ? "\nImage description: ${even
       }
     } else {
       emit(state.copyWith(
-        status: HomePageStatus.getSearchResults,
+        status: HomePageStatus.generateQuery,
         imageStatus: HomeImageStatus.unselected,
         threadData: updThreadData,
         loadingIndex: updThreadData.results.length - 1,
@@ -3586,6 +3640,8 @@ ${!hasVision && event.imageDescription.isNotEmpty ? "\nImage description: ${even
         print("Deep Drissy - Original query: $query");
         print("Deep Drissy - Rewritten query: $searchQuery");
       }
+
+      emit(state.copyWith(status: HomePageStatus.getSearchResults));
 
       try {
         final searchStartTime = DateTime.now();
@@ -3774,52 +3830,21 @@ ${!hasVision && event.imageDescription.isNotEmpty ? "\nImage description: ${even
         formattedResults.insertAll(0, memoryResults);
       }
 
-      print("Deep Drissy: Starting answer generation");
+      print("Deep Drissy: Starting answer generation via AI Gateway");
 
-      // Local AI: use on-device model
-      if (_drissyEngine.isLoaded) {
-        // Trim sources for small on-device model: top 8, max 500 chars each
-        final trimmedSources = <String>[];
-        const maxSources = 8;
-        const maxSnippetChars = 500;
-        for (int i = 0;
-            i < formattedResults.length && i < maxSources;
-            i++) {
-          final s = formattedResults[i];
-          final snippet = (s["snippet"] ?? "").length > maxSnippetChars
-              ? s["snippet"]!.substring(0, maxSnippetChars)
-              : s["snippet"] ?? "";
-          trimmedSources.add('${s["title"]}: $snippet');
-        }
-
-        try {
-          String finalContent = "";
-          await for (final token in _drissyEngine.answer(
-            query: query,
-            sources: trimmedSources,
-          )) {
-            finalContent += token;
-            event.streamedText.value = finalContent;
-            emit(state.copyWith(replyStatus: HomeReplyStatus.success));
-          }
-          if (finalContent.isNotEmpty) {
-            answer = finalContent;
-          } else {
-            answer = 'Something went wrong generating a response. Please try again.';
-            event.streamedText.value = answer!;
-          }
-          emit(state.copyWith(replyStatus: HomeReplyStatus.success));
-        } catch (e) {
-          print('Drissy inference error: $e');
-          answer = 'Something went wrong generating a response. Please try again.';
-          event.streamedText.value = answer!;
-          emit(state.copyWith(replyStatus: HomeReplyStatus.success));
-        }
-      } else {
-        answer = 'Local AI model not loaded. Please enable Local AI in settings.';
-        event.streamedText.value = answer!;
-        emit(state.copyWith(replyStatus: HomeReplyStatus.success));
-      }
+      // Use AI Gateway (vercelNewGenerateReply) for Deep Browse answers
+      answer = await vercelNewGenerateReply(
+        query,
+        formattedResults,
+        event.streamedText,
+        emit,
+        resultData.sourceImageDescription,
+        state.threadData.results,
+        resultData.extractedUrlData,
+        city,
+        region,
+        country,
+      );
     }
 
     // Update ThreadData (Deep Drissy)
@@ -6580,38 +6605,38 @@ $formattedUserContext
           threadHistory: [], historyStatus: HomeHistoryStatus.idle));
     }
 
-    // 2. Then sync from Firestore in background if logged in
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
-      final email = prefs.getString('email') ?? '';
+    // // 2. Then sync from Firestore in background if logged in
+    // try {
+    //   final prefs = await SharedPreferences.getInstance();
+    //   final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+    //   final email = prefs.getString('email') ?? '';
 
-      if (isLoggedIn && email.isNotEmpty) {
-        final db = FirebaseFirestore.instance;
-        final userQuery = await db
-            .collection('users')
-            .where('email', isEqualTo: email)
-            .limit(1)
-            .get();
+    //   if (isLoggedIn && email.isNotEmpty) {
+    //     final db = FirebaseFirestore.instance;
+    //     final userQuery = await db
+    //         .collection('users')
+    //         .where('email', isEqualTo: email)
+    //         .limit(1)
+    //         .get();
 
-        if (userQuery.docs.isNotEmpty) {
-          final userDocId = userQuery.docs.first.id;
-          final threadQuery = await db
-              .collection('threads')
-              .where('userId', isEqualTo: userDocId)
-              .orderBy('updatedAt', descending: true)
-              .get();
+    //     if (userQuery.docs.isNotEmpty) {
+    //       final userDocId = userQuery.docs.first.id;
+    //       final threadQuery = await db
+    //           .collection('threads')
+    //           .where('userId', isEqualTo: userDocId)
+    //           .orderBy('updatedAt', descending: true)
+    //           .get();
 
-          final firestoreSessionData = threadQuery.docs.map((doc) {
-            return ThreadSessionData.fromJson(doc.data());
-          }).toList();
+    //       final firestoreSessionData = threadQuery.docs.map((doc) {
+    //         return ThreadSessionData.fromJson(doc.data());
+    //       }).toList();
 
-          emit(state.copyWith(threadHistory: firestoreSessionData));
-        }
-      }
-    } catch (e) {
-      print("❌ Error fetching Firestore threads: $e");
-    }
+    //       emit(state.copyWith(threadHistory: firestoreSessionData));
+    //     }
+    //   }
+    // } catch (e) {
+    //   print("❌ Error fetching Firestore threads: $e");
+    // }
 
     // // Get user location silently
     // await _getUserLocation().then((userLocation) {

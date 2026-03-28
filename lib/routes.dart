@@ -105,7 +105,11 @@ class AppRouter {
       
       GoRoute(
         path: '/onboarding',
-        builder: (context, state) => const OnboardingPage(),
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          final skipToSetup = extra?['skipToSetup'] as bool? ?? false;
+          return OnboardingPage(skipToSetup: skipToSetup);
+        },
       ),
       GoRoute(
         path: '/loading',

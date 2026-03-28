@@ -72,8 +72,6 @@ class _AiSetupScreenState extends State<AiSetupScreen> {
       builder: (context, homeState) {
         final status = homeState.localAIStatus;
         final progress = homeState.localAIDownloadProgress;
-        final isVisionPhase = homeState.localAIDownloadPhase.contains('vision');
-        final totalBytes = isVisionPhase ? homeState.localAIVisionTotalBytes : homeState.localAITotalBytes;
 
         return Column(
           children: [
@@ -313,7 +311,7 @@ class _AiSetupScreenState extends State<AiSetupScreen> {
             ),
             // Bottom section — download action
             Expanded(
-              flex: 20,
+              flex: 25,
               child: Container(
                 width: double.infinity,
                 decoration: const BoxDecoration(
@@ -344,7 +342,7 @@ class _AiSetupScreenState extends State<AiSetupScreen> {
                       Text(
                         status == LocalAIStatus.noStorage
                             ? 'Not enough storage on your device. Free up at least 2 GB to download the model.'
-                            : 'It takes up a bit of room, but it more than makes \nup for it with speed and privacy',
+                            : 'This requires a ~1.7 GB download.\nWe recommend using Wi-Fi.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontFamily: 'Poppins',
@@ -396,7 +394,7 @@ class _AiSetupScreenState extends State<AiSetupScreen> {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              '${(progress * 100).toInt()}%${totalBytes > 0 ? ' of ${(totalBytes / (1024 * 1024)).round()} MB' : ''}',
+                              '${(progress * 1855).toInt()} MB of 1855 MB',
                               style: TextStyle(
                                 fontFamily: 'Poppins',
                                 fontSize: 14,
@@ -512,31 +510,54 @@ class _AiSetupScreenState extends State<AiSetupScreen> {
   Widget _buildPrimaryButton(BuildContext context, LocalAIStatus status) {
     switch (status) {
       case LocalAIStatus.idle:
-        return SizedBox(
-          width: double.infinity,
-          height: 56,
-          child: ElevatedButton.icon(
-            onPressed: () {
-              context.read<HomeBloc>().add(HomeLocalAIDownloadAndLoad());
-            },
-            icon: const Icon(Iconsax.document_download_outline, size: 20),
-            label: const Text(
-              'Download Model',
-              style: TextStyle(
-                fontSize: 16,
-                fontFamily: 'Poppins',
-                fontWeight: FontWeight.w600,
+        return Column(
+          children: [
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  context.read<HomeBloc>().add(HomeLocalAIDownloadAndLoad());
+                },
+                icon: const Icon(Iconsax.document_download_outline, size: 20),
+                label: const Text(
+                  'Download Model',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontFamily: 'Poppins',
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF8A2BE2),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(28),
+                  ),
+                ),
               ),
             ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF8A2BE2),
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(28),
+            //const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: TextButton(
+                onPressed: () {
+                  widget.onNext();
+                },
+                child: Text(
+                  'Skip for now',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontFamily: 'Poppins',
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
               ),
             ),
-          ),
+          ],
         );
       case LocalAIStatus.downloading:
       case LocalAIStatus.loading:

@@ -810,11 +810,19 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       final dir = await getApplicationDocumentsDirectory();
       final modelFile = File('${dir.path}/$_modelFileName');
 
-      // Step 1: Download if not already on disk
-      if (!await modelFile.exists()) {
+      // Combined download size is ~1855 MB (model + vision projector).
+      // Track total received bytes across both downloads for a single progress bar.
+      const combinedEstimate = 1855 * 1024 * 1024; // fallback estimate
+      int combinedReceivedBytes = 0;
+      int combinedTotalBytes = combinedEstimate;
+
+      final mmProjFile = File('${dir.path}/$_mmProjFileName');
+      final needsModel = !await modelFile.exists();
+      final needsVision = !await mmProjFile.exists();
+
+      if (needsModel || needsVision) {
         // Check available storage before downloading
         final availableBytes = await StorageChecker.getAvailableBytes();
-        // Model is ~1.7GB; require 2GB buffer for safety
         const requiredBytes = 2 * 1024 * 1024 * 1024; // 2 GB
         if (availableBytes != null && availableBytes < requiredBytes) {
           emit(state.copyWith(localAIStatus: LocalAIStatus.noStorage));
@@ -826,7 +834,10 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
           localAIDownloadProgress: 0.0,
           localAIDownloadPhase: 'Downloading model...',
         ));
+      }
 
+      // Step 1: Download main model
+      if (needsModel) {
         final request = http.Request('GET', Uri.parse(_modelDownloadUrl));
         final client = http.Client();
         final response = await client.send(request);
@@ -838,70 +849,64 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
           return;
         }
 
-        final totalBytes = response.contentLength ?? 0;
-        if (totalBytes > 0) {
-          emit(state.copyWith(localAITotalBytes: totalBytes));
+        final modelContentLength = response.contentLength ?? 0;
+        if (modelContentLength > 0) {
+          // Use actual model size + estimate for vision (~155 MB)
+          combinedTotalBytes = modelContentLength + (155 * 1024 * 1024);
         }
-        int receivedBytes = 0;
         final sink = modelFile.openWrite();
 
         await for (final chunk in response.stream) {
           sink.add(chunk);
-          receivedBytes += chunk.length;
-          if (totalBytes > 0) {
-            final progress = receivedBytes / totalBytes;
-            // Emit progress every ~2%
-            if ((progress * 100).floor() >
-                (state.localAIDownloadProgress * 100).floor()) {
-              emit(state.copyWith(localAIDownloadProgress: progress));
-            }
+          combinedReceivedBytes += chunk.length;
+          final progress = combinedReceivedBytes / combinedTotalBytes;
+          if ((progress * 100).floor() >
+              (state.localAIDownloadProgress * 100).floor()) {
+            emit(state.copyWith(localAIDownloadProgress: progress.clamp(0.0, 0.99)));
           }
         }
         await sink.flush();
         await sink.close();
         client.close();
-        emit(state.copyWith(localAIDownloadProgress: 1.0));
       }
 
-      // Step 2: Download mmproj if not already on disk
-      final mmProjFile = File('${dir.path}/$_mmProjFileName');
-      if (!await mmProjFile.exists()) {
+      // Step 2: Download vision projector
+      if (needsVision) {
         emit(state.copyWith(
-          localAIDownloadProgress: 0.0,
           localAIDownloadPhase: 'Downloading vision model...',
         ));
         try {
-          final mmRequest =
-              http.Request('GET', Uri.parse(_mmProjDownloadUrl));
+          final mmRequest = http.Request('GET', Uri.parse(_mmProjDownloadUrl));
           final mmClient = http.Client();
           final mmResponse = await mmClient.send(mmRequest);
           if (mmResponse.statusCode == 200) {
-            final mmTotalBytes = mmResponse.contentLength ?? 0;
-            if (mmTotalBytes > 0) {
-              emit(state.copyWith(localAIVisionTotalBytes: mmTotalBytes));
+            final mmContentLength = mmResponse.contentLength ?? 0;
+            // Refine combined total with actual vision size
+            if (mmContentLength > 0 && combinedReceivedBytes > 0) {
+              combinedTotalBytes = combinedReceivedBytes + mmContentLength;
             }
-            int mmReceivedBytes = 0;
             final mmSink = mmProjFile.openWrite();
             await for (final chunk in mmResponse.stream) {
               mmSink.add(chunk);
-              mmReceivedBytes += chunk.length;
-              if (mmTotalBytes > 0) {
-                final mmProgress = mmReceivedBytes / mmTotalBytes;
-                if ((mmProgress * 100).floor() >
-                    (state.localAIDownloadProgress * 100).floor()) {
-                  emit(state.copyWith(localAIDownloadProgress: mmProgress));
-                }
+              combinedReceivedBytes += chunk.length;
+              final progress = combinedReceivedBytes / combinedTotalBytes;
+              if ((progress * 100).floor() >
+                  (state.localAIDownloadProgress * 100).floor()) {
+                emit(state.copyWith(localAIDownloadProgress: progress.clamp(0.0, 0.99)));
               }
             }
             await mmSink.flush();
             await mmSink.close();
-            emit(state.copyWith(localAIDownloadProgress: 1.0));
             print('Vision projector downloaded');
           }
           mmClient.close();
         } catch (e) {
           print('mmproj download error (non-fatal): $e');
         }
+      }
+
+      if (needsModel || needsVision) {
+        emit(state.copyWith(localAIDownloadProgress: 1.0));
       }
 
       // Step 3: Load model into engine

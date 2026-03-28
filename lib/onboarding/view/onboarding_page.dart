@@ -7,19 +7,21 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class OnboardingPage extends StatelessWidget {
-  const OnboardingPage({super.key});
+  final bool skipToSetup;
+  const OnboardingPage({super.key, this.skipToSetup = false});
 
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
       create: (_) => OnboardingBloc(),
-      child: const _OnboardingView(),
+      child: _OnboardingView(skipToSetup: skipToSetup),
     );
   }
 }
 
 class _OnboardingView extends StatefulWidget {
-  const _OnboardingView();
+  final bool skipToSetup;
+  const _OnboardingView({this.skipToSetup = false});
 
   @override
   State<_OnboardingView> createState() => _OnboardingViewState();
@@ -31,7 +33,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
   @override
   void initState() {
     super.initState();
-    _pageController = PageController();
+    _pageController = PageController(initialPage: widget.skipToSetup ? 1 : 0);
   }
 
   @override

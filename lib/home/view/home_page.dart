@@ -24,6 +24,7 @@ import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:in_app_update/in_app_update.dart';
 import 'package:remixicon/remixicon.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:go_router/go_router.dart';
 
 class HomePage extends StatefulWidget {
   final String? query;
@@ -1947,119 +1948,221 @@ class _HomePageState extends State<HomePage>
                                                       ),
                                                     ],
                                                   )
-                                                : Column(
-                                                    mainAxisSize:
-                                                        MainAxisSize.min,
-                                                    children: [
-                                                      Row(
-                                                        mainAxisSize:
-                                                            MainAxisSize.min,
-                                                        crossAxisAlignment:
-                                                            CrossAxisAlignment
-                                                                .center,
-                                                        children: [
-                                                          // D with chat icon inside
-                                                          Stack(
-                                                            clipBehavior:
-                                                                Clip.none,
-                                                            alignment: Alignment
-                                                                .center,
+                                                : state.localAIStatus ==
+                                                            LocalAIStatus.idle
+                                                        ? Column(
+                                                            mainAxisSize:
+                                                                MainAxisSize
+                                                                    .min,
                                                             children: [
-                                                              Text(
-                                                                'D',
+                                                              Icon(
+                                                                Icons
+                                                                    .warning_amber_rounded,
+                                                                size: 48,
+                                                                color: Colors
+                                                                    .grey
+                                                                    .shade400,
+                                                              ),
+                                                              const SizedBox(
+                                                                  height: 16),
+                                                              const Text(
+                                                                'No Model Downloaded',
                                                                 style:
                                                                     TextStyle(
-                                                                  color: Color(
-                                                                      0xFF8A2BE2),
-                                                                  fontSize: 56,
                                                                   fontFamily:
-                                                                      'BagelFatOne',
-                                                                  // fontWeight:
-                                                                  //     FontWeight
-                                                                  //         .w600,
-                                                                  height: 1,
+                                                                      'Poppins',
+                                                                  fontSize: 20,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w600,
+                                                                  color: Colors
+                                                                      .black87,
                                                                 ),
                                                               ),
-                                                              Container(
-                                                                color: Color(
-                                                                    0xFF8A2BE2),
-                                                                width: 20,
-                                                                height: 30,
-                                                                child: SizedBox
-                                                                    .shrink(),
+                                                              const SizedBox(
+                                                                  height: 8),
+                                                              Text(
+                                                                'Download the AI model to start chatting.',
+                                                                style:
+                                                                    TextStyle(
+                                                                  fontFamily:
+                                                                      'Poppins',
+                                                                  fontSize: 14,
+                                                                  color: Colors
+                                                                      .grey
+                                                                      .shade500,
+                                                                ),
                                                               ),
-                                                              // Yellow chat bubble icon positioned inside D's counter
-                                                              Positioned(
-                                                                top: 24,
-                                                                left: 14,
+                                                              const SizedBox(
+                                                                  height: 20),
+                                                              OutlinedButton(
+                                                                onPressed: () {
+                                                                  GoRouter.of(
+                                                                          context)
+                                                                      .go(
+                                                                          '/onboarding',
+                                                                          extra: {'skipToSetup': true});
+                                                                },
+                                                                style: OutlinedButton
+                                                                    .styleFrom(
+                                                                  side: BorderSide(
+                                                                      color: Colors
+                                                                          .grey
+                                                                          .shade400),
+                                                                  shape:
+                                                                      RoundedRectangleBorder(
+                                                                    borderRadius:
+                                                                        BorderRadius.circular(
+                                                                            20),
+                                                                  ),
+                                                                  padding: const EdgeInsets
+                                                                      .symmetric(
+                                                                      horizontal:
+                                                                          24,
+                                                                      vertical:
+                                                                          12),
+                                                                ),
                                                                 child:
-                                                                    CustomPaint(
-                                                                  size: Size(
-                                                                      10, 18),
-                                                                  painter:
-                                                                      ChatBubblePainter(
-                                                                    color: Color(
-                                                                        0xFFDFFF00),
+                                                                    const Text(
+                                                                  'Download Model',
+                                                                  style:
+                                                                      TextStyle(
+                                                                    fontFamily:
+                                                                        'Poppins',
+                                                                    fontSize:
+                                                                        14,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w500,
+                                                                    color: Colors
+                                                                        .black87,
                                                                   ),
                                                                 ),
                                                               ),
                                                             ],
+                                                          )
+                                                        : Column(
+                                                            mainAxisSize:
+                                                                MainAxisSize
+                                                                    .min,
+                                                            children: [
+                                                              Row(
+                                                                mainAxisSize:
+                                                                    MainAxisSize
+                                                                        .min,
+                                                                crossAxisAlignment:
+                                                                    CrossAxisAlignment
+                                                                        .center,
+                                                                children: [
+                                                                  // D with chat icon inside
+                                                                  Stack(
+                                                                    clipBehavior:
+                                                                        Clip.none,
+                                                                    alignment:
+                                                                        Alignment
+                                                                            .center,
+                                                                    children: [
+                                                                      Text(
+                                                                        'D',
+                                                                        style:
+                                                                            TextStyle(
+                                                                          color:
+                                                                              Color(0xFF8A2BE2),
+                                                                          fontSize:
+                                                                              56,
+                                                                          fontFamily:
+                                                                              'BagelFatOne',
+                                                                          height:
+                                                                              1,
+                                                                        ),
+                                                                      ),
+                                                                      Container(
+                                                                        color: Color(
+                                                                            0xFF8A2BE2),
+                                                                        width:
+                                                                            20,
+                                                                        height:
+                                                                            30,
+                                                                        child: SizedBox
+                                                                            .shrink(),
+                                                                      ),
+                                                                      // Yellow chat bubble icon positioned inside D's counter
+                                                                      Positioned(
+                                                                        top: 24,
+                                                                        left:
+                                                                            14,
+                                                                        child:
+                                                                            CustomPaint(
+                                                                          size: Size(
+                                                                              10,
+                                                                              18),
+                                                                          painter:
+                                                                              ChatBubblePainter(
+                                                                            color:
+                                                                                Color(0xFFDFFF00),
+                                                                          ),
+                                                                        ),
+                                                                      ),
+                                                                    ],
+                                                                  ),
+                                                                  // rissy text
+                                                                  Text(
+                                                                    'rissy',
+                                                                    style:
+                                                                        TextStyle(
+                                                                      color: Color(
+                                                                          0xFF8A2BE2),
+                                                                      fontSize:
+                                                                          56,
+                                                                      fontFamily:
+                                                                          'BagelFatOne',
+                                                                      height: 1,
+                                                                    ),
+                                                                  ),
+                                                                ],
+                                                              ),
+                                                              // Loading indicator when local model is loading/downloading
+                                                              if (state.localAIStatus ==
+                                                                      LocalAIStatus
+                                                                          .loading ||
+                                                                  state.localAIStatus ==
+                                                                      LocalAIStatus
+                                                                          .downloading) ...[
+                                                                const SizedBox(
+                                                                    height: 16),
+                                                                SizedBox(
+                                                                  width: 24,
+                                                                  height: 24,
+                                                                  child:
+                                                                      CircularProgressIndicator(
+                                                                    strokeWidth:
+                                                                        3,
+                                                                    color: Color(
+                                                                        0xFF8A2BE2),
+                                                                  ),
+                                                                ),
+                                                                const SizedBox(
+                                                                    height: 8),
+                                                                Text(
+                                                                  state.localAIStatus ==
+                                                                          LocalAIStatus
+                                                                              .downloading
+                                                                      ? 'Downloading model... ${(state.localAIDownloadProgress * 100).toInt()}%'
+                                                                      : 'Loading model...',
+                                                                  style:
+                                                                      TextStyle(
+                                                                    color: Color(
+                                                                        0xFF8A2BE2),
+                                                                    fontSize:
+                                                                        14,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w500,
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ],
                                                           ),
-                                                          // rissy text
-                                                          Text(
-                                                            'rissy',
-                                                            style: TextStyle(
-                                                              color: Color(
-                                                                  0xFF8A2BE2),
-                                                              fontSize: 56,
-                                                              fontFamily:
-                                                                  'BagelFatOne',
-                                                              // fontWeight:
-                                                              //     FontWeight
-                                                              //         .w600,
-                                                              height: 1,
-                                                            ),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                      // Loading indicator when local model is loading/downloading
-                                                      if (state.localAIStatus ==
-                                                              LocalAIStatus
-                                                                  .loading ||
-                                                          state.localAIStatus ==
-                                                              LocalAIStatus
-                                                                  .downloading) ...[
-                                                        const SizedBox(
-                                                            height: 16),
-                                                        SizedBox(
-                                                          width: 24,
-                                                          height: 24,
-                                                          child:
-                                                              CircularProgressIndicator(
-                                                            strokeWidth: 3,
-                                                            color: Color(
-                                                                0xFF8A2BE2),
-                                                          ),
-                                                        ),
-                                                        const SizedBox(
-                                                            height: 8),
-                                                        Text(
-                                                          state.localAIStatus ==
-                                                                  LocalAIStatus
-                                                                      .downloading
-                                                              ? 'Downloading model... ${(state.localAIDownloadProgress * 100).toInt()}%'
-                                                              : 'Loading model...',
-                                                          style: TextStyle(
-                                                            color: Color(
-                                                                0xFF8A2BE2),
-                                                            fontSize: 14,
-                                                            fontWeight:
-                                                                FontWeight.w500,
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ],
-                                                  ),
                                           ),
                                         ),
                                       ],

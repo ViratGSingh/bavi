@@ -1,4 +1,5 @@
 import 'dart:io' show Platform;
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/services.dart';
 import 'package:llamadart/llamadart.dart';
 
@@ -56,6 +57,20 @@ Rules:
 
   static const _storageChannel = MethodChannel('com.example.bavi/storage');
 
+  Future<GpuBackend> _resolveAndroidGpuBackend() async {
+    final androidInfo = await DeviceInfoPlugin().androidInfo;
+    final manufacturer = androidInfo.manufacturer.toLowerCase();
+    const chineseOems = {
+      'xiaomi', 'redmi', 'poco',
+      'oppo', 'realme', 'oneplus',
+      'vivo', 'iqoo',
+      'huawei', 'honor',
+      'meizu', 'zte', 'nubia', 'tcl', 'lenovo',
+    };
+    final isChinese = chineseOems.any((brand) => manufacturer.contains(brand));
+    return isChinese ? GpuBackend.opencl : GpuBackend.vulkan;
+  }
+
   /// Load the GGUF model
   Future<bool> loadModel(String modelPath) async {
     try {
@@ -74,7 +89,9 @@ Rules:
           numberOfThreadsBatch: isLowRam ? 2 : 4,
           batchSize: isLowRam ? 512 : 2048,
           microBatchSize: isLowRam ? 128 : 512,
-          preferredBackend: Platform.isIOS ? GpuBackend.metal : GpuBackend.vulkan,
+          preferredBackend: Platform.isIOS
+              ? GpuBackend.metal
+              : await _resolveAndroidGpuBackend(),
         ),
       );
       _isLoaded = true;

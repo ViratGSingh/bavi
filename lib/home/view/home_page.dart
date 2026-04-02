@@ -4,10 +4,10 @@ import 'package:app_links/app_links.dart';
 import 'package:bavi/home/widgets/answers_view.dart';
 import 'package:bavi/home/widgets/search_view.dart';
 import 'package:bavi/home/widgets/sources_bottom_sheet.dart';
-import 'package:bavi/home/widgets/location_permission_sheet.dart';
 import 'package:bavi/home/widgets/web_view.dart';
 import 'package:bavi/home/widgets/google_search_webview.dart';
 import 'package:bavi/home/widgets/deep_drissy_search_webview.dart';
+import 'package:bavi/home/widgets/browse_consent_sheet.dart';
 import 'package:bavi/home/widgets/settings_bottom_sheet.dart';
 import 'package:bavi/models/short_video.dart';
 import 'package:bavi/models/thread.dart';
@@ -442,22 +442,6 @@ class _HomePageState extends State<HomePage>
                     );
               }
             },
-            child: BlocListener<HomeBloc, HomeState>(
-            listenWhen: (previous, current) =>
-                previous.showLocationRationale !=
-                    current.showLocationRationale &&
-                current.showLocationRationale == true,
-            listener: (context, state) {
-              showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                backgroundColor: Colors.transparent,
-                builder: (bottomSheetContext) => BlocProvider.value(
-                  value: context.read<HomeBloc>(),
-                  child: const LocationPermissionSheet(),
-                ),
-              );
-            },
             child: BlocBuilder<HomeBloc, HomeState>(builder: (context, state) {
               return PopScope(
                 canPop: true,
@@ -808,7 +792,7 @@ class _HomePageState extends State<HomePage>
                                       child: Icon(
                                         Iconsax.edit_outline,
                                         color: 
-                                        state.status==HomePageStatus.idle? Colors.grey.shade600: Colors.black,
+                                        state.status==HomePageStatus.idle? Colors.grey.shade400: Colors.black,
                                         size: 18,
                                       ),
                                     ),
@@ -1274,7 +1258,10 @@ class _HomePageState extends State<HomePage>
                           bottomSheet: Container(
                             color: Colors.white,
                             padding: EdgeInsets.fromLTRB(12, 0, 12, 12),
-                            child: Container(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                            Container(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 10, vertical: 10),
                               decoration: BoxDecoration(
@@ -1682,7 +1669,7 @@ class _HomePageState extends State<HomePage>
                                                   // padding: EdgeInsets.zero,
                                                   // visualDensity: VisualDensity(
                                                   //     horizontal: -4),
-                                                  onTap: () {
+                                                  onTap: () async {
                                                     FocusScope.of(context)
                                                         .unfocus();
 
@@ -1764,6 +1751,8 @@ class _HomePageState extends State<HomePage>
                                                                 ),
                                                               );
                                                         } else {
+                                                          final consented = await ensureBrowseConsent(context);
+                                                          if (!consented || !context.mounted) return;
                                                           taskTextController
                                                               .text = "";
                                                           if (state.deepDrissyStatus ==
@@ -1878,6 +1867,19 @@ class _HomePageState extends State<HomePage>
                                   ),
                                 ],
                               ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Text(
+                                'Drissy is AI and can make mistakes.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ),
+                              ],
                             ),
                           ),
                           extendBodyBehindAppBar:
@@ -2423,7 +2425,6 @@ class _HomePageState extends State<HomePage>
                 ),
               );
             }),
-          ), // Close inner BlocListener for location
         ), // Close BlocListener for deepDrissyWebSearchQueries
         ), // Close BlocListener for webSearchQuery
       ), // Close outer BlocListener for OCR

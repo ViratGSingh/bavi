@@ -324,10 +324,6 @@ final class HomeCancelOCRExtraction extends HomeEvent {
   HomeCancelOCRExtraction(this.imageDescription);
 }
 
-final class HomeCheckLocationPermission extends HomeEvent {}
-
-final class HomeRequestLocationPermission extends HomeEvent {}
-
 final class HomeToggleMapStatus extends HomeEvent {}
 
 final class HomeToggleYoutubeStatus extends HomeEvent {}

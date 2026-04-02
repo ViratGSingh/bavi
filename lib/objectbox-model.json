@@ -20,13 +20,6 @@
           "type": 9
         },
         {
-          "id": "3:2701887692716083341",
-          "name": "embedding",
-          "indexId": "1:4023350571186130358",
-          "type": 28,
-          "flags": 8
-        },
-        {
           "id": "4:1408057845629815315",
           "name": "createdAt",
           "type": 10
@@ -57,8 +50,12 @@
   "modelVersion": 5,
   "modelVersionParserMinimum": 5,
   "retiredEntityUids": [],
-  "retiredIndexUids": [],
-  "retiredPropertyUids": [],
+  "retiredIndexUids": [
+    4023350571186130358
+  ],
+  "retiredPropertyUids": [
+    2701887692716083341
+  ],
   "retiredRelationUids": [],
   "version": 1
 }

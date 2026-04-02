@@ -50,11 +50,11 @@ class PrivacyScreen extends StatelessWidget {
           ),
           const SizedBox(height: 28),
           // Privacy points
-          _PrivacyPoint(text: 'Runs completely on your phone'),
+          _PrivacyPoint(text: 'Chat & images processed fully on-device'),
           const SizedBox(height: 14),
-          _PrivacyPoint(text: 'No data sent to the cloud'),
+          _PrivacyPoint(text: 'Browse mode sends your query to our server for web results — nothing is stored'),
           const SizedBox(height: 14),
-          _PrivacyPoint(text: 'Creative, accurate answers with less hallucination'),
+          _PrivacyPoint(text: 'Your conversation history never leaves your phone'),
           const SizedBox(height: 28),
           // Subtext
           Padding(

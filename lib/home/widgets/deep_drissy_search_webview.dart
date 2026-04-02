@@ -78,12 +78,15 @@ class _DeepDrissySearchWebViewState extends State<DeepDrissySearchWebView>
     if (_controller == null) return false;
     final check = await _controller!.evaluateJavascript(source: '''
 (function() {
+  var hostname = window.location.hostname;
+  if (hostname === 'consent.google.com' || hostname.indexOf('consent.google') !== -1) return 'consent';
   var body = document.body ? document.body.innerText : '';
   if (document.querySelector('#captcha-form') !== null) return 'captcha';
   if (document.querySelector('form[action*="sorry"]') !== null) return 'captcha';
   if (body.indexOf('unusual traffic') !== -1) return 'captcha';
   if (body.indexOf('not a robot') !== -1) return 'captcha';
   if (document.querySelector('form[action*="consent"]') !== null) return 'consent';
+  if (document.title.indexOf('Before you continue') !== -1) return 'consent';
   return 'ok';
 })();
 ''');
@@ -103,7 +106,7 @@ class _DeepDrissySearchWebViewState extends State<DeepDrissySearchWebView>
     for (int step = 0; step < 12; step++) {
       final countResult = await _controller!.evaluateJavascript(source: '''
 (function() {
-  var items = document.querySelectorAll('#rso .g h3, #search .g h3');
+  var items = document.querySelectorAll('#rso .g h3, #search .g h3, .F0FGWb[role="heading"], [data-snf="GuLy6c"]');
   return items.length;
 })();
 ''');
@@ -128,7 +131,7 @@ class _DeepDrissySearchWebViewState extends State<DeepDrissySearchWebView>
 
       await _controller!.evaluateJavascript(source: '''
 (function() {
-  var items = document.querySelectorAll('#rso .g h3, #search .g h3');
+  var items = document.querySelectorAll('#rso .g h3, .F0FGWb[role="heading"], [data-snf="GuLy6c"]');
   if (items.length > 0) {
     items[items.length - 1].scrollIntoView({ behavior: 'smooth', block: 'center' });
   } else {
@@ -156,10 +159,8 @@ class _DeepDrissySearchWebViewState extends State<DeepDrissySearchWebView>
       if (host.indexOf('gstatic') !== -1) return true;
       if (host.indexOf('googleapis') !== -1) return true;
       if (host.indexOf('schema.org') !== -1) return true;
-    } catch(e) {
-      return true;
-    }
-    if (url.startsWith('javascript:')) return true;
+    } catch(e) { return true; }
+    if (url.indexOf('javascript:') === 0) return true;
     if (url === '#' || url.charAt(0) === '#') return true;
     return false;
   }
@@ -168,18 +169,18 @@ class _DeepDrissySearchWebViewState extends State<DeepDrissySearchWebView>
     if (!url) return false;
     try {
       var u = new URL(url);
-      var host = u.hostname;
-      if (host === 'youtu.be') return true;
-      if (host.indexOf('youtube.com') !== -1 || host.indexOf('youtube.') !== -1) {
-        if (u.pathname.indexOf('/watch') === 0) return true;
-        if (u.pathname.indexOf('/shorts') === 0) return true;
-        if (u.pathname.indexOf('/video') === 0) return true;
+      var h = u.hostname;
+      if (h === 'youtu.be') return true;
+      if (h.indexOf('youtube.') !== -1) {
+        var p = u.pathname;
+        if (p.indexOf('/watch') === 0 || p.indexOf('/shorts') === 0 || p.indexOf('/video') === 0) return true;
       }
     } catch(e) {}
     return false;
   }
 
   function cleanUrl(url) {
+    if (!url) return '';
     if (url.indexOf('/url?') !== -1 || url.indexOf('google.com/url') !== -1) {
       try {
         var u = new URL(url);
@@ -190,140 +191,126 @@ class _DeepDrissySearchWebViewState extends State<DeepDrissySearchWebView>
     return url;
   }
 
-  function getSnippet(startEl) {
-    var block = startEl;
-    for (var i = 0; i < 10; i++) {
-      if (!block.parentElement) break;
-      block = block.parentElement;
-      var cl = block.classList;
-      if (cl && (cl.contains('g') || cl.contains('hlcw0c') || cl.contains('MjjYud'))) break;
-      if (block.getAttribute('data-sokoban-container') !== null) break;
-      if (block.getAttribute('data-hveid') !== null) break;
-    }
-
-    var selectors = [
-      '.VwiC3b', '[data-sncf]', '.IsZvec', '.lEBKkf', '.ITZIwc',
-      '.GI74Re', '.yDYNvb', '.LEwnzc', '.lyLwlc',
-      '[style*="-webkit-line-clamp"]',
-      'div[data-content-feature]',
-      '.st', '.s'
-    ];
-    for (var s = 0; s < selectors.length; s++) {
-      try {
-        var el = block.querySelector(selectors[s]);
-        if (el && el.innerText && el.innerText.trim().length > 15) {
-          return el.innerText.trim();
-        }
-      } catch(e) {}
-    }
-
-    var titleText = (startEl.innerText || '').trim();
-    var allEls = block.querySelectorAll('div, span, p');
-    for (var j = 0; j < allEls.length; j++) {
-      var t = (allEls[j].innerText || '').trim();
-      if (t.length > 30 && t !== titleText && t.indexOf('http') !== 0) {
-        if (t.length > 500) t = t.substring(0, 500);
-        return t;
-      }
+  function breadcrumbToUrl(text) {
+    if (!text) return '';
+    text = text.trim();
+    if (text.indexOf('http') === 0) return text;
+    if (text.indexOf('//') === 0) return 'https:' + text;
+    text = text.replace(/\\s*[\\u203a>»·|]\\s*/g, '/').replace(/\\/\\//g, '/');
+    if (text.length > 4 && text.indexOf('.') !== -1 && text.indexOf(' ') === -1) {
+      return 'https://' + text;
     }
     return '';
   }
 
-  // Strategy 1: h3-based (standard organic results)
-  var allH3 = document.querySelectorAll('h3');
-  for (var i = 0; i < allH3.length; i++) {
-    var h3 = allH3[i];
-    var title = (h3.innerText || '').trim();
-    if (!title || title.length < 2) continue;
-
-    var a = h3.closest('a');
-    if (!a) {
-      var p = h3.parentElement;
-      for (var depth = 0; depth < 4 && p && !a; depth++) {
-        a = p.querySelector('a[href]');
-        if (!a) a = p.closest('a');
-        p = p.parentElement;
-      }
-    }
-
-    var url = a ? (a.href || '') : '';
-    url = cleanUrl(url);
-
-    if (!url || isGoogleInternal(url)) {
-      var dataEl = h3.closest('[data-url]');
-      if (dataEl) url = dataEl.getAttribute('data-url') || '';
-    }
-
-    if (!url || isGoogleInternal(url)) {
-      var container = h3.parentElement;
-      for (var d = 0; d < 5 && container; d++) {
-        var links = container.querySelectorAll('a[href]');
-        for (var li = 0; li < links.length; li++) {
-          var candidate = cleanUrl(links[li].href || '');
-          if (candidate && !isGoogleInternal(candidate)) {
-            url = candidate;
-            break;
-          }
+  function getBreadcrumbUrl(startEl) {
+    var node = startEl;
+    for (var i = 0; i < 10 && node; i++) {
+      var candidates = ['cite.tLk3Jb', 'span.nC62wb', '[data-snf="X87mVe"] span', '.ob9lvb', '.VndCse'];
+      for (var s = 0; s < candidates.length; s++) {
+        var el = node.querySelector ? node.querySelector(candidates[s]) : null;
+        if (el) {
+          var u = breadcrumbToUrl((el.innerText || el.textContent || '').trim());
+          if (u && !isGoogleInternal(u)) return u;
         }
-        if (url && !isGoogleInternal(url)) break;
-        container = container.parentElement;
       }
+      node = node.parentElement;
+    }
+    return '';
+  }
+
+  function getSnippet(startEl) {
+    var block = startEl;
+    for (var i = 0; i < 10 && block; i++) {
+      if (!block.parentElement) break;
+      block = block.parentElement;
+      var cl = block.classList;
+      if (cl && (cl.contains('g') || cl.contains('MjjYud') || cl.contains('hlcw0c'))) break;
+      if (block.getAttribute('data-hveid') !== null) break;
+    }
+    if (!block) return '';
+    var selectors = ['.VwiC3b', '[data-snf="nke7rc"]', '[data-sncf]', '.IsZvec',
+                     '.lEBKkf', '.ITZIwc', '.GI74Re', '.yDYNvb', '.st', '.s'];
+    for (var s = 0; s < selectors.length; s++) {
+      try {
+        var el = block.querySelector(selectors[s]);
+        if (el && el.innerText && el.innerText.trim().length > 15)
+          return el.innerText.trim().substring(0, 400);
+      } catch(e) {}
+    }
+    return '';
+  }
+
+  // Strategy 1: New Google layout (2025+) — titles in div.F0FGWb[role="heading"],
+  // URLs only available as breadcrumb text in span.nC62wb or cite.tLk3Jb
+  var cardHeadings = document.querySelectorAll('.F0FGWb[role="heading"], [data-snf="GuLy6c"] [role="heading"]');
+  for (var i = 0; i < cardHeadings.length && results.length < 15; i++) {
+    var heading = cardHeadings[i];
+    var title = (heading.innerText || '').trim();
+    if (!title || title.length < 3 || title.length > 250) continue;
+
+    var url = getBreadcrumbUrl(heading);
+    if (!url) {
+      var anc = heading.closest('a');
+      if (!anc) { var pp = heading.parentElement; for (var dd = 0; dd < 5 && pp; dd++) { anc = pp.querySelector('a[href]'); if (anc) break; pp = pp.parentElement; } }
+      if (anc) { var hf = cleanUrl(anc.href || ''); if (hf && !isGoogleInternal(hf)) url = hf; }
     }
 
-    if (!url || isGoogleInternal(url)) continue;
-    if (isYouTubeVideo(url)) continue;
-    if (seen[url]) continue;
+    if (!url || isGoogleInternal(url) || isYouTubeVideo(url) || seen[url]) continue;
     seen[url] = true;
-
-    results.push({
-      url: url,
-      title: title,
-      excerpts: getSnippet(h3)
-    });
+    results.push({ url: url, title: title, excerpts: getSnippet(heading) });
   }
 
-  // Strategy 2: data-hveid blocks
+  // Strategy 2: h3-based (old layout + PAA expanded answers)
   if (results.length < 8) {
-    var blocks = document.querySelectorAll('[data-hveid]');
-    for (var b = 0; b < blocks.length; b++) {
-      var block = blocks[b];
-      var link = block.querySelector('a[href]');
-      if (!link) continue;
-      var href = cleanUrl(link.href || '');
-      if (!href || isGoogleInternal(href) || isYouTubeVideo(href) || seen[href]) continue;
+    var allH3 = document.querySelectorAll('h3');
+    for (var j = 0; j < allH3.length && results.length < 15; j++) {
+      var h3 = allH3[j];
+      var titleH3 = (h3.innerText || '').trim();
+      if (!titleH3 || titleH3.length < 2 || titleH3.length > 250) continue;
 
-      var textEl = block.querySelector('h3') || block.querySelector('[role="heading"]');
-      var title2 = textEl ? (textEl.innerText || '').trim() : (link.innerText || '').trim();
-      if (!title2 || title2.length < 3 || title2.length > 200) continue;
+      var a = h3.closest('a');
+      if (!a) { var ph = h3.parentElement; for (var dh = 0; dh < 4 && ph; dh++) { a = ph.querySelector('a[href]'); if (!a) a = ph.closest('a'); ph = ph && ph.parentElement; } }
 
-      seen[href] = true;
-      results.push({
-        url: href,
-        title: title2,
-        excerpts: getSnippet(textEl || link)
-      });
+      var urlH3 = a ? cleanUrl(a.href || '') : '';
+      if (!urlH3 || isGoogleInternal(urlH3)) urlH3 = getBreadcrumbUrl(h3);
+      if (!urlH3 || isGoogleInternal(urlH3)) { var dc = h3.closest('[data-url]'); if (dc) urlH3 = dc.getAttribute('data-url') || ''; }
+
+      if (!urlH3 || isGoogleInternal(urlH3) || isYouTubeVideo(urlH3) || seen[urlH3]) continue;
+      seen[urlH3] = true;
+      results.push({ url: urlH3, title: titleH3, excerpts: getSnippet(h3) });
     }
   }
 
-  // Strategy 3: all external links fallback
+  // Strategy 3: data-hveid blocks
+  if (results.length < 8) {
+    var hvBlocks = document.querySelectorAll('[data-hveid]');
+    for (var b = 0; b < hvBlocks.length && results.length < 15; b++) {
+      var blk = hvBlocks[b];
+      var lnk = blk.querySelector('a[href]');
+      if (!lnk) continue;
+      var hrefB = cleanUrl(lnk.href || '');
+      if (!hrefB || isGoogleInternal(hrefB)) hrefB = getBreadcrumbUrl(blk);
+      if (!hrefB || isGoogleInternal(hrefB) || isYouTubeVideo(hrefB) || seen[hrefB]) continue;
+      var hEl = blk.querySelector('.F0FGWb[role="heading"]') || blk.querySelector('h3') || blk.querySelector('[role="heading"]');
+      var titleB = hEl ? (hEl.innerText || '').trim() : (lnk.innerText || '').trim();
+      if (!titleB || titleB.length < 3 || titleB.length > 200) continue;
+      seen[hrefB] = true;
+      results.push({ url: hrefB, title: titleB, excerpts: getSnippet(hEl || lnk) });
+    }
+  }
+
+  // Strategy 4: all external links fallback
   if (results.length < 5) {
     var allLinks = document.querySelectorAll('a[href]');
-    for (var k = 0; k < allLinks.length; k++) {
-      var lnk = allLinks[k];
-      var lHref = cleanUrl(lnk.href || '');
+    for (var k = 0; k < allLinks.length && results.length < 15; k++) {
+      var lk = allLinks[k];
+      var lHref = cleanUrl(lk.href || '');
       if (!lHref || isGoogleInternal(lHref) || isYouTubeVideo(lHref) || seen[lHref]) continue;
-
-      var lText = (lnk.innerText || '').trim();
+      var lText = (lk.innerText || '').trim();
       if (lText.length < 8 || lText.length > 200) continue;
-
       seen[lHref] = true;
-      results.push({
-        url: lHref,
-        title: lText,
-        excerpts: getSnippet(lnk)
-      });
-
-      if (results.length >= 15) break;
+      results.push({ url: lHref, title: lText, excerpts: getSnippet(lk) });
     }
   }
 

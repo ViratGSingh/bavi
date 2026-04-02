@@ -59,7 +59,7 @@ class LocationPermissionSheet extends StatelessWidget {
             width: double.infinity,
             child: ElevatedButton(
               onPressed: () {
-                context.read<HomeBloc>().add(HomeRequestLocationPermission());
+                //context.read<HomeBloc>().add(HomeRequestLocationPermission());
                 Navigator.of(context).pop();
               },
               style: ElevatedButton.styleFrom(

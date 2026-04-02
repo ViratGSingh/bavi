@@ -14,7 +14,9 @@ class MainActivity: FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler { call, result ->
                 if (call.method == "getAvailableBytes") {
-                    val stat = StatFs(Environment.getDataDirectory().path)
+                    val path = context.getExternalFilesDir(null)?.path
+                        ?: Environment.getExternalStorageDirectory().path
+                    val stat = StatFs(path)
                     val availableBytes = stat.availableBlocksLong * stat.blockSizeLong
                     result.success(availableBytes)
                 } else {

@@ -1,6 +1,6 @@
 import 'package:objectbox/objectbox.dart';
 
-/// Represents an atomic cached answer chunk with semantic embedding.
+/// Represents an atomic cached answer chunk with on-device text similarity.
 /// Used for local offline answer-memory with recency-aware retrieval.
 @Entity()
 class AnswerChunk {
@@ -9,11 +9,6 @@ class AnswerChunk {
 
   /// The atomic text chunk (1-2 sentences of factual/info content)
   String text;
-
-  /// 1536-dimensional OpenAI text-embedding-3-small for semantic similarity search
-  @HnswIndex(dimensions: 1536)
-  @Property(type: PropertyType.floatVector)
-  List<double>? embedding;
 
   /// When this chunk was first created
   @Property(type: PropertyType.date)
@@ -31,7 +26,6 @@ class AnswerChunk {
 
   AnswerChunk({
     required this.text,
-    this.embedding,
     required this.createdAt,
     required this.lastUsedAt,
     this.confidence = 1.0,

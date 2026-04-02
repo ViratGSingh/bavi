@@ -38,14 +38,6 @@ final _entities = <obx_int.ModelEntity>[
         flags: 0,
       ),
       obx_int.ModelProperty(
-        id: const obx_int.IdUid(3, 2701887692716083341),
-        name: 'embedding',
-        type: 28,
-        flags: 8,
-        indexId: const obx_int.IdUid(1, 4023350571186130358),
-        hnswParams: obx_int.ModelHnswParams(dimensions: 1536),
-      ),
-      obx_int.ModelProperty(
         id: const obx_int.IdUid(4, 1408057845629815315),
         name: 'createdAt',
         type: 10,
@@ -123,8 +115,8 @@ obx_int.ModelDefinition getObjectBoxModel() {
     lastRelationId: const obx_int.IdUid(0, 0),
     lastSequenceId: const obx_int.IdUid(0, 0),
     retiredEntityUids: const [],
-    retiredIndexUids: const [],
-    retiredPropertyUids: const [],
+    retiredIndexUids: const [4023350571186130358],
+    retiredPropertyUids: const [2701887692716083341],
     retiredRelationUids: const [],
     modelVersion: 5,
     modelVersionParserMinimum: 5,
@@ -142,14 +134,10 @@ obx_int.ModelDefinition getObjectBoxModel() {
       },
       objectToFB: (AnswerChunk object, fb.Builder fbb) {
         final textOffset = fbb.writeString(object.text);
-        final embeddingOffset = object.embedding == null
-            ? null
-            : fbb.writeListFloat32(object.embedding!);
         final sourceQueryOffset = fbb.writeString(object.sourceQuery);
         fbb.startTable(8);
         fbb.addInt64(0, object.id);
         fbb.addOffset(1, textOffset);
-        fbb.addOffset(2, embeddingOffset);
         fbb.addInt64(3, object.createdAt.millisecondsSinceEpoch);
         fbb.addInt64(4, object.lastUsedAt.millisecondsSinceEpoch);
         fbb.addFloat64(5, object.confidence);
@@ -163,10 +151,6 @@ obx_int.ModelDefinition getObjectBoxModel() {
         final textParam = const fb.StringReader(
           asciiOptimization: true,
         ).vTableGet(buffer, rootOffset, 6, '');
-        final embeddingParam = const fb.ListReader<double>(
-          fb.Float32Reader(),
-          lazy: false,
-        ).vTableGetNullable(buffer, rootOffset, 8);
         final createdAtParam = DateTime.fromMillisecondsSinceEpoch(
           const fb.Int64Reader().vTableGet(buffer, rootOffset, 10, 0),
         );
@@ -184,7 +168,6 @@ obx_int.ModelDefinition getObjectBoxModel() {
         ).vTableGet(buffer, rootOffset, 16, '');
         final object = AnswerChunk(
           text: textParam,
-          embedding: embeddingParam,
           createdAt: createdAtParam,
           lastUsedAt: lastUsedAtParam,
           confidence: confidenceParam,
@@ -211,28 +194,23 @@ class AnswerChunk_ {
     _entities[0].properties[1],
   );
 
-  /// See [AnswerChunk.embedding].
-  static final embedding = obx.QueryHnswProperty<AnswerChunk>(
-    _entities[0].properties[2],
-  );
-
   /// See [AnswerChunk.createdAt].
   static final createdAt = obx.QueryDateProperty<AnswerChunk>(
-    _entities[0].properties[3],
+    _entities[0].properties[2],
   );
 
   /// See [AnswerChunk.lastUsedAt].
   static final lastUsedAt = obx.QueryDateProperty<AnswerChunk>(
-    _entities[0].properties[4],
+    _entities[0].properties[3],
   );
 
   /// See [AnswerChunk.confidence].
   static final confidence = obx.QueryDoubleProperty<AnswerChunk>(
-    _entities[0].properties[5],
+    _entities[0].properties[4],
   );
 
   /// See [AnswerChunk.sourceQuery].
   static final sourceQuery = obx.QueryStringProperty<AnswerChunk>(
-    _entities[0].properties[6],
+    _entities[0].properties[5],
   );
 }

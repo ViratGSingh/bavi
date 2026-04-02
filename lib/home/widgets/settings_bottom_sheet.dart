@@ -1,5 +1,6 @@
 import 'package:bavi/home/bloc/home_bloc.dart';
 import 'package:bavi/home/widgets/mode_bottom_sheet.dart';
+import 'package:bavi/home/widgets/personalization_bottom_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -168,6 +169,20 @@ class _SettingsBottomSheetState extends State<SettingsBottomSheet> {
                   },
                 ),
                 _divider(),
+
+                _settingsTile(
+                  icon: Iconsax.designtools_outline,
+                  label: 'Personalization',
+                  onTap: () {
+                    showModalBottomSheet<void>(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => const PersonalizationBottomSheet(),
+                    );
+                  },
+                ),
+                _divider(),
                 _settingsTile(
                   icon: Iconsax.trash_outline,
                   label: 'Delete conversation history',
@@ -274,6 +289,19 @@ Check out Drissy! It's a local assistant for your phone that chats, sees images 
                   },
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Center(
+            child: Text(
+              'Thank you for using Drissy! \nMade with ❤️ from 🇮🇳',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                fontFamily: 'Poppins',
+                fontWeight: FontWeight.w400,
+                color: Colors.grey.shade600,
+              ),
             ),
           ),
           const SizedBox(height: 16),

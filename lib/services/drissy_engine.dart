@@ -1,4 +1,5 @@
 import 'dart:io' show Platform;
+import 'package:flutter/services.dart';
 import 'package:llamadart/llamadart.dart';
 
 class DrissyEngine {
@@ -12,6 +13,19 @@ class DrissyEngine {
 
   bool get isLoaded => _isLoaded;
   bool get isVisionLoaded => _isVisionLoaded;
+
+  String? _personalizationContext;
+
+  void setPersonalization(String? context) {
+    final trimmed = context?.trim();
+    _personalizationContext =
+        (trimmed != null && trimmed.isNotEmpty) ? trimmed : null;
+  }
+
+  String _buildSystemPrompt() {
+    if (_personalizationContext == null) return systemPrompt;
+    return '$systemPrompt\n\nAbout the user: $_personalizationContext';
+  }
 
   static const String systemPrompt =
       '''You are Drissy, a private, conversational, and insightful answer engine. You do not save user data and keep as much processing as possible strictly on-device.
@@ -40,19 +54,26 @@ Rules:
     streamBatchByteThreshold: 64,
   );
 
+  static const _storageChannel = MethodChannel('com.example.bavi/storage');
+
   /// Load the GGUF model
   Future<bool> loadModel(String modelPath) async {
     try {
+      final physicalBytes =
+          await _storageChannel.invokeMethod<int>('getPhysicalMemoryBytes') ?? 0;
+      final isLowRam =
+          physicalBytes > 0 && physicalBytes < 6 * 1024 * 1024 * 1024;
+
       _engine = LlamaEngine(LlamaBackend());
       await _engine!.loadModel(
         modelPath,
         modelParams: ModelParams(
-          contextSize: 8192,
+          contextSize: isLowRam ? 4096 : 8192,
           gpuLayers: ModelParams.maxGpuLayers,
           numberOfThreads: 2,
-          numberOfThreadsBatch: 4,
-          batchSize: 2048,
-          microBatchSize: 512,
+          numberOfThreadsBatch: isLowRam ? 2 : 4,
+          batchSize: isLowRam ? 512 : 2048,
+          microBatchSize: isLowRam ? 128 : 512,
           preferredBackend: Platform.isIOS ? GpuBackend.metal : GpuBackend.vulkan,
         ),
       );
@@ -135,7 +156,7 @@ Rules:
     final messages = [
       LlamaChatMessage.fromText(
         role: LlamaChatRole.system,
-        text: systemPrompt,
+        text: _buildSystemPrompt(),
       ),
       LlamaChatMessage.fromText(
         role: LlamaChatRole.user,
@@ -233,7 +254,7 @@ Rules:
     final messages = <LlamaChatMessage>[
       LlamaChatMessage.fromText(
         role: LlamaChatRole.system,
-        text: systemPrompt,
+        text: _buildSystemPrompt(),
       ),
       LlamaChatMessage.withContent(
         role: LlamaChatRole.user,

@@ -22,7 +22,9 @@ import UIKit
       binaryMessenger: controller.binaryMessenger
     )
     storageChannel.setMethodCallHandler { (call, result) in
-      if call.method == "getAvailableBytes" {
+      if call.method == "getPhysicalMemoryBytes" {
+        result(Int64(bitPattern: UInt64(ProcessInfo.processInfo.physicalMemory)))
+      } else if call.method == "getAvailableBytes" {
         do {
           let attrs = try FileManager.default.attributesOfFileSystem(
             forPath: NSHomeDirectory()

@@ -10,7 +10,6 @@ list(APPEND FLUTTER_PLUGIN_LIST
   firebase_core
   flutter_inappwebview_windows
   gal
-  geolocator_windows
   objectbox_flutter_libs
   share_plus
   sqlite3_flutter_libs

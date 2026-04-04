@@ -425,33 +425,33 @@ class _GoogleSearchWebViewState extends State<GoogleSearchWebView>
           icon: const Icon(Icons.close, color: Colors.white70),
           onPressed: () => _popWithResults([]),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.copy, color: Colors.white70, size: 20),
-            tooltip: 'Copy page HTML (debug)',
-            onPressed: () async {
-              if (_controller == null) return;
-              final messenger = ScaffoldMessenger.of(context);
-              final diag = await _controller!.evaluateJavascript(source: '''
-(function() {
-  var rso = document.querySelector('#rso') || document.querySelector('#search') || document.body;
-  var raw = rso ? rso.innerHTML : '';
-  return raw.substring(120000);
-})()
-''');
-              if (diag != null) {
-                await Clipboard.setData(
-                    ClipboardData(text: diag.toString()));
-                messenger.showSnackBar(
-                  const SnackBar(
-                    content: Text('HTML chunk 2 copied to clipboard'),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              }
-            },
-          ),
-        ],
+//         actions: [
+//           IconButton(
+//             icon: const Icon(Icons.copy, color: Colors.white70, size: 20),
+//             tooltip: 'Copy page HTML (debug)',
+//             onPressed: () async {
+//               if (_controller == null) return;
+//               final messenger = ScaffoldMessenger.of(context);
+//               final diag = await _controller!.evaluateJavascript(source: '''
+// (function() {
+//   var rso = document.querySelector('#rso') || document.querySelector('#search') || document.body;
+//   var raw = rso ? rso.innerHTML : '';
+//   return raw.substring(120000);
+// })()
+// ''');
+//               if (diag != null) {
+//                 await Clipboard.setData(
+//                     ClipboardData(text: diag.toString()));
+//                 messenger.showSnackBar(
+//                   const SnackBar(
+//                     content: Text('HTML chunk 2 copied to clipboard'),
+//                     duration: Duration(seconds: 2),
+//                   ),
+//                 );
+//               }
+//             },
+//           ),
+//         ],
         title: Column(
           children: [
             Text(

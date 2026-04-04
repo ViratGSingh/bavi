@@ -13,13 +13,10 @@ import UIKit
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
 
-    guard let controller = window?.rootViewController as? FlutterViewController else {
-      return
-    }
-
+    let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "BaviStorageChannel")!
     let storageChannel = FlutterMethodChannel(
       name: "com.example.bavi/storage",
-      binaryMessenger: controller.binaryMessenger
+      binaryMessenger: registrar.messenger()
     )
     storageChannel.setMethodCallHandler { (call, result) in
       if call.method == "getPhysicalMemoryBytes" {

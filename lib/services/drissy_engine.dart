@@ -74,10 +74,14 @@ Rules:
   /// Load the GGUF model
   Future<bool> loadModel(String modelPath) async {
     try {
-      final physicalBytes =
-          await _storageChannel.invokeMethod<int>('getPhysicalMemoryBytes') ?? 0;
+      int physicalBytes = 0;
+      try {
+        physicalBytes =
+            await _storageChannel.invokeMethod<int>('getPhysicalMemoryBytes') ??
+                0;
+      } catch (_) {}
       final isLowRam =
-          physicalBytes > 0 && physicalBytes < 6 * 1024 * 1024 * 1024;
+          physicalBytes == 0 || physicalBytes < 6 * 1024 * 1024 * 1024;
 
       _engine = LlamaEngine(LlamaBackend());
       await _engine!.loadModel(

@@ -2,6 +2,8 @@ import 'dart:io' show Platform;
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/services.dart';
 import 'package:llamadart/llamadart.dart';
+import 'pea_service.dart';
+import 'pea_builder.dart';
 
 class DrissyEngine {
   static final DrissyEngine _instance = DrissyEngine._internal();
@@ -15,7 +17,11 @@ class DrissyEngine {
   bool get isLoaded => _isLoaded;
   bool get isVisionLoaded => _isVisionLoaded;
 
+  final PeaService _peaService = PeaService();
+  bool get isPeaLoaded => _peaService.isLoaded;
+
   String? _personalizationContext;
+
 
   void setPersonalization(String? context) {
     final trimmed = context?.trim();
@@ -42,7 +48,6 @@ Rules:
 - Do not repeat the question or use generic filler lines.
 - Keep your language engaging, detailed, and exhaustive.''';
 
-  /// Generation params: max context, low stress, fast TTFT
   static const _generationParams = GenerationParams(
     maxTokens: 1024,
     temp: 0.6,
@@ -71,7 +76,6 @@ Rules:
     return isChinese ? GpuBackend.opencl : GpuBackend.vulkan;
   }
 
-  /// Load the GGUF model
   Future<bool> loadModel(String modelPath) async {
     try {
       int physicalBytes = 0;
@@ -100,9 +104,22 @@ Rules:
       );
       _isLoaded = true;
 
-      // Pre-warm: run the system prompt through the model so the KV cache
-      // is already populated before the first real query.
       await _warmup();
+
+      // Load personal engram if available
+      await _peaService.load();
+      if (_peaService.isLoaded) {
+        print('PEA: personal engram loaded successfully');
+        final backend = _engine!.backend;
+        if (backend is NativeLlamaBackend) {
+          await backend.setPeaAdapter(
+            _peaService.nativeHandle.address,
+          );
+          print('PEA: inject hook wired into generation loop');
+        }
+      } else {
+        print('PEA: no engram found, running without personalisation');
+      }
 
       return true;
     } catch (e) {
@@ -112,7 +129,43 @@ Rules:
     }
   }
 
-  /// Load the multimodal projector for vision support
+  Future<bool> loadPeaFromBytes(List<int> bytes) async {
+    await _peaService.saveFromBytes(bytes);
+    return _peaService.load();
+  }
+
+  Future<List<int>> tokenize(String text) async {
+    if (!_isLoaded || _engine == null) return [];
+    return _engine!.tokenize(text, addSpecial: false);
+  }
+
+
+  Future<bool> savePreferences({
+  required List<String> likes,
+  required List<String> dislikes,
+  }) async {
+    // Tokenize each concept using the actual model tokenizer
+    final likeTokens = <List<int>>[];
+    for (final concept in likes) {
+      final tokens = await tokenize(concept);
+      likeTokens.add(tokens);
+    }
+
+    final dislikeTokens = <List<int>>[];
+    for (final concept in dislikes) {
+      final tokens = await tokenize(concept);
+      dislikeTokens.add(tokens);
+    }
+
+    final path = await PeaBuilder.buildFromTokens(
+      likeTokens: likeTokens,
+      dislikeTokens: dislikeTokens,
+      likeLabels: likes,
+      dislikeLabels: dislikes,
+    );
+    return _peaService.loadFromPath(path);
+  }
+
   Future<bool> loadVisionProjector(String mmProjPath) async {
     if (_engine == null || !_isLoaded) return false;
     try {
@@ -127,7 +180,6 @@ Rules:
     }
   }
 
-  /// Pre-process the system prompt so it's cached in KV for reuse.
   Future<void> _warmup() async {
     if (_engine == null) return;
     try {
@@ -148,12 +200,9 @@ Rules:
       )) {
         break;
       }
-    } catch (_) {
-      // Warmup failure is non-fatal
-    }
+    } catch (_) {}
   }
 
-  /// Ask Drissy a question with source context
   Stream<String> answer({
     required String query,
     required List<String> sources,
@@ -163,7 +212,6 @@ Rules:
       return;
     }
 
-    // Build sources context
     final sourcesText = sources
         .asMap()
         .entries
@@ -201,7 +249,6 @@ Rules:
     }
   }
 
-  /// Non-streaming completion for utility tasks (query rewriting, etc.)
   Future<String?> complete({
     required String systemMessage,
     required String userMessage,
@@ -246,7 +293,6 @@ Rules:
     return result.trim().isNotEmpty ? result.trim() : null;
   }
 
-  /// Streaming answer with image (vision) support for search mode
   Stream<String> answerWithImage({
     required String query,
     required String imagePath,
@@ -302,7 +348,6 @@ Rules:
     }
   }
 
-  /// Streaming chat with conversation history and optional image
   Stream<String> chat({
     required String systemMessage,
     required List<Map<String, String>> conversationMessages,
@@ -320,7 +365,6 @@ Rules:
       ),
     ];
 
-    // Add previous conversation history (text only)
     for (int i = 0; i < conversationMessages.length - 1; i++) {
       final m = conversationMessages[i];
       final role = m['role'] == 'assistant'
@@ -332,7 +376,6 @@ Rules:
       ));
     }
 
-    // Add the last user message — with image if provided and vision is loaded
     if (conversationMessages.isNotEmpty) {
       final lastMsg = conversationMessages.last;
       if (imagePath != null && _isVisionLoaded) {
@@ -367,13 +410,12 @@ Rules:
     }
   }
 
-  /// Stop current generation
   void stop() {
     _engine?.cancelGeneration();
   }
 
-  /// Release model from memory
   void dispose() {
+    _peaService.dispose();
     _engine?.dispose();
     _engine = null;
     _isLoaded = false;

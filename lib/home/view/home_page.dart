@@ -2498,132 +2498,7 @@ class _ToolsMenuButton extends StatefulWidget {
   State<_ToolsMenuButton> createState() => _ToolsMenuButtonState();
 }
 
-class _ToolsMenuButtonState extends State<_ToolsMenuButton>
-    with SingleTickerProviderStateMixin {
-  bool _isOpen = false;
-  late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
-  late Animation<double> _fadeAnimation;
-  final LayerLink _layerLink = LayerLink();
-  OverlayEntry? _overlayEntry;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 200),
-      vsync: this,
-    );
-    _scaleAnimation = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOutBack,
-    );
-    _fadeAnimation = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOut,
-    );
-  }
-
-  @override
-  void dispose() {
-    _removeOverlay();
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _removeOverlay() {
-    _overlayEntry?.remove();
-    _overlayEntry = null;
-  }
-
-  void _toggle() {
-    if (_isOpen) {
-      _controller.reverse().then((_) {
-        _removeOverlay();
-      });
-    } else {
-      _showOverlay();
-      _controller.forward();
-    }
-    setState(() {
-      _isOpen = !_isOpen;
-    });
-  }
-
-  void _showOverlay() {
-    _overlayEntry = OverlayEntry(
-      builder: (context) => GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: _toggle,
-        child: Stack(
-          children: [
-            CompositedTransformFollower(
-              link: _layerLink,
-              targetAnchor: Alignment.topLeft,
-              followerAnchor: Alignment.bottomLeft,
-              offset: const Offset(0, -8),
-              child: FadeTransition(
-                opacity: _fadeAnimation,
-                child: SizeTransition(
-                  sizeFactor: _scaleAnimation,
-                  axisAlignment: 1.0,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.12),
-                          blurRadius: 12,
-                          offset: const Offset(0, -2),
-                        ),
-                      ],
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildMenuItem(
-                          icon: Icons.chat_bubble_outline,
-                          label: "Chat",
-                          isActive: widget.isChatActive && !widget.isSearchActive && !widget.isDeepSearchActive,
-                          onTap: () {
-                            widget.onChatSelected();
-                            _toggle();
-                          },
-                        ),
-                        _buildMenuItem(
-                          icon: Icons.language,
-                          label: "Browse",
-                          isActive: widget.isSearchActive && !widget.isDeepSearchActive,
-                          onTap: () {
-                            widget.onSearchToggle();
-                            _toggle();
-                          },
-                        ),
-                        _buildMenuItem(
-                          icon: Icons.auto_awesome,
-                          label: "Deep Browse",
-                          isActive: widget.isDeepSearchActive,
-                          onTap: () {
-                            widget.onDeepSearchToggle();
-                            _toggle();
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-    Overlay.of(context).insert(_overlayEntry!);
-  }
-
+class _ToolsMenuButtonState extends State<_ToolsMenuButton> {
   String get _activeLabel {
     if (widget.isDeepSearchActive) return "Deep Browse";
     if (widget.isChatActive && !widget.isSearchActive) return "Chat";
@@ -2636,86 +2511,315 @@ class _ToolsMenuButtonState extends State<_ToolsMenuButton>
     return Icons.language;
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return CompositedTransformTarget(
-      link: _layerLink,
-      child: GestureDetector(
-        onTap: _toggle,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-          height: 32,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: const Color(0xFFE8D5FF),
-            borderRadius: BorderRadius.circular(26),
-            border: Border.all(
-                color: const Color(0xFF8A2BE2).withOpacity(0.3)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                _activeIcon,
-                size: 16,
-                color: const Color(0xFF8A2BE2),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                _activeLabel,
-                style: const TextStyle(
-                  color: Color(0xFF8A2BE2),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
+  void _openBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => _ToolsModeSheet(
+        isChatActive: widget.isChatActive,
+        isSearchActive: widget.isSearchActive,
+        isDeepSearchActive: widget.isDeepSearchActive,
+        onChatSelected: () {
+          Navigator.pop(context);
+          widget.onChatSelected();
+        },
+        onSearchToggle: () {
+          Navigator.pop(context);
+          widget.onSearchToggle();
+        },
+        onDeepSearchToggle: () {
+          Navigator.pop(context);
+          widget.onDeepSearchToggle();
+        },
       ),
     );
   }
 
-  Widget _buildMenuItem({
-    required IconData icon,
-    required String label,
-    required bool isActive,
-    required VoidCallback onTap,
-  }) {
+  @override
+  Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      onTap: _openBottomSheet,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+        height: 32,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFE8D5FF),
+          borderRadius: BorderRadius.circular(26),
+          border: Border.all(color: const Color(0xFF8A2BE2).withOpacity(0.3)),
+        ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              size: 18,
-              color: isActive
-                  ? const Color(0xFF8A2BE2)
-                  : Colors.black54,
-            ),
-            const SizedBox(width: 10),
+            Icon(_activeIcon, size: 16, color: const Color(0xFF8A2BE2)),
+            const SizedBox(width: 6),
             Text(
-              label,
-              style: TextStyle(
-                color: isActive
-                    ? const Color(0xFF8A2BE2)
-                    : Colors.black87,
-                fontSize: 14,
-                fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+              _activeLabel,
+              style: const TextStyle(
+                color: Color(0xFF8A2BE2),
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
               ),
             ),
-            if (isActive) ...[
-              const SizedBox(width: 8),
-              Icon(
-                Icons.check_circle,
-                size: 16,
-                color: const Color(0xFF8A2BE2),
+            // const SizedBox(width: 4),
+            // const Icon(Icons.keyboard_arrow_up_rounded, size: 14, color: Color(0xFF8A2BE2)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ToolsModeSheet extends StatelessWidget {
+  final bool isChatActive;
+  final bool isSearchActive;
+  final bool isDeepSearchActive;
+  final VoidCallback onChatSelected;
+  final VoidCallback onSearchToggle;
+  final VoidCallback onDeepSearchToggle;
+
+  const _ToolsModeSheet({
+    required this.isChatActive,
+    required this.isSearchActive,
+    required this.isDeepSearchActive,
+    required this.onChatSelected,
+    required this.onSearchToggle,
+    required this.onDeepSearchToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bool chatSelected = isChatActive && !isDeepSearchActive;
+    final bool browseSelected = isSearchActive && !isDeepSearchActive;
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 16,
+        bottom: MediaQuery.of(context).padding.bottom + 24,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Handle
+          Container(
+            width: 36,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 20),
+          // Title
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              "Choose Mode",
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF1A1A1A),
+                letterSpacing: -0.3,
               ),
-            ],
+            ),
+          ),
+          const SizedBox(height: 4),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              "Select how you'd like to interact",
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.black.withOpacity(0.4),
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          // Chat option
+          _ModeCard(
+            icon: Icons.chat_bubble_outline_rounded,
+            title: "Chat",
+            subtitle: "Ask anything, get instant answers",
+            isActive: chatSelected,
+            onTap: onChatSelected,
+          ),
+          const SizedBox(height: 10),
+          // Browse option
+          _ModeCard(
+            icon: Icons.language_rounded,
+            title: "Browse",
+            subtitle: "Search the web for up-to-date info",
+            isActive: browseSelected,
+            onTap: onSearchToggle,
+          ),
+          const SizedBox(height: 10),
+          // Deep Browse option
+          _ModeCard(
+            icon: Icons.auto_awesome_rounded,
+            title: "Deep Browse",
+            subtitle: "Multi-step reasoning with web sources",
+            isActive: isDeepSearchActive,
+            onTap: onDeepSearchToggle,
+            //badge: "PRO",
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ModeCard extends StatelessWidget {
+  static const _purple1 = Color(0xFF9B59FF);
+  static const _purple2 = Color(0xFF7B2FE0);
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool isActive;
+  final VoidCallback onTap;
+  final String? badge;
+
+  const _ModeCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.isActive,
+    required this.onTap,
+    this.badge,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeInOut,
+        decoration: BoxDecoration(
+          gradient: isActive
+              ? const LinearGradient(
+                  colors: [_purple1, _purple2],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+              : null,
+          color: isActive ? null : const Color(0xFFF5F5F7),
+          borderRadius: BorderRadius.circular(18),
+          border: isActive
+              ? null
+              : Border.all(color: const Color(0xFFE0E0E0)),
+          boxShadow: isActive
+              ? [
+                  BoxShadow(
+                    color: _purple2.withOpacity(0.32),
+                    blurRadius: 18,
+                    offset: const Offset(0, 7),
+                  ),
+                ]
+              : null,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            // Icon container
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: isActive
+                    ? Colors.white.withOpacity(0.18)
+                    : const Color(0xFFEDE0FF),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                icon,
+                size: 22,
+                color: isActive ? Colors.white : _purple2,
+              ),
+            ),
+            const SizedBox(width: 14),
+            // Text
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: isActive ? Colors.white : const Color(0xFF1A1A1A),
+                          letterSpacing: -0.2,
+                        ),
+                      ),
+                      if (badge != null) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: isActive
+                                ? Colors.white.withOpacity(0.22)
+                                : const Color(0xFFEDE0FF),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            badge!,
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              color: isActive ? Colors.white : _purple2,
+                              letterSpacing: 0.6,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isActive
+                          ? Colors.white.withOpacity(0.72)
+                          : Colors.black.withOpacity(0.38),
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Checkmark
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: isActive
+                  ? Container(
+                      key: const ValueKey('check'),
+                      width: 26,
+                      height: 26,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.22),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.check_rounded,
+                        size: 16,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const SizedBox(key: ValueKey('empty'), width: 26),
+            ),
           ],
         ),
       ),

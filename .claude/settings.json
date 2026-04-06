@@ -8,7 +8,8 @@
       "Bash(plutil -p /Users/viratsingh/Projects/bavi/build/native_assets/ios/llamadart.framework/Info.plist)",
       "Bash(otool -l /Users/viratsingh/Projects/bavi/build/native_assets/ios/llamadart.framework/llamadart)",
       "Read(//Users/viratsingh/.pub-cache/hosted/pub.dev/llamadart-0.6.7/lib/**)",
-      "Bash(flutter pub:*)"
+      "Bash(flutter pub:*)",
+      "Read(//Users/viratsingh/.pub-cache/hosted/pub.dev/llamadart-0.6.7/.dart_tool/llamadart/native_bundles/**)"
     ]
   }
 }

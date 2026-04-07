@@ -1,5 +1,6 @@
 import 'package:bavi/home/bloc/home_bloc.dart';
 import 'package:bavi/home/widgets/mode_bottom_sheet.dart';
+import 'package:bavi/home/widgets/chat_backup_bottom_sheet.dart';
 import 'package:bavi/home/widgets/likes_dislikes_bottom_sheet.dart';
 import 'package:bavi/home/widgets/personalization_bottom_sheet.dart';
 import 'package:flutter/material.dart';
@@ -202,6 +203,19 @@ class _SettingsBottomSheetState extends State<SettingsBottomSheet> {
                       isScrollControlled: true,
                       backgroundColor: Colors.transparent,
                       builder: (_) => const LikesDislikesBottomSheet(),
+                    );
+                  },
+                ),
+                _divider(),
+                _settingsTile(
+                  icon: Iconsax.archive_outline,
+                  label: 'Chat Backup',
+                  onTap: () {
+                    showModalBottomSheet<void>(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => const ChatBackupBottomSheet(),
                     );
                   },
                 ),

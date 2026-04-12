@@ -40,6 +40,16 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
   static const String _mmProjFileName = 'drissy-qwen3.5-2b.BF16-mmproj.gguf';
   static const String _mmProjDownloadUrl =
       'https://huggingface.co/drissea-ai/drissy-qwen3.5-2b-GGUF/resolve/main/drissy-qwen3.5-2b.BF16-mmproj.gguf';
+
+  static const String _gemma4FileName = 'gemma-4-E2B-it-Q4_K_M.gguf';
+  static const String _gemma4DownloadUrl =
+      'https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf?download=true';
+  static const String _gemma4MmProjFileName = 'gemma-4-E2B-it-mmproj-BF16.gguf';
+  static const String _gemma4MmProjDownloadUrl =
+      'https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/mmproj-BF16.gguf';
+  static const String _bonsaiFileName = 'Bonsai-8B.gguf';
+  static const String _bonsaiDownloadUrl =
+      'https://huggingface.co/prism-ml/Bonsai-8B-gguf/resolve/main/Bonsai-8B.gguf';
   // @override
   // void onTransition(Transition<HomeEvent, HomeState> transition) {
   //   super.onTransition(transition);
@@ -99,18 +109,40 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     on<HomeLocalAIDownloadAndLoad>(_downloadAndLoadLocalModel);
     on<HomeLocalAIDownloadProgress>(_handleLocalAIDownloadProgress);
     on<HomeLocalAILoadIfDownloaded>(_loadModelIfDownloaded);
+    on<HomeGemma4DownloadAndLoad>(_downloadAndLoadGemma4);
+    on<HomeGemma4LoadIfDownloaded>(_loadGemma4IfDownloaded);
+    on<HomeBonsaiDownloadAndLoad>(_downloadAndLoadBonsai);
+    on<HomeBonsaiLoadIfDownloaded>(_loadBonsaiIfDownloaded);
+    on<HomeCheckSecondaryModelsDownloaded>(_checkSecondaryModelsDownloaded);
     on<HomeDeleteAllHistory>(_deleteAllHistory);
+    on<HomeObsidianNoteSelected>(_handleObsidianNoteSelected);
+    on<HomeObsidianNoteCleared>(_handleObsidianNoteCleared);
+    on<HomeVisualBrowseCompleted>(_handleVisualBrowseCompleted);
+    on<HomeToggleVisualBrowse>(_toggleVisualBrowse);
+    on<HomeVisualBrowseStart>(_handleVisualBrowseStart);
+    on<HomeVisualBrowseImagesExtracted>(_handleVisualBrowseImagesExtracted);
+    on<HomeToggleMoodboard>(_toggleMoodboard);
+    on<HomeMoodboardStart>(_handleMoodboardStart);
+    on<HomeMoodboardImagesExtracted>(_handleMoodboardImagesExtracted);
+    on<HomeMoodboardCompleted>(_handleMoodboardCompleted);
+    on<HomeDeleteLocalAIModel>(_deleteLocalAIModel);
+    on<HomeDeleteGemma4Model>(_deleteGemma4Model);
+    on<HomeDeleteBonsaiModel>(_deleteBonsaiModel);
   }
 
-  Completer<List<ExtractedResultInfo>>? _webSearchCompleter;
+  Completer<BrowseSearchResult>? _webSearchCompleter;
   Completer<List<ExtractedResultInfo>>? _deepDrissyWebSearchCompleter;
+  Completer<List<VisualBrowseImageData>>? _visualBrowseCompleter;
+  Completer<List<VisualBrowseImageData>>? _moodboardCompleter;
 
   void _handleWebSearchResults(
     HomeWebSearchResultsReceived event,
     Emitter<HomeState> emit,
   ) {
     if (_webSearchCompleter != null && !_webSearchCompleter!.isCompleted) {
-      _webSearchCompleter!.complete(event.results);
+      _webSearchCompleter!.complete(
+        BrowseSearchResult(webResults: event.results, images: event.browseImages),
+      );
     }
     emit(state.copyWith(webSearchQuery: null));
   }
@@ -611,12 +643,18 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     Emitter<HomeState> emit,
   ) async {
     emit(state.copyWith(selectedModel: event.model));
-    // Auto-trigger download+load when localAI is selected and not ready
     if (event.model == HomeModel.localAI &&
         state.localAIStatus != LocalAIStatus.ready &&
         state.localAIStatus != LocalAIStatus.downloading &&
         state.localAIStatus != LocalAIStatus.loading) {
       add(HomeLocalAIDownloadAndLoad());
+    } else if (event.model == HomeModel.gemma4 &&
+        state.gemma4Status == LocalAIStatus.ready) {
+      // File already downloaded — just load into engine
+      add(HomeGemma4LoadIfDownloaded());
+    } else if (event.model == HomeModel.bonsai &&
+        state.bonsaiStatus == LocalAIStatus.ready) {
+      add(HomeBonsaiLoadIfDownloaded());
     }
   }
 
@@ -752,6 +790,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         }
         emit(state.copyWith(localAIStatus: LocalAIStatus.ready));
         print('Local AI model loaded successfully');
+        print('[ModelSwitch] Active model → Qwen 3.5');
       } else {
         emit(state.copyWith(localAIStatus: LocalAIStatus.error));
       }
@@ -794,12 +833,315 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         }
         emit(state.copyWith(localAIStatus: LocalAIStatus.ready));
         print('Local AI model loaded on home init');
+        print('[ModelSwitch] Active model → Qwen 3.5');
       } else {
         emit(state.copyWith(localAIStatus: LocalAIStatus.error));
       }
     } catch (e) {
       print('Local AI load error: $e');
       emit(state.copyWith(localAIStatus: LocalAIStatus.error));
+    }
+  }
+
+  // ── Startup: check secondary model files on disk ───────────────────────────
+
+  Future<void> _checkSecondaryModelsDownloaded(
+    HomeCheckSecondaryModelsDownloaded event,
+    Emitter<HomeState> emit,
+  ) async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final gemma4File = File('${dir.path}/$_gemma4FileName');
+      final bonsaiFile = File('${dir.path}/$_bonsaiFileName');
+      final gemma4Exists = await gemma4File.exists();
+      final bonsaiExists = await bonsaiFile.exists();
+      if (gemma4Exists || bonsaiExists) {
+        emit(state.copyWith(
+          gemma4Status:
+              gemma4Exists ? LocalAIStatus.ready : state.gemma4Status,
+          bonsaiStatus:
+              bonsaiExists ? LocalAIStatus.ready : state.bonsaiStatus,
+        ));
+      }
+    } catch (e) {
+      print('Secondary model file check error: $e');
+    }
+  }
+
+  // ── Gemma 4 ────────────────────────────────────────────────────────────────
+
+  Future<void> _downloadAndLoadGemma4(
+    HomeGemma4DownloadAndLoad event,
+    Emitter<HomeState> emit,
+  ) async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final modelFile = File('${dir.path}/$_gemma4FileName');
+      final mmProjFile = File('${dir.path}/$_gemma4MmProjFileName');
+      final needsModel = !await modelFile.exists();
+      final needsVision = !await mmProjFile.exists();
+
+      const combinedEstimate = 4258 * 1024 * 1024; // ~3.11 GB model + ~987 MB mmproj
+      int combinedReceivedBytes = 0;
+      int combinedTotalBytes = combinedEstimate;
+
+      if (needsModel || needsVision) {
+        final availableBytes = await StorageChecker.getAvailableBytes();
+        const requiredBytes = 2 * 1024 * 1024 * 1024;
+        if (availableBytes != null && availableBytes < requiredBytes) {
+          emit(state.copyWith(gemma4Status: LocalAIStatus.noStorage));
+          return;
+        }
+        emit(state.copyWith(
+          gemma4Status: LocalAIStatus.downloading,
+          gemma4DownloadProgress: 0.0,
+          gemma4DownloadPhase: 'Downloading Gemma 4...',
+        ));
+      }
+
+      // Step 1: Download main model
+      if (needsModel) {
+        final request = http.Request('GET', Uri.parse(_gemma4DownloadUrl));
+        final client = http.Client();
+        final response = await client.send(request);
+        if (response.statusCode != 200) {
+          print('Gemma 4 model download failed: ${response.statusCode}');
+          client.close();
+          emit(state.copyWith(gemma4Status: LocalAIStatus.error));
+          return;
+        }
+        final modelContentLength = response.contentLength ?? 0;
+        if (modelContentLength > 0) {
+          combinedTotalBytes = modelContentLength + (600 * 1024 * 1024);
+        }
+        final sink = modelFile.openWrite();
+        await for (final chunk in response.stream) {
+          sink.add(chunk);
+          combinedReceivedBytes += chunk.length;
+          final progress = combinedReceivedBytes / combinedTotalBytes;
+          if ((progress * 100).floor() >
+              (state.gemma4DownloadProgress * 100).floor()) {
+            emit(state.copyWith(
+                gemma4DownloadProgress: progress.clamp(0.0, 0.99)));
+          }
+        }
+        await sink.flush();
+        await sink.close();
+        client.close();
+      }
+
+      // Step 2: Download vision projector
+      if (needsVision) {
+        emit(state.copyWith(
+          gemma4DownloadPhase: 'Downloading vision model...',
+        ));
+        try {
+          final mmRequest =
+              http.Request('GET', Uri.parse(_gemma4MmProjDownloadUrl));
+          final mmClient = http.Client();
+          final mmResponse = await mmClient.send(mmRequest);
+          if (mmResponse.statusCode == 200) {
+            final mmContentLength = mmResponse.contentLength ?? 0;
+            if (mmContentLength > 0 && combinedReceivedBytes > 0) {
+              combinedTotalBytes = combinedReceivedBytes + mmContentLength;
+            }
+            final mmSink = mmProjFile.openWrite();
+            await for (final chunk in mmResponse.stream) {
+              mmSink.add(chunk);
+              combinedReceivedBytes += chunk.length;
+              final progress = combinedReceivedBytes / combinedTotalBytes;
+              if ((progress * 100).floor() >
+                  (state.gemma4DownloadProgress * 100).floor()) {
+                emit(state.copyWith(
+                    gemma4DownloadProgress: progress.clamp(0.0, 0.99)));
+              }
+            }
+            await mmSink.flush();
+            await mmSink.close();
+            print('Gemma 4 vision projector downloaded');
+          }
+          mmClient.close();
+        } catch (e) {
+          print('Gemma 4 mmproj download error (non-fatal): $e');
+        }
+      }
+
+      if (needsModel || needsVision) {
+        emit(state.copyWith(gemma4DownloadProgress: 1.0));
+      }
+
+      // Step 3: Load model into engine
+      await Future.delayed(const Duration(seconds: 2));
+      emit(state.copyWith(
+        gemma4Status: LocalAIStatus.loading,
+        gemma4DownloadPhase: '',
+      ));
+      final success = await _drissyEngine.loadModel(modelFile.path);
+      if (success) {
+        if (await mmProjFile.exists()) {
+          await _drissyEngine.loadVisionProjector(mmProjFile.path);
+        }
+        emit(state.copyWith(
+          gemma4Status: LocalAIStatus.ready,
+          selectedModel: HomeModel.gemma4,
+        ));
+        print('Gemma 4 loaded successfully');
+        print('[ModelSwitch] Active model → Gemma 4');
+      } else {
+        emit(state.copyWith(gemma4Status: LocalAIStatus.error));
+      }
+    } catch (e) {
+      print('Gemma 4 download/load error: $e');
+      emit(state.copyWith(gemma4Status: LocalAIStatus.error));
+    }
+  }
+
+  Future<void> _loadGemma4IfDownloaded(
+    HomeGemma4LoadIfDownloaded event,
+    Emitter<HomeState> emit,
+  ) async {
+    if (state.gemma4Status == LocalAIStatus.loading ||
+        state.gemma4Status == LocalAIStatus.downloading) return;
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final modelFile = File('${dir.path}/$_gemma4FileName');
+      final mmProjFile = File('${dir.path}/$_gemma4MmProjFileName');
+      if (!await modelFile.exists()) return;
+      // Skip if this model is already loaded in the engine
+      if (_drissyEngine.loadedModelPath == modelFile.path) {
+        emit(state.copyWith(
+          gemma4Status: LocalAIStatus.ready,
+          selectedModel: HomeModel.gemma4,
+        ));
+        print('[ModelSwitch] Active model → Gemma 4 (already in engine)');
+        return;
+      }
+      emit(state.copyWith(gemma4Status: LocalAIStatus.loading));
+      final success = await _drissyEngine.loadModel(modelFile.path);
+      if (success) {
+        if (await mmProjFile.exists()) {
+          await _drissyEngine.loadVisionProjector(mmProjFile.path);
+        }
+        emit(state.copyWith(
+          gemma4Status: LocalAIStatus.ready,
+          selectedModel: HomeModel.gemma4,
+        ));
+        print('[ModelSwitch] Active model → Gemma 4');
+      } else {
+        emit(state.copyWith(gemma4Status: LocalAIStatus.error));
+      }
+    } catch (e) {
+      print('Gemma 4 load error: $e');
+      emit(state.copyWith(gemma4Status: LocalAIStatus.error));
+    }
+  }
+
+  // ── Bonsai ─────────────────────────────────────────────────────────────────
+
+  Future<void> _downloadAndLoadBonsai(
+    HomeBonsaiDownloadAndLoad event,
+    Emitter<HomeState> emit,
+  ) async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final modelFile = File('${dir.path}/$_bonsaiFileName');
+      final needsDownload = !await modelFile.exists();
+
+      if (needsDownload) {
+        final availableBytes = await StorageChecker.getAvailableBytes();
+        const requiredBytes = 2 * 1024 * 1024 * 1024;
+        if (availableBytes != null && availableBytes < requiredBytes) {
+          emit(state.copyWith(bonsaiStatus: LocalAIStatus.noStorage));
+          return;
+        }
+        emit(state.copyWith(
+          bonsaiStatus: LocalAIStatus.downloading,
+          bonsaiDownloadProgress: 0.0,
+          bonsaiDownloadPhase: 'Downloading Bonsai...',
+        ));
+
+        final request = http.Request('GET', Uri.parse(_bonsaiDownloadUrl));
+        final client = http.Client();
+        final response = await client.send(request);
+        if (response.statusCode != 200) {
+          client.close();
+          emit(state.copyWith(bonsaiStatus: LocalAIStatus.error));
+          return;
+        }
+        int received = 0;
+        int total = response.contentLength ?? (1200 * 1024 * 1024);
+        final sink = modelFile.openWrite();
+        await for (final chunk in response.stream) {
+          sink.add(chunk);
+          received += chunk.length;
+          final progress = received / total;
+          if ((progress * 100).floor() >
+              (state.bonsaiDownloadProgress * 100).floor()) {
+            emit(state.copyWith(
+                bonsaiDownloadProgress: progress.clamp(0.0, 0.99)));
+          }
+        }
+        await sink.flush();
+        await sink.close();
+        client.close();
+        emit(state.copyWith(bonsaiDownloadProgress: 1.0));
+      }
+
+      await Future.delayed(const Duration(seconds: 2));
+      emit(state.copyWith(
+        bonsaiStatus: LocalAIStatus.loading,
+        bonsaiDownloadPhase: '',
+      ));
+      final success = await _drissyEngine.loadModel(modelFile.path);
+      if (success) {
+        emit(state.copyWith(
+          bonsaiStatus: LocalAIStatus.ready,
+          selectedModel: HomeModel.bonsai,
+        ));
+        print('Bonsai loaded successfully');
+        print('[ModelSwitch] Active model → Bonsai');
+      } else {
+        emit(state.copyWith(bonsaiStatus: LocalAIStatus.error));
+      }
+    } catch (e) {
+      print('Bonsai download/load error: $e');
+      emit(state.copyWith(bonsaiStatus: LocalAIStatus.error));
+    }
+  }
+
+  Future<void> _loadBonsaiIfDownloaded(
+    HomeBonsaiLoadIfDownloaded event,
+    Emitter<HomeState> emit,
+  ) async {
+    if (state.bonsaiStatus == LocalAIStatus.loading ||
+        state.bonsaiStatus == LocalAIStatus.downloading) return;
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final modelFile = File('${dir.path}/$_bonsaiFileName');
+      if (!await modelFile.exists()) return;
+      // Skip if this model is already loaded in the engine
+      if (_drissyEngine.loadedModelPath == modelFile.path) {
+        emit(state.copyWith(
+          bonsaiStatus: LocalAIStatus.ready,
+          selectedModel: HomeModel.bonsai,
+        ));
+        print('[ModelSwitch] Active model → Bonsai (already in engine)');
+        return;
+      }
+      emit(state.copyWith(bonsaiStatus: LocalAIStatus.loading));
+      final success = await _drissyEngine.loadModel(modelFile.path);
+      if (success) {
+        emit(state.copyWith(
+          bonsaiStatus: LocalAIStatus.ready,
+          selectedModel: HomeModel.bonsai,
+        ));
+        print('[ModelSwitch] Active model → Bonsai');
+      } else {
+        emit(state.copyWith(bonsaiStatus: LocalAIStatus.error));
+      }
+    } catch (e) {
+      print('Bonsai load error: $e');
+      emit(state.copyWith(bonsaiStatus: LocalAIStatus.error));
     }
   }
 
@@ -946,7 +1288,9 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
           influence: initialresultData.influence,
           isSearchMode: initialresultData.isSearchMode,
           extractedUrlData: initialresultData.extractedUrlData,
-          local: initialresultData.local);
+          local: initialresultData.local,
+          obsidianNoteName: initialresultData.obsidianNoteName,
+          browseImages: initialresultData.browseImages);
 
       final updatedResults =
           List<ThreadResultData>.from(state.threadData.results)
@@ -1670,6 +2014,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       answer: "",
       influence: [],
       local: [],
+      obsidianNoteName: state.pendingObsidianNoteName,
     );
     List<ExtractedResultInfo> extractedResults = [];
 
@@ -1688,6 +2033,8 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
           id: state.threadData.id,
           isIncognito: state.threadData.isIncognito,
           results: tempUpdatedResults,
+          obsidianNoteName: state.threadData.obsidianNoteName,
+          obsidianNoteContent: state.threadData.obsidianNoteContent,
           createdAt: Timestamp.now(),
           updatedAt: Timestamp.now());
     } else {
@@ -1695,12 +2042,15 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
           id: threadId,
           isIncognito: state.isIncognito,
           results: tempUpdatedResults,
+          obsidianNoteName: state.pendingObsidianNoteName,
+          obsidianNoteContent: state.pendingObsidianNoteContent,
           createdAt: Timestamp.now(),
           updatedAt: Timestamp.now());
     }
     String? answer;
     List<LocalResultData> mapResults = [];
     List<ShortVideoResultData> instagramShortVideos = [];
+    List<VisualBrowseResultData> pendingBrowseImages = [];
 
     // Search memory for relevant content to enhance the answer
     List<({String text, String sourceQuery, double score})> memoryChunks = [];
@@ -1817,6 +2167,10 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       if (_drissyEngine.isLoaded) {
         final userData = await _getUserLocation();
         final hasVision = _drissyEngine.isVisionLoaded && chatImagePath != null;
+        final chatNoteContent = state.pendingObsidianNoteContent ??
+            state.threadData.obsidianNoteContent;
+        final chatNoteName = state.pendingObsidianNoteName ??
+            state.threadData.obsidianNoteName;
         final chatSystemPrompt =
             """You are Drissy, a helpful, friendly AI assistant.
 
@@ -1829,7 +2183,7 @@ Rules:
 ${hasVision ? "- The user has shared an image. Describe and analyze it as part of your response." : ""}
 
 The user is located in ${userData.city}, ${userData.region}, ${userData.country}. The current date and time is ${DateTime.now()}.
-${_personalizationText.isNotEmpty ? '\nAbout the user: $_personalizationText' : ''}${!hasVision && event.imageDescription.isNotEmpty ? "\nImage description: ${event.imageDescription}" : ""}""";
+${_personalizationText.isNotEmpty ? '\nAbout the user: $_personalizationText' : ''}${!hasVision && event.imageDescription.isNotEmpty ? "\nImage description: ${event.imageDescription}" : ""}${chatNoteContent != null ? '\n\nThe user has attached a note called "${chatNoteName ?? 'Note'}". Use its content to inform your answers and reference it explicitly when relevant.\n\nNote content:\n$chatNoteContent' : ''}""";
 
         final allPrevious = state.threadData.results
             .getRange(0, state.threadData.results.length - 1)
@@ -1962,16 +2316,17 @@ ${_personalizationText.isNotEmpty ? '\nAbout the user: $_personalizationText' : 
         final searchStartTime = DateTime.now();
 
         if (state.generalStatus == HomeGeneralStatus.enabled) {
-          _webSearchCompleter = Completer<List<ExtractedResultInfo>>();
+          _webSearchCompleter = Completer<BrowseSearchResult>();
           emit(state.copyWith(webSearchQuery: searchQuery, isQuickSearch: _isSimpleFactualQuery(query)));
 
           // Wait for the UI to open WebView and return results
-          final webResults = await _webSearchCompleter!.future;
+          final browseResult = await _webSearchCompleter!.future;
           _webSearchCompleter = null;
+          pendingBrowseImages = browseResult.images;
 
           int totalChars = 0;
           const int charLimit = 120000;
-          for (final result in webResults) {
+          for (final result in browseResult.webResults) {
             final int resultChars = result.url.length +
                 result.title.length +
                 result.excerpts.length;
@@ -2258,6 +2613,12 @@ ${_personalizationText.isNotEmpty ? '\nAbout the user: $_personalizationText' : 
               .toList();
         }
 
+        // Prepend Obsidian note as highest-priority source
+        final obsidianSource = await _prepareObsidianNoteSource();
+        if (obsidianSource != null) {
+          sourcesForDrissy.insert(0, 'Obsidian Note:\n$obsidianSource');
+        }
+
         // Clear condensing sources after summary is ready
         emit(state.copyWith(condensingSources: const []));
 
@@ -2310,6 +2671,7 @@ ${_personalizationText.isNotEmpty ? '\nAbout the user: $_personalizationText' : 
       userQuery: query,
       searchQuery: searchQuery,
       answer: answer ?? "",
+      browseImages: pendingBrowseImages,
       influence: extractedResults.map((searchResult) {
         return InfluenceData(
             url: searchResult.url,
@@ -2329,6 +2691,7 @@ ${_personalizationText.isNotEmpty ? '\nAbout the user: $_personalizationText' : 
               similarity: 0);
         })),
       local: mapResults,
+      obsidianNoteName: resultData.obsidianNoteName,
     );
 
     final updatedResults = List<ThreadResultData>.from(state.threadData.results)
@@ -2350,6 +2713,18 @@ ${_personalizationText.isNotEmpty ? '\nAbout the user: $_personalizationText' : 
           createdAt: Timestamp.now(),
           updatedAt: Timestamp.now());
     }
+    // Commit pending Obsidian note on first message; preserve on subsequent ones
+    if (updatedResults.length == 1 && state.pendingObsidianNoteContent != null) {
+      updThreadData = updThreadData.copyWith(
+        obsidianNoteName: state.pendingObsidianNoteName,
+        obsidianNoteContent: state.pendingObsidianNoteContent,
+      );
+    } else if (updatedResults.length > 1) {
+      updThreadData = updThreadData.copyWith(
+        obsidianNoteName: state.threadData.obsidianNoteName,
+        obsidianNoteContent: state.threadData.obsidianNoteContent,
+      );
+    }
     if (_cancelTaskGen) {
       return;
     }
@@ -2358,7 +2733,9 @@ ${_personalizationText.isNotEmpty ? '\nAbout the user: $_personalizationText' : 
         threadData: updThreadData,
         uploadedImageUrl: "",
         selectedImage: null,
-        imageStatus: HomeImageStatus.unselected));
+        imageStatus: HomeImageStatus.unselected,
+        pendingObsidianNoteName: null,
+        pendingObsidianNoteContent: null));
     event.imageDescriptionNotifier.value = "";
 
     // Generate thread title and summary using AI Gateway before saving
@@ -2497,6 +2874,7 @@ ${_personalizationText.isNotEmpty ? '\nAbout the user: $_personalizationText' : 
       answer: "",
       influence: [],
       local: [],
+      obsidianNoteName: state.pendingObsidianNoteName,
     );
     List<ExtractedResultInfo> extractedResults = [];
 
@@ -2515,6 +2893,8 @@ ${_personalizationText.isNotEmpty ? '\nAbout the user: $_personalizationText' : 
           id: state.threadData.id,
           isIncognito: state.threadData.isIncognito,
           results: tempUpdatedResults,
+          obsidianNoteName: state.threadData.obsidianNoteName,
+          obsidianNoteContent: state.threadData.obsidianNoteContent,
           createdAt: Timestamp.now(),
           updatedAt: Timestamp.now());
     } else {
@@ -2522,6 +2902,8 @@ ${_personalizationText.isNotEmpty ? '\nAbout the user: $_personalizationText' : 
           id: threadId,
           isIncognito: state.isIncognito,
           results: tempUpdatedResults,
+          obsidianNoteName: state.pendingObsidianNoteName,
+          obsidianNoteContent: state.pendingObsidianNoteContent,
           createdAt: Timestamp.now(),
           updatedAt: Timestamp.now());
     }
@@ -2951,6 +3333,12 @@ print("Starting Deep Drissy search with query: $searchQuery");
         );
       }
 
+      // Prepend Obsidian note as highest-priority source
+      final obsidianSourceDeep = await _prepareObsidianNoteSource();
+      if (obsidianSourceDeep != null) {
+        sourcesForDrissy.insert(0, 'Obsidian Note:\n$obsidianSourceDeep');
+      }
+
       print("Deep Drissy: Starting answer generation via on-device AI with ${sourcesForDrissy.length} summaries");
 
       if (_drissyEngine.isLoaded) {
@@ -2959,6 +3347,11 @@ print("Starting Deep Drissy search with query: $searchQuery");
           await for (final token in _drissyEngine.answer(
             query: query,
             sources: sourcesForDrissy,
+            maxTokens: 2048,
+            systemPromptSuffix:
+                'This is a deep research response. Be COMPREHENSIVE and EXHAUSTIVE. '
+                'Cover every angle from the sources with detailed sections and subsections. '
+                'Do not truncate — write a thorough, complete research summary.',
           )) {
             finalContent += token;
             event.streamedText.value = finalContent;
@@ -3023,6 +3416,7 @@ print("Starting Deep Drissy search with query: $searchQuery");
               similarity: 0);
         })),
       local: mapResults,
+      obsidianNoteName: resultData.obsidianNoteName,
     );
 
     final updatedResults =
@@ -3045,6 +3439,18 @@ print("Starting Deep Drissy search with query: $searchQuery");
           createdAt: Timestamp.now(),
           updatedAt: Timestamp.now());
     }
+    // Commit pending Obsidian note on first message; preserve on subsequent ones
+    if (updatedResults.length == 1 && state.pendingObsidianNoteContent != null) {
+      updThreadData = updThreadData.copyWith(
+        obsidianNoteName: state.pendingObsidianNoteName,
+        obsidianNoteContent: state.pendingObsidianNoteContent,
+      );
+    } else if (updatedResults.length > 1) {
+      updThreadData = updThreadData.copyWith(
+        obsidianNoteName: state.threadData.obsidianNoteName,
+        obsidianNoteContent: state.threadData.obsidianNoteContent,
+      );
+    }
     if (_cancelTaskGen) return;
 
     emit(state.copyWith(
@@ -3052,7 +3458,9 @@ print("Starting Deep Drissy search with query: $searchQuery");
         threadData: updThreadData,
         uploadedImageUrl: "",
         selectedImage: null,
-        imageStatus: HomeImageStatus.unselected));
+        imageStatus: HomeImageStatus.unselected,
+        pendingObsidianNoteName: null,
+        pendingObsidianNoteContent: null));
     event.imageDescriptionNotifier.value = "";
 
     final titleSummary =
@@ -3073,7 +3481,7 @@ print("Starting Deep Drissy search with query: $searchQuery");
     add(HomeInitialUserData());
   }
 
- 
+
 
   /// Generate a reply from Drissea API given a query and search results.
   Future<String?> generateReply(
@@ -3393,10 +3801,10 @@ ${jsonEncode(userContext)}
         .toList();
 
     final systemPrompt =
-        """Rewrite the QUERY by replacing pronouns and references using the CONTEXT. Output ONLY the rewritten query. No explanation.""";
+        """Generate a concise search query to find information that answers the USER QUERY, using the CONTEXT for reference. Output ONLY the search query. No explanation.""";
 
     final userMessage =
-        """Rewrite the QUERY by replacing pronouns and references using the CONTEXT. Output ONLY the rewritten query. No explanation. \nCONTEXT:\n${contextLines.join('\n')}\n\nQUERY: $query\n\nREWRITTEN QUERY:""";
+        """Generate a concise search query to find information that answers the USER QUERY, using the CONTEXT for reference. Output ONLY the search query. No explanation.\nCONTEXT:\n${contextLines.join('\n')}\n\nUSER QUERY: $query\n\nSEARCH QUERY:""";
 
     try {
       if (_drissyEngine.isLoaded) {
@@ -3412,6 +3820,7 @@ ${jsonEncode(userContext)}
           if (result.length <= query.length * 3) {
             return result;
           }
+          print(result);
           print("❌ Query rewrite too long, using original");
         }
       } else {
@@ -3977,8 +4386,49 @@ Don't reveal any personal information you have in your context unless asked abou
           createdAt: Timestamp.now(),
           updatedAt: Timestamp.now(),
         ),
+        pendingObsidianNoteName: null,
+        pendingObsidianNoteContent: null,
       ),
     );
+  }
+
+  FutureOr<void> _handleObsidianNoteSelected(
+      HomeObsidianNoteSelected event, Emitter<HomeState> emit) {
+    emit(state.copyWith(
+      pendingObsidianNoteName: event.noteName,
+      pendingObsidianNoteContent: event.noteContent,
+    ));
+  }
+
+  FutureOr<void> _handleObsidianNoteCleared(
+      HomeObsidianNoteCleared event, Emitter<HomeState> emit) {
+    emit(state.copyWith(
+      pendingObsidianNoteName: null,
+      pendingObsidianNoteContent: null,
+      threadData: state.threadData.copyWith(
+        obsidianNoteName: null,
+        obsidianNoteContent: null,
+      ),
+    ));
+  }
+
+  /// Resolves the Obsidian note content for the current inference call,
+  /// truncating to fit within the token budget if needed.
+  Future<String?> _prepareObsidianNoteSource() async {
+    final rawContent = state.threadData.results.isEmpty
+        ? state.pendingObsidianNoteContent
+        : state.threadData.obsidianNoteContent;
+
+    if (rawContent == null || rawContent.isEmpty) return null;
+
+    const int maxNoteTokens = 5268; // 8192 - 1024gen - 200sys - 800conv - 800src - 100query
+
+    final tokens = await _drissyEngine.tokenize(rawContent);
+    if (tokens.length <= maxNoteTokens) return rawContent;
+
+    final ratio = rawContent.length / tokens.length;
+    final charLimit = (maxNoteTokens * ratio).floor();
+    return '${rawContent.substring(0, charLimit)}\n\n[...note truncated to fit context]';
   }
 
   Future<void> _deleteAllHistory(
@@ -4002,9 +4452,7 @@ Don't reveal any personal information you have in your context unless asked abou
 
   Future<void> _getUserInfo(
       HomeInitialUserData event, Emitter<HomeState> emit) async {
-    if (state.historyStatus == HomeHistoryStatus.loading) {
-      // initMixpanel();
-    }
+    emit(state.copyWith(historyStatus: HomeHistoryStatus.loading));
 
     // 1. Load local data first for instant display
     try {
@@ -4245,5 +4693,600 @@ Don't reveal any personal information you have in your context unless asked abou
     }
   }
 
-  
+  void _toggleVisualBrowse(
+    HomeToggleVisualBrowse event,
+    Emitter<HomeState> emit,
+  ) {
+    final next = state.visualBrowseStatus == HomeVisualBrowseStatus.enabled
+        ? HomeVisualBrowseStatus.disabled
+        : HomeVisualBrowseStatus.enabled;
+    // Disable other modes when enabling visual browse
+    emit(state.copyWith(
+      visualBrowseStatus: next,
+      deepDrissyStatus: next == HomeVisualBrowseStatus.enabled
+          ? HomeDeepDrissyStatus.disabled
+          : state.deepDrissyStatus,
+      isChatModeActive: next == HomeVisualBrowseStatus.enabled
+          ? false
+          : state.isChatModeActive,
+    ));
+  }
+
+  void _handleVisualBrowseImagesExtracted(
+    HomeVisualBrowseImagesExtracted event,
+    Emitter<HomeState> emit,
+  ) {
+    if (_visualBrowseCompleter != null && !_visualBrowseCompleter!.isCompleted) {
+      _visualBrowseCompleter!.complete(event.images);
+    }
+    emit(state.copyWith(visualBrowseSearchQuery: null));
+  }
+
+  Future<void> _handleVisualBrowseStart(
+    HomeVisualBrowseStart event,
+    Emitter<HomeState> emit,
+  ) async {
+    // Create placeholder thread entry
+    final newResult = ThreadResultData(
+      userQuery: event.query,
+      searchQuery: '',
+      visualBrowseResults: const [],
+      answer: '',
+      web: [],
+      shortVideos: [],
+      videos: [],
+      news: [],
+      images: [],
+      local: [],
+      youtubeVideos: [],
+      influence: [],
+      searchType: HomeSearchType.general,
+      isSearchMode: false,
+      sourceImageDescription: '',
+      sourceImageLink: '',
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    );
+    final results = [...state.threadData.results, newResult];
+    final loadingIndex = results.length - 1;
+
+    event.streamedText.value = '';
+
+    emit(state.copyWith(
+      threadData: state.threadData.copyWith(results: results),
+      loadingIndex: loadingIndex,
+      status: HomePageStatus.loading,
+      replyStatus: HomeReplyStatus.loading,
+      visualBrowseSearchQuery: event.query,
+    ));
+
+    // Wait for WebView to extract images
+    _visualBrowseCompleter = Completer<List<VisualBrowseImageData>>();
+    List<VisualBrowseImageData> images;
+    try {
+      images = await _visualBrowseCompleter!.future
+          .timeout(const Duration(seconds: 40), onTimeout: () => []);
+    } catch (_) {
+      images = [];
+    }
+
+    if (images.isEmpty) {
+      emit(state.copyWith(
+        replyStatus: HomeReplyStatus.success,
+        status: HomePageStatus.success,
+        deepDrissyReadingStatus: null,
+      ));
+      return;
+    }
+
+    // Accept all images (up to 10) without AI filtering
+    final engine = _drissyEngine;
+    final tempDir = await getTemporaryDirectory();
+    final accepted = <VisualBrowseResultData>[];
+
+    final capped = images.take(10).toList();
+    for (final img in capped) {
+      accepted.add(VisualBrowseResultData(
+        thumbnailDataUri: img.thumbnailDataUri,
+        title: img.title,
+        sourceLink: img.sourceLink,
+      ));
+    }
+    event.visualBrowseNotifier.value = List<VisualBrowseResultData>.from(accepted);
+
+    // ── Phase 1 done: store filtered images, show album ──────────────────────
+    final phase1Results = List<ThreadResultData>.from(state.threadData.results);
+    if (loadingIndex < phase1Results.length) {
+      final old = phase1Results[loadingIndex];
+      phase1Results[loadingIndex] = ThreadResultData(
+        userQuery: old.userQuery,
+        searchQuery: old.searchQuery,
+        visualBrowseResults: accepted,
+        answer: '',
+        web: old.web,
+        shortVideos: old.shortVideos,
+        videos: old.videos,
+        news: old.news,
+        images: old.images,
+        local: old.local,
+        youtubeVideos: old.youtubeVideos,
+        influence: old.influence,
+        searchType: old.searchType,
+        isSearchMode: old.isSearchMode,
+        sourceImageDescription: old.sourceImageDescription,
+        sourceImageLink: old.sourceImageLink,
+        createdAt: old.createdAt,
+        updatedAt: Timestamp.now(),
+        obsidianNoteName: old.obsidianNoteName,
+      );
+    }
+
+    emit(state.copyWith(
+      threadData: state.threadData.copyWith(results: phase1Results),
+      replyStatus: HomeReplyStatus.success,
+      status: HomePageStatus.success,
+      deepDrissyReadingStatus: null,
+    ));
+
+    // ── Phase 2: describe each accepted image (vision) ────────────────────────
+    if (accepted.isEmpty || !engine.isLoaded) return;
+
+    final descriptions = <String>[];
+
+    for (int i = 0; i < accepted.length; i++) {
+      emit(state.copyWith(
+        visualBrowseAnalysisStatus:
+            'Describing image ${i + 1} of ${accepted.length}...',
+      ));
+
+      try {
+        final bytes = await _resolveVBImageBytes(accepted[i].thumbnailDataUri);
+        if (bytes == null) continue;
+
+        final tempFile = File('${tempDir.path}/vb_desc_$i.jpg');
+        await tempFile.writeAsBytes(bytes);
+
+        String description = '';
+        final descStream = engine.chat(
+          systemMessage:
+              'Describe this image concisely in under 80 words, focusing on what is visually present.',
+          conversationMessages: const [
+            {'role': 'user', 'content': 'Describe this image.'}
+          ],
+          imagePath: tempFile.path,
+        );
+        await for (final token in descStream) {
+          description += token;
+          if (description.split(' ').length > 100) break;
+        }
+
+        try { await tempFile.delete(); } catch (_) {}
+
+        final label = accepted[i].title.isNotEmpty
+            ? accepted[i].title
+            : 'Image ${i + 1}';
+        descriptions.add('**$label**: $description');
+      } catch (e) {
+        print('VisualBrowse: description error for image $i: $e');
+      }
+    }
+
+    // ── Phase 3: generate answer from descriptions ────────────────────────────
+    if (descriptions.isEmpty) {
+      emit(state.copyWith(visualBrowseAnalysisStatus: null));
+      return;
+    }
+
+    emit(state.copyWith(
+      visualBrowseAnalysisStatus: null,
+      deepDrissyReadingStatus: 'Generating answer...',
+    ));
+
+    final combinedPrompt = 'The user searched for: "${event.query}"\n\n'
+        'Here are descriptions of the found images:\n\n'
+        '${descriptions.join('\n\n')}\n\n'
+        'Based on these images, provide a helpful, concise answer to the user\'s query.';
+
+    String finalAnswer = '';
+    try {
+      final answerStream = engine.chat(
+        systemMessage:
+            'You are a helpful assistant. Answer based on the image descriptions provided.',
+        conversationMessages: [
+          {'role': 'user', 'content': combinedPrompt}
+        ],
+      );
+      await for (final token in answerStream) {
+        finalAnswer += token;
+        event.streamedText.value = finalAnswer;
+        emit(state.copyWith(replyStatus: HomeReplyStatus.success));
+      }
+    } catch (e) {
+      print('VisualBrowse: answer generation error: $e');
+    }
+
+    // ── Phase 4: persist answer + clear status ────────────────────────────────
+    final finalResults = List<ThreadResultData>.from(state.threadData.results);
+    if (loadingIndex < finalResults.length) {
+      final old = finalResults[loadingIndex];
+      finalResults[loadingIndex] = ThreadResultData(
+        userQuery: old.userQuery,
+        searchQuery: old.searchQuery,
+        visualBrowseResults: accepted,
+        answer: finalAnswer,
+        web: old.web,
+        shortVideos: old.shortVideos,
+        videos: old.videos,
+        news: old.news,
+        images: old.images,
+        local: old.local,
+        youtubeVideos: old.youtubeVideos,
+        influence: old.influence,
+        searchType: old.searchType,
+        isSearchMode: old.isSearchMode,
+        sourceImageDescription: old.sourceImageDescription,
+        sourceImageLink: old.sourceImageLink,
+        createdAt: old.createdAt,
+        updatedAt: Timestamp.now(),
+        obsidianNoteName: old.obsidianNoteName,
+      );
+    }
+
+    emit(state.copyWith(
+      threadData: state.threadData.copyWith(results: finalResults),
+      replyStatus: HomeReplyStatus.success,
+      status: HomePageStatus.success,
+      visualBrowseAnalysisStatus: null,
+      deepDrissyReadingStatus: null,
+    ));
+  }
+
+  Future<Uint8List?> _resolveVBImageBytes(String src) async {
+    if (src.startsWith('data:image/')) {
+      return base64Decode(src.split(',').last);
+    } else if (src.startsWith('http')) {
+      final response = await httpClient
+          .get(Uri.parse(src))
+          .timeout(const Duration(seconds: 8));
+      if (response.statusCode == 200) return response.bodyBytes;
+    }
+    return null;
+  }
+
+  void _handleVisualBrowseCompleted(
+    HomeVisualBrowseCompleted event,
+    Emitter<HomeState> emit,
+  ) {
+    final newResult = ThreadResultData(
+      userQuery: event.query,
+      searchQuery: '',
+      visualBrowseResults: event.images,
+      answer: '',
+      web: [],
+      shortVideos: [],
+      videos: [],
+      news: [],
+      images: [],
+      local: [],
+      youtubeVideos: [],
+      influence: [],
+      searchType: HomeSearchType.general,
+      isSearchMode: false,
+      sourceImageDescription: '',
+      sourceImageLink: '',
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    );
+    final updatedResults = [
+      ...state.threadData.results,
+      newResult,
+    ];
+    emit(state.copyWith(
+      threadData: state.threadData.copyWith(results: updatedResults),
+    ));
+  }
+
+  // ── Moodboard handlers ─────────────────────────────────────────────────────
+
+  void _toggleMoodboard(
+    HomeToggleMoodboard event,
+    Emitter<HomeState> emit,
+  ) {
+    final next = state.moodboardStatus == HomeMoodboardStatus.enabled
+        ? HomeMoodboardStatus.disabled
+        : HomeMoodboardStatus.enabled;
+    emit(state.copyWith(
+      moodboardStatus: next,
+      deepDrissyStatus: next == HomeMoodboardStatus.enabled
+          ? HomeDeepDrissyStatus.disabled
+          : state.deepDrissyStatus,
+      visualBrowseStatus: next == HomeMoodboardStatus.enabled
+          ? HomeVisualBrowseStatus.disabled
+          : state.visualBrowseStatus,
+      isChatModeActive: next == HomeMoodboardStatus.enabled
+          ? false
+          : state.isChatModeActive,
+    ));
+  }
+
+  void _handleMoodboardImagesExtracted(
+    HomeMoodboardImagesExtracted event,
+    Emitter<HomeState> emit,
+  ) {
+    if (_moodboardCompleter != null && !_moodboardCompleter!.isCompleted) {
+      _moodboardCompleter!.complete(event.images);
+    }
+    emit(state.copyWith(moodboardSearchQuery: null));
+  }
+
+  /// Helper: rebuild a ThreadResultData with updated moodboard results + answer.
+  ThreadResultData _rebuildWithMoodboard(
+    ThreadResultData old,
+    List<MoodboardResultData> moodboardResults,
+    String answer,
+  ) {
+    return ThreadResultData(
+      userQuery: old.userQuery,
+      searchQuery: old.searchQuery,
+      moodboardResults: moodboardResults,
+      visualBrowseResults: old.visualBrowseResults,
+      answer: answer.isNotEmpty ? answer : old.answer,
+      web: old.web,
+      shortVideos: old.shortVideos,
+      videos: old.videos,
+      news: old.news,
+      images: old.images,
+      local: old.local,
+      youtubeVideos: old.youtubeVideos,
+      influence: old.influence,
+      searchType: old.searchType,
+      isSearchMode: old.isSearchMode,
+      sourceImageDescription: old.sourceImageDescription,
+      sourceImageLink: old.sourceImageLink,
+      createdAt: old.createdAt,
+      updatedAt: Timestamp.now(),
+      obsidianNoteName: old.obsidianNoteName,
+    );
+  }
+
+  Future<void> _handleMoodboardStart(
+    HomeMoodboardStart event,
+    Emitter<HomeState> emit,
+  ) async {
+    // ── Phase 0: create placeholder thread entry ──────────────────────────────
+    final newResult = ThreadResultData(
+      userQuery: event.query,
+      searchQuery: '',
+      moodboardResults: const [],
+      visualBrowseResults: const [],
+      answer: '',
+      web: [],
+      shortVideos: [],
+      videos: [],
+      news: [],
+      images: [],
+      local: [],
+      youtubeVideos: [],
+      influence: [],
+      searchType: HomeSearchType.general,
+      isSearchMode: false,
+      sourceImageDescription: '',
+      sourceImageLink: '',
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    );
+    final results = [...state.threadData.results, newResult];
+    final loadingIndex = results.length - 1;
+
+    event.moodboardNotifier.value = [];
+    event.scanImagesNotifier.value = [];
+    event.progressNotifier.value = '';
+
+    // ── Phase 1: generate search queries via the cloud API (fast, like Deep Drissy) ──
+    emit(state.copyWith(
+      threadData: state.threadData.copyWith(results: results),
+      loadingIndex: loadingIndex,
+      status: HomePageStatus.generateQuery,  // shows "Understanding" loader
+      replyStatus: HomeReplyStatus.loading,
+    ));
+
+    List<String> subQueries = await _generateMoodboardSearchQueries(event.query);
+    if (subQueries.isEmpty) subQueries = [event.query];
+
+    // ── Phase 2: open ONE MoodboardWebView for all queries ───────────────────
+    // MoodboardWebView handles navigation between queries internally and returns
+    // all extracted images in a single pop — no flicker between home ↔ webview.
+    _moodboardCompleter = Completer<List<VisualBrowseImageData>>();
+    emit(state.copyWith(
+      status: HomePageStatus.getSearchResults,
+      moodboardAllQueries: subQueries,
+    ));
+
+    List<VisualBrowseImageData> allExtracted;
+    try {
+      allExtracted = await _moodboardCompleter!.future
+          .timeout(const Duration(seconds: 300), onTimeout: () => []);
+    } catch (_) {
+      allExtracted = [];
+    }
+
+    // Clear the trigger so the BlocListener doesn't refire
+    emit(state.copyWith(moodboardAllQueries: null));
+
+    if (allExtracted.isEmpty) {
+      event.progressNotifier.value = '';
+      emit(state.copyWith(
+        replyStatus: HomeReplyStatus.success,
+        status: HomePageStatus.success,
+        moodboardAnalysisStatus: null,
+      ));
+      return;
+    }
+
+    // ── Phase 3: skip AI — accept all extracted images directly ─────────────
+    event.progressNotifier.value = '';
+
+    final finalImages = allExtracted
+        .map((img) => MoodboardResultData(
+              thumbnailDataUri: img.thumbnailDataUri,
+              title: img.title,
+              sourceLink: img.sourceLink,
+              searchQuery: event.query,
+            ))
+        .toList();
+
+    event.moodboardNotifier.value = finalImages;
+
+    final finalResults = List<ThreadResultData>.from(state.threadData.results);
+    if (loadingIndex < finalResults.length) {
+      finalResults[loadingIndex] =
+          _rebuildWithMoodboard(finalResults[loadingIndex], finalImages, '');
+    }
+    emit(state.copyWith(
+      threadData: state.threadData.copyWith(results: finalResults),
+      replyStatus: HomeReplyStatus.success,
+      status: HomePageStatus.success,
+      moodboardAnalysisStatus: null,
+    ));
+  }
+
+  /// Generate moodboard-optimised image search queries via the cloud API.
+  Future<List<String>> _generateMoodboardSearchQueries(String theme) async {
+    try {
+      final apiSecret = dotenv.get('API_SECRET');
+      final url = Uri.parse("https://browser-api.drissea.com/generate-search-queries");
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $apiSecret',
+        },
+        body: jsonEncode({
+          'query': 'moodboard images for: $theme',
+          'context': <Map<String, String>>[],
+          'maxTokens': 256,
+          'maxQueries': 10,
+        }),
+      );
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        final List<dynamic> queries = json['queries'] ?? [];
+        final result = queries
+            .map((q) => q.toString().trim())
+            .where((q) => q.isNotEmpty && q.length > 3)
+            .take(10)
+            .toList();
+        if (result.isNotEmpty) return result;
+      }
+    } catch (e) {
+      print('Moodboard: query API error: $e');
+    }
+    return [];
+  }
+
+  void _handleMoodboardCompleted(
+    HomeMoodboardCompleted event,
+    Emitter<HomeState> emit,
+  ) {
+    final newResult = ThreadResultData(
+      userQuery: event.query,
+      searchQuery: '',
+      moodboardResults: event.images,
+      answer: '',
+      web: [],
+      shortVideos: [],
+      videos: [],
+      news: [],
+      images: [],
+      local: [],
+      youtubeVideos: [],
+      influence: [],
+      searchType: HomeSearchType.general,
+      isSearchMode: false,
+      sourceImageDescription: '',
+      sourceImageLink: '',
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    );
+    emit(state.copyWith(
+      threadData: state.threadData.copyWith(
+          results: [...state.threadData.results, newResult]),
+    ));
+  }
+
+  Future<void> _deleteLocalAIModel(
+    HomeDeleteLocalAIModel event,
+    Emitter<HomeState> emit,
+  ) async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final modelFile = File('${dir.path}/$_modelFileName');
+      final mmProjFile = File('${dir.path}/$_mmProjFileName');
+      if (_drissyEngine.loadedModelPath == modelFile.path) {
+        _drissyEngine.unload();
+      }
+      if (await modelFile.exists()) await modelFile.delete();
+      if (await mmProjFile.exists()) await mmProjFile.delete();
+      emit(state.copyWith(
+        localAIStatus: LocalAIStatus.idle,
+        localAIDownloadProgress: 0.0,
+        localAIDownloadPhase: '',
+        selectedModel: state.selectedModel == HomeModel.localAI
+            ? HomeModel.gemini
+            : state.selectedModel,
+      ));
+    } catch (e) {
+      debugPrint('Delete Qwen model error: $e');
+    }
+  }
+
+  Future<void> _deleteGemma4Model(
+    HomeDeleteGemma4Model event,
+    Emitter<HomeState> emit,
+  ) async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final modelFile = File('${dir.path}/$_gemma4FileName');
+      final mmProjFile = File('${dir.path}/$_gemma4MmProjFileName');
+      if (_drissyEngine.loadedModelPath == modelFile.path) {
+        _drissyEngine.unload();
+      }
+      if (await modelFile.exists()) await modelFile.delete();
+      if (await mmProjFile.exists()) await mmProjFile.delete();
+      emit(state.copyWith(
+        gemma4Status: LocalAIStatus.idle,
+        gemma4DownloadProgress: 0.0,
+        gemma4DownloadPhase: '',
+        selectedModel: state.selectedModel == HomeModel.gemma4
+            ? HomeModel.gemini
+            : state.selectedModel,
+      ));
+    } catch (e) {
+      debugPrint('Delete Gemma 4 model error: $e');
+    }
+  }
+
+  Future<void> _deleteBonsaiModel(
+    HomeDeleteBonsaiModel event,
+    Emitter<HomeState> emit,
+  ) async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final modelFile = File('${dir.path}/$_bonsaiFileName');
+      if (_drissyEngine.loadedModelPath == modelFile.path) {
+        _drissyEngine.unload();
+      }
+      if (await modelFile.exists()) await modelFile.delete();
+      emit(state.copyWith(
+        bonsaiStatus: LocalAIStatus.idle,
+        bonsaiDownloadProgress: 0.0,
+        bonsaiDownloadPhase: '',
+        selectedModel: state.selectedModel == HomeModel.bonsai
+            ? HomeModel.gemini
+            : state.selectedModel,
+      ));
+    } catch (e) {
+      debugPrint('Delete Bonsai model error: $e');
+    }
+  }
 }

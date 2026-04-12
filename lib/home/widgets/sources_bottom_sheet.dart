@@ -1,6 +1,10 @@
+import 'dart:convert';
+
 import 'package:bavi/home/bloc/home_bloc.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:icons_plus/icons_plus.dart';
+import 'package:syncfusion_flutter_pdf/pdf.dart';
 
 import 'package:image_picker/image_picker.dart';
 
@@ -12,7 +16,9 @@ class SourcesBottomSheet extends StatefulWidget {
   final bool isMapEnabled;
   final bool isYoutubeEnabled;
   final bool isInstagramEnabled;
-
+  final void Function(String noteName, String noteContent) onObsidianNoteSelected;
+  final String? currentObsidianNoteName;
+  final bool isNoteLocked;
   const SourcesBottomSheet({
     super.key,
     required this.onImageSelected,
@@ -22,6 +28,9 @@ class SourcesBottomSheet extends StatefulWidget {
     required this.isMapEnabled,
     required this.isYoutubeEnabled,
     required this.isInstagramEnabled,
+    required this.onObsidianNoteSelected,
+    this.currentObsidianNoteName,
+    this.isNoteLocked = false,
   });
 
   @override
@@ -32,6 +41,50 @@ class _SourcesBottomSheetState extends State<SourcesBottomSheet> {
   bool isWebEnabled = false;
   bool isSocialEnabled = false;
   final ImagePicker _picker = ImagePicker();
+
+  Future<void> _pickFile() async {
+    if (widget.isNoteLocked) return;
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['md', 'txt', 'csv', 'json', 'pdf'],
+      withData: true,
+    );
+    if (result == null || result.files.single.bytes == null) return;
+
+    final bytes = result.files.single.bytes!;
+    final name = result.files.single.name;
+    String content;
+
+    try {
+      if (name.toLowerCase().endsWith('.pdf')) {
+        final document = PdfDocument(inputBytes: bytes);
+        content = PdfTextExtractor(document).extractText();
+        document.dispose();
+        if (content.trim().isEmpty) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Could not extract text from PDF (scanned or image-only).')),
+            );
+          }
+          return;
+        }
+      } else {
+        content = utf8.decode(bytes, allowMalformed: true);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to read file: $e')),
+        );
+      }
+      return;
+    }
+
+    if (mounted) {
+      Navigator.pop(context);
+      widget.onObsidianNoteSelected(name, content);
+    }
+  }
 
   Future<void> _pickImage(ImageSource source) async {
     try {
@@ -109,7 +162,7 @@ class _SourcesBottomSheetState extends State<SourcesBottomSheet> {
                   onTap: () => _pickImage(ImageSource.gallery),
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 12),
               Expanded(
                 child: _buildSourceCard(
                   icon: Iconsax.camera_outline,
@@ -117,6 +170,8 @@ class _SourcesBottomSheetState extends State<SourcesBottomSheet> {
                   onTap: () => _pickImage(ImageSource.camera),
                 ),
               ),
+              const SizedBox(width: 12),
+              Expanded(child: _buildFileCard()),
             ],
           ),
           const SizedBox(height: 24),
@@ -229,6 +284,46 @@ class _SourcesBottomSheetState extends State<SourcesBottomSheet> {
           // ),
           const SizedBox(height: 20),
         ],
+      ),
+    );
+  }
+
+  Widget _buildFileCard() {
+    final hasFile = widget.currentObsidianNoteName != null;
+    final displayName = hasFile
+        ? widget.currentObsidianNoteName!.replaceAll(RegExp(r'\.[^.]+$'), '')
+        : 'File';
+    return GestureDetector(
+      onTap: _pickFile,
+      child: Container(
+        height: 100,
+        decoration: BoxDecoration(
+          color: hasFile ? const Color(0xFFF0EBF8) : const Color(0xFFF5F5F5),
+          borderRadius: BorderRadius.circular(16),
+          border: hasFile
+              ? Border.all(color: const Color(0xFF8A2BE2), width: 1.5)
+              : null,
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.attach_file_rounded,
+              size: 32,
+              color: hasFile ? const Color(0xFF8A2BE2) : Colors.black,
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Text(
+                displayName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

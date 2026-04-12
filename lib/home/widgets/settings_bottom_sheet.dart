@@ -2,6 +2,7 @@ import 'package:bavi/home/bloc/home_bloc.dart';
 import 'package:bavi/home/widgets/mode_bottom_sheet.dart';
 import 'package:bavi/home/widgets/chat_backup_bottom_sheet.dart';
 import 'package:bavi/home/widgets/likes_dislikes_bottom_sheet.dart';
+import 'package:bavi/home/widgets/manage_models_bottom_sheet.dart';
 import 'package:bavi/home/widgets/personalization_bottom_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -182,6 +183,22 @@ class _SettingsBottomSheetState extends State<SettingsBottomSheet> {
                 _divider(),
 
                 _settingsTile(
+                  icon: Iconsax.cpu_bold,
+                  label: 'Manage Models',
+                  onTap: () {
+                    showModalBottomSheet<void>(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => BlocProvider.value(
+                        value: context.read<HomeBloc>(),
+                        child: const ManageModelsBottomSheet(),
+                      ),
+                    );
+                  },
+                ),
+                _divider(),
+                _settingsTile(
                   icon: Iconsax.designtools_outline,
                   label: 'Personalization',
                   onTap: () {
@@ -207,19 +224,19 @@ class _SettingsBottomSheetState extends State<SettingsBottomSheet> {
                   },
                 ),
                 _divider(),
-                _settingsTile(
-                  icon: Iconsax.archive_outline,
-                  label: 'Chat Backup',
-                  onTap: () {
-                    showModalBottomSheet<void>(
-                      context: context,
-                      isScrollControlled: true,
-                      backgroundColor: Colors.transparent,
-                      builder: (_) => const ChatBackupBottomSheet(),
-                    );
-                  },
-                ),
-                _divider(),
+                // _settingsTile(
+                //   icon: Iconsax.archive_outline,
+                //   label: 'Chat Backup',
+                //   onTap: () {
+                //     showModalBottomSheet<void>(
+                //       context: context,
+                //       isScrollControlled: true,
+                //       backgroundColor: Colors.transparent,
+                //       builder: (_) => const ChatBackupBottomSheet(),
+                //     );
+                //   },
+                // ),
+                // _divider(),
                 _settingsTile(
                   icon: Iconsax.trash_outline,
                   label: 'Delete conversation history',

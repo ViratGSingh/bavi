@@ -13,9 +13,11 @@ class DrissyEngine {
   LlamaEngine? _engine;
   bool _isLoaded = false;
   bool _isVisionLoaded = false;
+  String? _loadedModelPath;
 
   bool get isLoaded => _isLoaded;
   bool get isVisionLoaded => _isVisionLoaded;
+  String? get loadedModelPath => _loadedModelPath;
 
   final PeaService _peaService = PeaService();
   bool get isPeaLoaded => _peaService.isLoaded;
@@ -87,6 +89,16 @@ Rules:
       final isLowRam =
           physicalBytes == 0 || physicalBytes < 6 * 1024 * 1024 * 1024;
 
+      // Unload the existing model before loading a new one to free memory
+      if (_engine != null) {
+        print('[ModelSwitch] Unloading previous model from memory...');
+        _engine!.dispose();
+        _engine = null;
+        _isLoaded = false;
+        _isVisionLoaded = false;
+        _loadedModelPath = null;
+      }
+
       _engine = LlamaEngine(LlamaBackend());
       await _engine!.loadModel(
         modelPath,
@@ -103,6 +115,7 @@ Rules:
         ),
       );
       _isLoaded = true;
+      _loadedModelPath = modelPath;
 
       await _warmup();
 
@@ -206,6 +219,8 @@ Rules:
   Stream<String> answer({
     required String query,
     required List<String> sources,
+    int maxTokens = 1024,
+    String? systemPromptSuffix,
   }) async* {
     if (!_isLoaded || _engine == null) {
       yield 'Model not loaded.';
@@ -222,10 +237,15 @@ Rules:
         ? 'Sources:\n$sourcesText\n\nUser question: $query'
         : query;
 
+    final basePrompt = _buildSystemPrompt();
+    final finalSystemPrompt = systemPromptSuffix != null
+        ? '$basePrompt\n\n$systemPromptSuffix'
+        : basePrompt;
+
     final messages = [
       LlamaChatMessage.fromText(
         role: LlamaChatRole.system,
-        text: _buildSystemPrompt(),
+        text: finalSystemPrompt,
       ),
       LlamaChatMessage.fromText(
         role: LlamaChatRole.user,
@@ -233,10 +253,25 @@ Rules:
       ),
     ];
 
+    final params = maxTokens == 1024
+        ? _generationParams
+        : GenerationParams(
+            maxTokens: maxTokens,
+            temp: _generationParams.temp,
+            topK: _generationParams.topK,
+            topP: _generationParams.topP,
+            minP: _generationParams.minP,
+            penalty: _generationParams.penalty,
+            reusePromptPrefix: _generationParams.reusePromptPrefix,
+            streamBatchTokenThreshold:
+                _generationParams.streamBatchTokenThreshold,
+            streamBatchByteThreshold: _generationParams.streamBatchByteThreshold,
+          );
+
     try {
       await for (final chunk in _engine!.create(
         messages,
-        params: _generationParams,
+        params: params,
         enableThinking: false,
       )) {
         final content = chunk.choices.firstOrNull?.delta.content;
@@ -414,10 +449,20 @@ Rules:
     _engine?.cancelGeneration();
   }
 
+  void unload() {
+    _peaService.dispose();
+    _engine?.dispose();
+    _engine = null;
+    _isLoaded = false;
+    _isVisionLoaded = false;
+    _loadedModelPath = null;
+  }
+
   void dispose() {
     _peaService.dispose();
     _engine?.dispose();
     _engine = null;
     _isLoaded = false;
+    _loadedModelPath = null;
   }
 }

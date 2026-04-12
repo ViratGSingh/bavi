@@ -54,6 +54,10 @@ enum HomeSpicyStatus { enabled, disabled }
 
 enum HomeDeepDrissyStatus { enabled, disabled }
 
+enum HomeVisualBrowseStatus { enabled, disabled }
+
+enum HomeMoodboardStatus { enabled, disabled }
+
 enum HomeImageStatus { selected, unselected }
 
 enum HomeHistoryStatus { loading, idle }
@@ -66,7 +70,7 @@ enum HomeExtractUrlStatus { loading, success, failure, idle }
 
 enum OCRExtractionStatus { idle, loading, success, failed, cancelled }
 
-enum HomeModel { deepseek, gemini, claude, openAI, flashThink, localAI }
+enum HomeModel { deepseek, gemini, claude, openAI, flashThink, localAI, gemma4, bonsai }
 
 enum LocalAIStatus { idle, downloading, loading, ready, error, noStorage }
 
@@ -116,12 +120,27 @@ final class HomeState extends Equatable {
     this.deepDrissyStatus = HomeDeepDrissyStatus.disabled,
     this.deepDrissyWebSearchQueries,
     this.deepDrissyReadingStatus,
+    this.visualBrowseStatus = HomeVisualBrowseStatus.disabled,
+    this.visualBrowseSearchQuery,
+    this.visualBrowseAnalysisStatus,
+    this.moodboardStatus = HomeMoodboardStatus.disabled,
+    this.moodboardSearchQuery,
+    this.moodboardAllQueries,
+    this.moodboardAnalysisStatus,
     this.localAIStatus = LocalAIStatus.idle,
     this.localAIDownloadProgress = 0.0,
     this.localAITotalBytes = 0,
     this.localAIVisionTotalBytes = 0,
     this.localAIDownloadPhase = '',
+    this.gemma4Status = LocalAIStatus.idle,
+    this.gemma4DownloadProgress = 0.0,
+    this.gemma4DownloadPhase = '',
+    this.bonsaiStatus = LocalAIStatus.idle,
+    this.bonsaiDownloadProgress = 0.0,
+    this.bonsaiDownloadPhase = '',
     this.condensingSources = const [],
+    this.pendingObsidianNoteName,
+    this.pendingObsidianNoteContent,
   })  : userData = userData ??
             UserProfileInfo(
               email: "NA",
@@ -191,12 +210,27 @@ final class HomeState extends Equatable {
   final HomeDeepDrissyStatus deepDrissyStatus;
   final List<String>? deepDrissyWebSearchQueries;
   final String? deepDrissyReadingStatus;
+  final HomeVisualBrowseStatus visualBrowseStatus;
+  final String? visualBrowseSearchQuery;
+  final String? visualBrowseAnalysisStatus;
+  final HomeMoodboardStatus moodboardStatus;
+  final String? moodboardSearchQuery;
+  final List<String>? moodboardAllQueries;
+  final String? moodboardAnalysisStatus;
   final LocalAIStatus localAIStatus;
   final double localAIDownloadProgress;
   final int localAITotalBytes;
   final int localAIVisionTotalBytes;
   final String localAIDownloadPhase;
+  final LocalAIStatus gemma4Status;
+  final double gemma4DownloadProgress;
+  final String gemma4DownloadPhase;
+  final LocalAIStatus bonsaiStatus;
+  final double bonsaiDownloadProgress;
+  final String bonsaiDownloadPhase;
   final List<Map<String, String>> condensingSources;
+  final String? pendingObsidianNoteName;
+  final String? pendingObsidianNoteContent;
 
   HomeState copyWith({
     String? sessionId,
@@ -241,12 +275,27 @@ final class HomeState extends Equatable {
     HomeDeepDrissyStatus? deepDrissyStatus,
     Object? deepDrissyWebSearchQueries = _sentinel,
     Object? deepDrissyReadingStatus = _sentinel,
+    HomeVisualBrowseStatus? visualBrowseStatus,
+    Object? visualBrowseSearchQuery = _sentinel,
+    Object? visualBrowseAnalysisStatus = _sentinel,
+    HomeMoodboardStatus? moodboardStatus,
+    Object? moodboardSearchQuery = _sentinel,
+    Object? moodboardAllQueries = _sentinel,
+    Object? moodboardAnalysisStatus = _sentinel,
     LocalAIStatus? localAIStatus,
     double? localAIDownloadProgress,
     int? localAITotalBytes,
     int? localAIVisionTotalBytes,
     String? localAIDownloadPhase,
+    LocalAIStatus? gemma4Status,
+    double? gemma4DownloadProgress,
+    String? gemma4DownloadPhase,
+    LocalAIStatus? bonsaiStatus,
+    double? bonsaiDownloadProgress,
+    String? bonsaiDownloadPhase,
     List<Map<String, String>>? condensingSources,
+    Object? pendingObsidianNoteName = _sentinel,
+    Object? pendingObsidianNoteContent = _sentinel,
   }) {
     return HomeState(
       editQuery: editQuery ?? this.editQuery,
@@ -302,6 +351,23 @@ final class HomeState extends Equatable {
       deepDrissyReadingStatus: deepDrissyReadingStatus == _sentinel
           ? this.deepDrissyReadingStatus
           : deepDrissyReadingStatus as String?,
+      visualBrowseStatus: visualBrowseStatus ?? this.visualBrowseStatus,
+      visualBrowseSearchQuery: visualBrowseSearchQuery == _sentinel
+          ? this.visualBrowseSearchQuery
+          : visualBrowseSearchQuery as String?,
+      visualBrowseAnalysisStatus: visualBrowseAnalysisStatus == _sentinel
+          ? this.visualBrowseAnalysisStatus
+          : visualBrowseAnalysisStatus as String?,
+      moodboardStatus: moodboardStatus ?? this.moodboardStatus,
+      moodboardSearchQuery: moodboardSearchQuery == _sentinel
+          ? this.moodboardSearchQuery
+          : moodboardSearchQuery as String?,
+      moodboardAllQueries: moodboardAllQueries == _sentinel
+          ? this.moodboardAllQueries
+          : moodboardAllQueries as List<String>?,
+      moodboardAnalysisStatus: moodboardAnalysisStatus == _sentinel
+          ? this.moodboardAnalysisStatus
+          : moodboardAnalysisStatus as String?,
       localAIStatus: localAIStatus ?? this.localAIStatus,
       localAIDownloadProgress:
           localAIDownloadProgress ?? this.localAIDownloadProgress,
@@ -309,7 +375,21 @@ final class HomeState extends Equatable {
       localAIVisionTotalBytes: localAIVisionTotalBytes ?? this.localAIVisionTotalBytes,
       localAIDownloadPhase:
           localAIDownloadPhase ?? this.localAIDownloadPhase,
+      gemma4Status: gemma4Status ?? this.gemma4Status,
+      gemma4DownloadProgress:
+          gemma4DownloadProgress ?? this.gemma4DownloadProgress,
+      gemma4DownloadPhase: gemma4DownloadPhase ?? this.gemma4DownloadPhase,
+      bonsaiStatus: bonsaiStatus ?? this.bonsaiStatus,
+      bonsaiDownloadProgress:
+          bonsaiDownloadProgress ?? this.bonsaiDownloadProgress,
+      bonsaiDownloadPhase: bonsaiDownloadPhase ?? this.bonsaiDownloadPhase,
       condensingSources: condensingSources ?? this.condensingSources,
+      pendingObsidianNoteName: pendingObsidianNoteName == _sentinel
+          ? this.pendingObsidianNoteName
+          : pendingObsidianNoteName as String?,
+      pendingObsidianNoteContent: pendingObsidianNoteContent == _sentinel
+          ? this.pendingObsidianNoteContent
+          : pendingObsidianNoteContent as String?,
     );
   }
 
@@ -356,11 +436,26 @@ final class HomeState extends Equatable {
         deepDrissyStatus,
         deepDrissyWebSearchQueries,
         deepDrissyReadingStatus,
+        visualBrowseStatus,
+        visualBrowseSearchQuery,
+        visualBrowseAnalysisStatus,
+        moodboardStatus,
+        moodboardSearchQuery,
+        moodboardAllQueries,
+        moodboardAnalysisStatus,
         localAIStatus,
         localAIDownloadProgress,
         localAITotalBytes,
         localAIVisionTotalBytes,
         localAIDownloadPhase,
+        gemma4Status,
+        gemma4DownloadProgress,
+        gemma4DownloadPhase,
+        bonsaiStatus,
+        bonsaiDownloadProgress,
+        bonsaiDownloadPhase,
         condensingSources,
+        pendingObsidianNoteName,
+        pendingObsidianNoteContent,
       ];
 }

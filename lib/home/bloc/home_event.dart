@@ -107,7 +107,8 @@ final class HomeGenScreenshot extends HomeEvent {
 // Web search results received from GoogleSearchWebView
 final class HomeWebSearchResultsReceived extends HomeEvent {
   final List<ExtractedResultInfo> results;
-  HomeWebSearchResultsReceived(this.results);
+  final List<VisualBrowseResultData> browseImages;
+  HomeWebSearchResultsReceived(this.results, {this.browseImages = const []});
 }
 
 //Watch Google Search
@@ -402,4 +403,73 @@ final class HomeLocalAIDownloadProgress extends HomeEvent {
   HomeLocalAIDownloadProgress(this.progress);
 }
 
+/// Gemma 4 download/load events
+final class HomeGemma4DownloadAndLoad extends HomeEvent {}
+final class HomeGemma4LoadIfDownloaded extends HomeEvent {}
+
+/// Bonsai download/load events
+final class HomeBonsaiDownloadAndLoad extends HomeEvent {}
+final class HomeBonsaiLoadIfDownloaded extends HomeEvent {}
+
+/// Check on startup if secondary model files exist on disk (no engine load)
+final class HomeCheckSecondaryModelsDownloaded extends HomeEvent {}
+
 final class HomeDeleteAllHistory extends HomeEvent {}
+
+final class HomeObsidianNoteSelected extends HomeEvent {
+  final String noteName;
+  final String noteContent;
+  HomeObsidianNoteSelected(this.noteName, this.noteContent);
+}
+
+final class HomeObsidianNoteCleared extends HomeEvent {}
+
+final class HomeVisualBrowseCompleted extends HomeEvent {
+  final String query;
+  final List<VisualBrowseResultData> images;
+  HomeVisualBrowseCompleted(this.query, this.images);
+}
+
+final class HomeToggleVisualBrowse extends HomeEvent {}
+
+final class HomeVisualBrowseStart extends HomeEvent {
+  final String query;
+  final ValueNotifier<List<VisualBrowseResultData>> visualBrowseNotifier;
+  final ValueNotifier<String> streamedText;
+  HomeVisualBrowseStart(this.query, this.visualBrowseNotifier, this.streamedText);
+}
+
+final class HomeVisualBrowseImagesExtracted extends HomeEvent {
+  final List<VisualBrowseImageData> images;
+  HomeVisualBrowseImagesExtracted(this.images);
+}
+
+// ── Moodboard ──────────────────────────────────────────────────────────────
+
+final class HomeToggleMoodboard extends HomeEvent {}
+
+final class HomeMoodboardStart extends HomeEvent {
+  final String query;
+  final ValueNotifier<List<MoodboardResultData>> moodboardNotifier;
+  final ValueNotifier<String> progressNotifier;
+  /// All extracted image URIs (accepted + still scanning) for the scanning UI
+  final ValueNotifier<List<String>> scanImagesNotifier;
+  HomeMoodboardStart(
+      this.query, this.moodboardNotifier, this.progressNotifier, this.scanImagesNotifier);
+}
+
+final class HomeMoodboardImagesExtracted extends HomeEvent {
+  final List<VisualBrowseImageData> images;
+  HomeMoodboardImagesExtracted(this.images);
+}
+
+final class HomeMoodboardCompleted extends HomeEvent {
+  final String query;
+  final List<MoodboardResultData> images;
+  HomeMoodboardCompleted(this.query, this.images);
+}
+
+/// Model deletion events
+final class HomeDeleteLocalAIModel extends HomeEvent {}
+final class HomeDeleteGemma4Model extends HomeEvent {}
+final class HomeDeleteBonsaiModel extends HomeEvent {}

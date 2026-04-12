@@ -1,7 +1,57 @@
 import 'dart:typed_data';
 import 'package:bavi/home/bloc/home_bloc.dart';
+import 'package:bavi/models/short_video.dart';
 import 'package:equatable/equatable.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; // Import for Timestamp
+
+const _sentinel = Object();
+
+// ─── Visual Browse ───────────────────────────────────────────────────────────
+
+/// Raw image data extracted from Google Image Search WebView.
+class VisualBrowseImageData {
+  final String thumbnailDataUri; // data:image/... base64 or https:// URL
+  final String title;
+  final String sourceLink;
+
+  const VisualBrowseImageData({
+    required this.thumbnailDataUri,
+    required this.title,
+    required this.sourceLink,
+  });
+}
+
+/// Vision-filtered result stored in the thread.
+class VisualBrowseResultData {
+  final String thumbnailDataUri; // data:image/... base64 or https:// URL
+  final String title;
+  final String sourceLink;
+
+  const VisualBrowseResultData({
+    required this.thumbnailDataUri,
+    required this.title,
+    required this.sourceLink,
+  });
+}
+
+// ─── Moodboard ───────────────────────────────────────────────────────────────
+
+/// A single image accepted for a moodboard, tagged with the sub-query that found it.
+class MoodboardResultData {
+  final String thumbnailDataUri; // data:image/... base64 or https:// URL
+  final String title;
+  final String sourceLink;
+  final String searchQuery; // which sub-query produced this image
+
+  const MoodboardResultData({
+    required this.thumbnailDataUri,
+    required this.title,
+    required this.sourceLink,
+    required this.searchQuery,
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 class ThreadResultData extends Equatable {
   final List<WebResultData> web;
@@ -25,6 +75,10 @@ class ThreadResultData extends Equatable {
   final List<YoutubeVideoData> youtubeVideos;
   final HomeSearchType searchType;
   final ExtractedUrlResultData? extractedUrlData;
+  final String? obsidianNoteName;
+  final List<VisualBrowseResultData> visualBrowseResults;
+  final List<MoodboardResultData> moodboardResults;
+  final List<VisualBrowseResultData> browseImages;
   ThreadResultData({
     required this.searchType,
     required this.web,
@@ -47,6 +101,10 @@ class ThreadResultData extends Equatable {
     this.knowledgeGraph,
     this.answerBox,
     this.extractedUrlData,
+    this.obsidianNoteName,
+    this.visualBrowseResults = const [],
+    this.moodboardResults = const [],
+    this.browseImages = const [],
   });
 
   factory ThreadResultData.fromJson(Map<String, dynamic> json) {
@@ -117,6 +175,24 @@ class ThreadResultData extends Equatable {
           : (json['sourceImage'] is List
               ? Uint8List.fromList(List<int>.from(json['sourceImage']))
               : null),
+      obsidianNoteName: json['obsidianNoteName'] as String?,
+      moodboardResults: (json['moodboardResults'] as List<dynamic>?)
+              ?.map((e) => MoodboardResultData(
+                    thumbnailDataUri: e['thumbnailDataUri'] ?? '',
+                    title: e['title'] ?? '',
+                    sourceLink: e['sourceLink'] ?? '',
+                    searchQuery: e['searchQuery'] ?? '',
+                  ))
+              .toList() ??
+          [],
+      browseImages: (json['browseImages'] as List<dynamic>?)
+              ?.map((e) => VisualBrowseResultData(
+                    thumbnailDataUri: e['thumbnailDataUri'] ?? '',
+                    title: e['title'] ?? '',
+                    sourceLink: e['sourceLink'] ?? '',
+                  ))
+              .toList() ??
+          [],
     );
   }
 
@@ -143,6 +219,24 @@ class ThreadResultData extends Equatable {
         'sourceImageDescription': sourceImageDescription,
         'sourceImageLink': sourceImageLink,
         if (sourceImage != null) 'sourceImage': sourceImage!.toList(),
+        if (obsidianNoteName != null) 'obsidianNoteName': obsidianNoteName!,
+        if (moodboardResults.isNotEmpty)
+          'moodboardResults': moodboardResults
+              .map((e) => {
+                    'thumbnailDataUri': e.thumbnailDataUri,
+                    'title': e.title,
+                    'sourceLink': e.sourceLink,
+                    'searchQuery': e.searchQuery,
+                  })
+              .toList(),
+        if (browseImages.isNotEmpty)
+          'browseImages': browseImages
+              .map((e) => {
+                    'thumbnailDataUri': e.thumbnailDataUri,
+                    'title': e.title,
+                    'sourceLink': e.sourceLink,
+                  })
+              .toList(),
       };
 
   @override
@@ -168,6 +262,9 @@ class ThreadResultData extends Equatable {
         sourceImageDescription,
         sourceImageLink,
         sourceImage,
+        obsidianNoteName,
+        moodboardResults,
+        browseImages,
       ];
 }
 
@@ -642,6 +739,8 @@ class ThreadSessionData extends Equatable {
   final bool isIncognito;
   final String title;
   final String summary;
+  final String? obsidianNoteName;
+  final String? obsidianNoteContent;
 
   const ThreadSessionData({
     required this.id,
@@ -651,6 +750,8 @@ class ThreadSessionData extends Equatable {
     required this.updatedAt,
     this.title = '',
     this.summary = '',
+    this.obsidianNoteName,
+    this.obsidianNoteContent,
   });
 
   factory ThreadSessionData.fromJson(Map<String, dynamic> json) {
@@ -673,6 +774,8 @@ class ThreadSessionData extends Equatable {
               : Timestamp.now()),
       title: json['title'] ?? '',
       summary: json['summary'] ?? '',
+      obsidianNoteName: json['obsidianNoteName'] as String?,
+      obsidianNoteContent: json['obsidianNoteContent'] as String?,
     );
   }
 
@@ -684,6 +787,9 @@ class ThreadSessionData extends Equatable {
         'updatedAt': updatedAt.toDate().toIso8601String(),
         'title': title,
         'summary': summary,
+        if (obsidianNoteName != null) 'obsidianNoteName': obsidianNoteName!,
+        if (obsidianNoteContent != null)
+          'obsidianNoteContent': obsidianNoteContent!,
       };
 
   ThreadSessionData copyWith({
@@ -694,6 +800,8 @@ class ThreadSessionData extends Equatable {
     bool? isIncognito,
     String? title,
     String? summary,
+    Object? obsidianNoteName = _sentinel,
+    Object? obsidianNoteContent = _sentinel,
   }) {
     return ThreadSessionData(
       id: id ?? this.id,
@@ -703,12 +811,18 @@ class ThreadSessionData extends Equatable {
       isIncognito: isIncognito ?? this.isIncognito,
       title: title ?? this.title,
       summary: summary ?? this.summary,
+      obsidianNoteName: obsidianNoteName == _sentinel
+          ? this.obsidianNoteName
+          : obsidianNoteName as String?,
+      obsidianNoteContent: obsidianNoteContent == _sentinel
+          ? this.obsidianNoteContent
+          : obsidianNoteContent as String?,
     );
   }
 
   @override
-  List<Object> get props =>
-      [id, isIncognito, results, createdAt, updatedAt, title, summary];
+  List<Object?> get props =>
+      [id, isIncognito, results, createdAt, updatedAt, title, summary, obsidianNoteName, obsidianNoteContent];
 }
 
 class FeaturedReview extends Equatable {
@@ -943,4 +1057,11 @@ class YoutubeVideoData extends Equatable {
         channelId,
         description,
       ];
+}
+
+/// Wrapper returned by GoogleSearchWebView containing both web results and browse images.
+class BrowseSearchResult {
+  final List<ExtractedResultInfo> webResults;
+  final List<VisualBrowseResultData> images;
+  const BrowseSearchResult({required this.webResults, required this.images});
 }

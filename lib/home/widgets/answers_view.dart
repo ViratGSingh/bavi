@@ -35,6 +35,16 @@ class ThreadAnswerView extends StatefulWidget {
   final ExtractedUrlResultData? extractedUrlData;
   final String? deepDrissyReadingStatus;
   final List<Map<String, String>> condensingSources;
+  final String? obsidianNoteName;
+  final List<VisualBrowseResultData> visualBrowseResults;
+  final String? visualBrowseAnalysisStatus;
+  final List<MoodboardResultData> moodboardResults;
+  final String? moodboardAnalysisStatus;
+  final String? moodboardProgressText;
+  /// All image URIs extracted so far (accepted + being scanned) — for scan animation
+  final List<String> moodboardScanImages;
+  /// Images extracted from Google Images during browse search
+  final List<VisualBrowseResultData> browseImages;
   const ThreadAnswerView({
     super.key,
     required this.youtubeVideos,
@@ -54,6 +64,14 @@ class ThreadAnswerView extends StatefulWidget {
     this.extractedUrlData,
     this.deepDrissyReadingStatus,
     this.condensingSources = const [],
+    this.obsidianNoteName,
+    this.visualBrowseResults = const [],
+    this.visualBrowseAnalysisStatus,
+    this.moodboardResults = const [],
+    this.moodboardAnalysisStatus,
+    this.moodboardProgressText,
+    this.moodboardScanImages = const [],
+    this.browseImages = const [],
   });
 
   @override
@@ -95,91 +113,140 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        //Extracted URL
-        if (widget.extractedUrlData?.title != "" ||
-            widget.extractedUrlData?.snippet != "")
-          Container(
-            margin: EdgeInsets.only(right: 8, left: 8, bottom: 12),
+        // //Extracted URL
+        // if (widget.extractedUrlData?.title != "" ||
+        //     widget.extractedUrlData?.snippet != "")
+        //   Container(
+        //     margin: EdgeInsets.only(right: 8, left: 8, bottom: 12),
+        //     alignment: Alignment.centerRight,
+        //     width: MediaQuery.of(context).size.width,
+        //     height: 220,
+        //     decoration: BoxDecoration(
+        //       color: Colors.white,
+        //       borderRadius: BorderRadius.circular(16),
+        //       boxShadow: [
+        //         BoxShadow(
+        //           color: Colors.black.withOpacity(0.1),
+        //           blurRadius: 10,
+        //           offset: Offset(0, 4),
+        //         ),
+        //       ],
+        //     ),
+        //     child: Stack(
+        //       children: [
+        //         // Background Image
+        //         ClipRRect(
+        //           borderRadius: BorderRadius.circular(16),
+        //           child: Image.network(
+        //             widget.extractedUrlData?.thumbnail ?? "",
+        //             width: double.infinity,
+        //             height: double.infinity,
+        //             fit: BoxFit.cover,
+        //             errorBuilder: (context, error, stackTrace) {
+        //               return Container(
+        //                 color: Colors.grey.shade200,
+        //                 child: Center(
+        //                   child: Icon(
+        //                     Icons.image_not_supported,
+        //                     color: Colors.grey.shade400,
+        //                     size: 40,
+        //                   ),
+        //                 ),
+        //               );
+        //             },
+        //           ),
+        //         ),
+        //         // Gradient Overlay
+        //         Container(
+        //           decoration: BoxDecoration(
+        //             borderRadius: BorderRadius.circular(16),
+        //             gradient: LinearGradient(
+        //               begin: Alignment.topCenter,
+        //               end: Alignment.bottomCenter,
+        //               colors: [
+        //                 Colors.transparent,
+        //                 Colors.black.withOpacity(0.7),
+        //               ],
+        //               stops: [0.5, 1.0],
+        //             ),
+        //           ),
+        //         ),
+        //         // Title at Bottom Left
+        //         Positioned(
+        //           left: 16,
+        //           right: 16,
+        //           bottom: 12,
+        //           child: Text(
+        //             (widget.extractedUrlData?.title == ""
+        //                     ? widget.extractedUrlData?.snippet
+        //                     : widget.extractedUrlData?.title) ??
+        //                 "",
+        //             style: TextStyle(
+        //               color: Colors.white,
+        //               fontSize: 16,
+        //               fontWeight: FontWeight.bold,
+        //               shadows: [
+        //                 Shadow(
+        //                   color: Colors.black.withOpacity(0.5),
+        //                   blurRadius: 4,
+        //                   offset: Offset(0, 2),
+        //                 ),
+        //               ],
+        //             ),
+        //             maxLines: 2,
+        //             overflow: TextOverflow.ellipsis,
+        //           ),
+        //         ),
+        //       ],
+        //     ),
+        //   ),
+        if (widget.obsidianNoteName != null)
+          Align(
             alignment: Alignment.centerRight,
-            width: MediaQuery.of(context).size.width,
-            height: 220,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 10,
-                  offset: Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Stack(
-              children: [
-                // Background Image
-                ClipRRect(
+            child: Padding(
+              padding: const EdgeInsets.only(right: 8, left: 50, top: 12, bottom: 4),
+              child: Container(
+                width: 120,
+                height: 120,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0EBF8),
                   borderRadius: BorderRadius.circular(16),
-                  child: Image.network(
-                    widget.extractedUrlData?.thumbnail ?? "",
-                    width: double.infinity,
-                    height: double.infinity,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        color: Colors.grey.shade200,
-                        child: Center(
-                          child: Icon(
-                            Icons.image_not_supported,
-                            color: Colors.grey.shade400,
-                            size: 40,
-                          ),
+                  border: Border.all(color: const Color(0xFF8A2BE2), width: 1.5),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        widget.obsidianNoteName!.replaceAll(RegExp(r'\.[^.]+$'), ''),
+                        style: const TextStyle(
+                          color: Color(0xFF3D1466),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
                         ),
-                      );
-                    },
-                  ),
-                ),
-                // Gradient Overlay
-                Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.transparent,
-                        Colors.black.withOpacity(0.7),
-                      ],
-                      stops: [0.5, 1.0],
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 3,
+                      ),
                     ),
-                  ),
-                ),
-                // Title at Bottom Left
-                Positioned(
-                  left: 16,
-                  right: 16,
-                  bottom: 12,
-                  child: Text(
-                    (widget.extractedUrlData?.title == ""
-                            ? widget.extractedUrlData?.snippet
-                            : widget.extractedUrlData?.title) ??
-                        "",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      shadows: [
-                        Shadow(
-                          color: Colors.black.withOpacity(0.5),
-                          blurRadius: 4,
-                          offset: Offset(0, 2),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF8A2BE2),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        (RegExp(r'\.([^.]+)$').firstMatch(widget.obsidianNoteName!)?.group(1)?.toUpperCase()) ?? 'FILE',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
                         ),
-                      ],
+                      ),
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         Align(
@@ -320,11 +387,92 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
                   )
                 ],
               )
-            : Padding(
+            : (widget.moodboardResults.isNotEmpty ||
+                        widget.moodboardScanImages.isNotEmpty ||
+                        (widget.moodboardProgressText != null &&
+                            widget.moodboardProgressText!.isNotEmpty) ||
+                        widget.moodboardAnalysisStatus != null)
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(6, 0, 6, 0),
+                    child: _MoodboardView(
+                      results: widget.moodboardResults,
+                      scanImages: widget.moodboardScanImages,
+                      moodboardTitle: widget.query,
+                      progressText: widget.moodboardProgressText,
+                      analysisStatus: widget.moodboardAnalysisStatus,
+                    ),
+                  )
+                : widget.visualBrowseResults.isNotEmpty
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(6, 0, 6, 0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _VisualBrowseAlbum(
+                          results: widget.visualBrowseResults,
+                          analysisStatus: widget.visualBrowseAnalysisStatus,
+                        ),
+                        if (widget.answer.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          SelectionArea(
+                            child: MarkdownBody(
+                              data: widget.answer,
+                              onTapLink: (text, href, title) async {
+                                if (href != null) widget.onLinkTap(href);
+                              },
+                              styleSheet: MarkdownStyleSheet.fromTheme(
+                                      Theme.of(context))
+                                  .copyWith(
+                                h1: const TextStyle(
+                                    color: Colors.black,
+                                    fontFamily: 'Poppins',
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold),
+                                h2: const TextStyle(
+                                    color: Colors.black,
+                                    fontFamily: 'Poppins',
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold),
+                                h3: const TextStyle(
+                                    color: Colors.black,
+                                    fontFamily: 'Poppins',
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600),
+                                p: const TextStyle(
+                                    color: Colors.black,
+                                    fontFamily: 'Poppins',
+                                    fontSize: 14,
+                                    height: 1.5),
+                                a: const TextStyle(
+                                  fontFamily: 'Poppins',
+                                  color: Color(0xFF8A2BE2),
+                                  decoration: TextDecoration.underline,
+                                  decorationColor: Color(0xFF8A2BE2),
+                                ),
+                                listBullet:
+                                    const TextStyle(fontSize: 16),
+                              ),
+                            ),
+                          ),
+                        ] else if (widget.visualBrowseAnalysisStatus != null) ...[
+                          // Answer not yet started but analysis is running — show loader
+                          const SizedBox(height: 8),
+                          AnswerLoader(loaderText: widget.visualBrowseAnalysisStatus!),
+                        ] else if (widget.deepDrissyReadingStatus != null) ...[
+                          const SizedBox(height: 8),
+                          AnswerLoader(loaderText: widget.deepDrissyReadingStatus!),
+                        ],
+                      ],
+                    ),
+                  )
+                : Padding(
                 padding: const EdgeInsets.fromLTRB(6, 0, 6, 0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (widget.browseImages.isNotEmpty) ...[
+                      _BrowseImageStrip(images: widget.browseImages),
+                    ],
                     if (widget.youtubeVideos.isNotEmpty ||
                         widget.local.isNotEmpty ||
                         widget.shortVideos.isNotEmpty) ...[
@@ -537,6 +685,25 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
             children: [
               Row(
                 children: [
+                  if (widget.moodboardResults.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.55),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${widget.moodboardResults.length} photos',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontFamily: 'Poppins',
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    )
+                  else ...[
                   InkWell(
                     onTap: () {
                       final textToCopy = widget.answer.trim();
@@ -601,6 +768,7 @@ class _ThreadAnswerViewState extends State<ThreadAnswerView> {
                   //     ),
                   //   ),
                   // )
+                  ],
                 ],
               ),
               Row(
@@ -1698,6 +1866,1588 @@ class InstagramVideoCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ─── Browse Image Strip ───────────────────────────────────────────────────────
+
+class _BrowseImageStrip extends StatefulWidget {
+  final List<VisualBrowseResultData> images;
+  const _BrowseImageStrip({required this.images});
+
+  static const _heroPrefix = 'browse_img';
+
+  @override
+  State<_BrowseImageStrip> createState() => _BrowseImageStripState();
+}
+
+class _BrowseImageStripState extends State<_BrowseImageStrip> {
+  // Number of slots shown at once (based on total image count)
+  int get _slotCount {
+    final n = widget.images.length;
+    if (n >= 4) return 4;
+    return n; // 0, 1, 2, 3
+  }
+
+  // Current image index shown in each slot
+  late List<int> _slotIndices;
+  // Next image index to rotate in
+  int _nextIndex = 0;
+
+  Timer? _cycleTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _initSlots();
+    if (widget.images.length > _slotCount) {
+      _scheduleCycle();
+    }
+  }
+
+  @override
+  void dispose() {
+    _cycleTimer?.cancel();
+    super.dispose();
+  }
+
+  void _initSlots() {
+    final count = _slotCount;
+    _slotIndices = List.generate(count, (i) => i);
+    _nextIndex = count % widget.images.length;
+  }
+
+  void _scheduleCycle() {
+    _cycleTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      _rotateCycle();
+    });
+  }
+
+  void _rotateCycle() {
+    final count = _slotIndices.length;
+    for (int slot = 0; slot < count; slot++) {
+      Future.delayed(Duration(milliseconds: slot * 380), () {
+        if (!mounted) return;
+        setState(() {
+          _slotIndices[slot] = _nextIndex;
+          _nextIndex = (_nextIndex + 1) % widget.images.length;
+        });
+      });
+    }
+  }
+
+  void _openLightbox(BuildContext context) {
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        opaque: false,
+        barrierColor: Colors.transparent,
+        pageBuilder: (ctx, animation, _) => _AnswersImageLightbox(
+          results: widget.images,
+          initialIndex: 0,
+          heroTagPrefix: _BrowseImageStrip._heroPrefix,
+        ),
+        transitionsBuilder: (ctx, animation, _, child) => FadeTransition(
+          opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  Widget _cell(int slot) {
+    final item = widget.images[_slotIndices[slot]];
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 700),
+      transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
+      child: _AlbumTileImage(
+        key: ValueKey(item.thumbnailDataUri.hashCode),
+        src: item.thumbnailDataUri,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.images.isEmpty) return const SizedBox.shrink();
+
+    final count = _slotCount;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: GestureDetector(
+        onTap: () => _openLightbox(context),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF8A2BE2).withValues(alpha: 0.15),
+                blurRadius: 14,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(18),
+            child: AspectRatio(
+              aspectRatio: 16 / 9,
+              child: count == 1
+                  ? _cell(0)
+                  : count == 2
+                      ? Row(children: [
+                          Expanded(child: _cell(0)),
+                          const SizedBox(width: 2),
+                          Expanded(child: _cell(1)),
+                        ])
+                      : count == 3
+                          ? Row(children: [
+                              Expanded(flex: 55, child: _cell(0)),
+                              const SizedBox(width: 2),
+                              Expanded(
+                                flex: 45,
+                                child: Column(children: [
+                                  Expanded(child: _cell(1)),
+                                  const SizedBox(height: 2),
+                                  Expanded(child: _cell(2)),
+                                ]),
+                              ),
+                            ])
+                          : Column(children: [
+                              Expanded(
+                                child: Row(children: [
+                                  Expanded(child: _cell(0)),
+                                  const SizedBox(width: 2),
+                                  Expanded(child: _cell(1)),
+                                ]),
+                              ),
+                              const SizedBox(height: 2),
+                              Expanded(
+                                child: Row(children: [
+                                  Expanded(child: _cell(2)),
+                                  const SizedBox(width: 2),
+                                  Expanded(child: _cell(3)),
+                                ]),
+                              ),
+                            ]),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Visual Browse Album ─────────────────────────────────────────────────────
+
+class _VisualBrowseAlbum extends StatelessWidget {
+  final List<VisualBrowseResultData> results;
+  final String? analysisStatus;
+  const _VisualBrowseAlbum({required this.results, this.analysisStatus});
+
+  void _openLightbox(BuildContext context, int index) {
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        opaque: false,
+        barrierColor: Colors.transparent,
+        pageBuilder: (ctx, animation, _) => _AnswersImageLightbox(
+          results: results,
+          initialIndex: index,
+        ),
+        transitionsBuilder: (ctx, animation, _, child) => FadeTransition(
+          opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(6, 4, 6, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 10),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF8A2BE2), Color(0xFFAB47BC)],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF8A2BE2).withValues(alpha: 0.3),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.photo_library_rounded,
+                          color: Colors.white, size: 13),
+                      const SizedBox(width: 5),
+                      Text(
+                        '${results.length} image${results.length == 1 ? '' : 's'}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontFamily: 'Poppins',
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  'Tap to view',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontFamily: 'Poppins',
+                    color: Colors.grey.shade400,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // 3-column album grid — wrapped in RepaintBoundary so token
+          // stream rebuilds above don't repaint the image tiles
+          RepaintBoundary(
+            child: GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                mainAxisSpacing: 4,
+                crossAxisSpacing: 4,
+                childAspectRatio: 1.0,
+              ),
+              itemCount: results.length,
+              itemBuilder: (context, index) {
+                final item = results[index];
+                return GestureDetector(
+                  onTap: () => _openLightbox(context, index),
+                  child: Hero(
+                    tag: 'answers_vb_img_${item.thumbnailDataUri.hashCode}_$index',
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        color: const Color(0xFFF3F4F6),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF8A2BE2).withValues(alpha: 0.10),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: _AlbumTileImage(
+                          key: ValueKey(item.thumbnailDataUri.hashCode),
+                          src: item.thumbnailDataUri,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          // if (analysisStatus != null) ...[
+          //   const SizedBox(height: 12),
+          //   _VBAnalyzingIndicator(status: analysisStatus!),
+          // ],
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Moodboard ────────────────────────────────────────────────────────────────
+
+class _MoodboardView extends StatelessWidget {
+  final List<MoodboardResultData> results;
+  /// All image URIs seen so far (accepted + being scanned) — for scanning grid
+  final List<String> scanImages;
+  final String moodboardTitle;
+  final String? progressText;
+  final String? analysisStatus;
+
+  const _MoodboardView({
+    required this.results,
+    required this.scanImages,
+    required this.moodboardTitle,
+    this.progressText,
+    this.analysisStatus,
+  });
+
+  void _openLightbox(BuildContext context, int index) {
+    HapticFeedback.mediumImpact();
+    // Convert to VisualBrowseResultData to reuse the existing lightbox
+    final vbResults = results
+        .map((r) => VisualBrowseResultData(
+              thumbnailDataUri: r.thumbnailDataUri,
+              title: r.title,
+              sourceLink: r.sourceLink,
+            ))
+        .toList();
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        opaque: false,
+        barrierColor: Colors.transparent,
+        pageBuilder: (ctx, animation, _) => _AnswersImageLightbox(
+          results: vbResults,
+          initialIndex: index,
+        ),
+        transitionsBuilder: (ctx, animation, _, child) => FadeTransition(
+          opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAlbumGrid(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          mainAxisSpacing: 4,
+          crossAxisSpacing: 4,
+          childAspectRatio: 1.0,
+        ),
+        itemCount: results.length,
+        itemBuilder: (context, index) {
+          final item = results[index];
+          return GestureDetector(
+            onTap: () => _openLightbox(context, index),
+            child: Hero(
+              tag: 'moodboard_album_${item.thumbnailDataUri.hashCode}_$index',
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  color: const Color(0xFFF3F0FF),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF8A2BE2).withValues(alpha: 0.10),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: _AlbumTileImage(
+                    key: ValueKey(item.thumbnailDataUri.hashCode),
+                    src: item.thumbnailDataUri,
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // progressText is non-empty during query generation; analysisStatus=='scanning' during scan phase
+    final bool isWorking = (progressText != null && progressText!.isNotEmpty) || analysisStatus == 'scanning';
+    final bool isGeneratingQueries = isWorking && scanImages.isEmpty && results.isEmpty && analysisStatus != 'scanning';
+    final bool isScanning = scanImages.isNotEmpty && (analysisStatus == 'scanning' || (progressText != null && progressText!.isNotEmpty));
+    final bool isDone = results.isNotEmpty && analysisStatus == null && (progressText == null || progressText!.isEmpty);
+
+    // Set of accepted URIs for fast lookup in scanning grid
+    final acceptedUris = results.map((r) => r.thumbnailDataUri).toSet();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 4, 0, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // // ── Header ──────────────────────────────────────────────────────────
+          // Padding(
+          //   padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+          //   child: Row(
+          //     children: [
+          //       Container(
+          //         padding:
+          //             const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          //         decoration: BoxDecoration(
+          //           gradient: const LinearGradient(
+          //             colors: [Color(0xFF8A2BE2), Color(0xFFAB47BC)],
+          //             begin: Alignment.centerLeft,
+          //             end: Alignment.centerRight,
+          //           ),
+          //           borderRadius: BorderRadius.circular(20),
+          //           boxShadow: [
+          //             BoxShadow(
+          //               color: const Color(0xFF8A2BE2).withValues(alpha: 0.3),
+          //               blurRadius: 10,
+          //               offset: const Offset(0, 3),
+          //             ),
+          //           ],
+          //         ),
+          //         child: Row(
+          //           mainAxisSize: MainAxisSize.min,
+          //           children: [
+          //             const Icon(Icons.collections_rounded,
+          //                 color: Colors.white, size: 13),
+          //             const SizedBox(width: 5),
+          //             Text(
+          //               results.isNotEmpty
+          //                   ? '${results.length} images'
+          //                   : 'Moodboard',
+          //               style: const TextStyle(
+          //                 color: Colors.white,
+          //                 fontSize: 12,
+          //                 fontFamily: 'Poppins',
+          //                 fontWeight: FontWeight.w600,
+          //               ),
+          //             ),
+          //           ],
+          //         ),
+          //       ),
+          //       const SizedBox(width: 10),
+          //       if (isDone)
+          //         Text(
+          //           'Tap to view',
+          //           style: TextStyle(
+          //             fontSize: 12,
+          //             fontFamily: 'Poppins',
+          //             color: Colors.grey.shade400,
+          //           ),
+          //         )
+          //       else
+          //         Expanded(
+          //           child: Text(
+          //             moodboardTitle,
+          //             maxLines: 1,
+          //             overflow: TextOverflow.ellipsis,
+          //             style: const TextStyle(
+          //               fontSize: 13,
+          //               fontFamily: 'Poppins',
+          //               fontWeight: FontWeight.w600,
+          //               color: Color(0xFF1A1A1A),
+          //             ),
+          //           ),
+          //         ),
+          //     ],
+          //   ),
+          // ),
+
+          // ── Phase A: generating queries — purple progress text ───────────────
+          if (isGeneratingQueries) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: const Color(0xFF8A2BE2).withValues(alpha: 0.7),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      progressText ?? analysisStatus ?? 'Planning searches...',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontFamily: 'Poppins',
+                        color: const Color(0xFF8A2BE2).withValues(alpha: 0.8),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const _MoodboardShimmerGrid(),
+          ]
+
+          // ── Phase B: album cover — cycles through all extracted images ─────────
+          else if (results.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 8, left: 0),
+              child: _MoodboardAlbumCover(
+                results: results,
+                onTap: () => _openLightbox(context, 0),
+              ),
+            )
+
+          else
+            const _MoodboardShimmerGrid(),
+        ],
+      ),
+    );
+  }
+
+  /// Scanning grid: 2-col, shows all extracted images.
+  /// Accepted ones show green checkmark; unaccepted show scan animation.
+  Widget _buildScanGrid(BuildContext context, Set<String> acceptedUris) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final tileWidth = (screenWidth - 44 - 8) / 2;
+    const tileHeight = 160.0;
+
+    final col1 = <int>[];
+    final col2 = <int>[];
+    for (int i = 0; i < scanImages.length; i++) {
+      if (i.isEven) { col1.add(i); } else { col2.add(i); }
+    }
+
+    Widget buildColumn(List<int> indices) => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: indices.map((i) {
+        final uri = scanImages[i];
+        final isAccepted = acceptedUris.contains(uri);
+        // Only the last image in the list is actively being scanned
+        final isActive = i == scanImages.length - 1 && !isAccepted;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: _MoodboardScanTile(
+            key: ValueKey(uri),
+            src: uri,
+            width: tileWidth,
+            height: tileHeight,
+            isAccepted: isAccepted,
+            isActive: isActive,
+          ),
+        );
+      }).toList(),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: buildColumn(col1)),
+          const SizedBox(width: 8),
+          Expanded(child: buildColumn(col2)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Animated tile shown during image scanning phase.
+/// Shows the image with a sweeping purple scan line while being evaluated,
+/// and a green checkmark once accepted.
+class _MoodboardScanTile extends StatefulWidget {
+  final String src;
+  final double width;
+  final double height;
+  final bool isAccepted;
+  /// Only the tile currently being evaluated by AI should be true.
+  /// All others render statically so GPU load stays constant.
+  final bool isActive;
+
+  const _MoodboardScanTile({
+    super.key,
+    required this.src,
+    required this.width,
+    required this.height,
+    required this.isAccepted,
+    required this.isActive,
+  });
+
+  @override
+  State<_MoodboardScanTile> createState() => _MoodboardScanTileState();
+}
+
+class _MoodboardScanTileState extends State<_MoodboardScanTile>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _scan;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
+    _scan = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+    );
+    if (widget.isActive) _ctrl.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(_MoodboardScanTile old) {
+    super.didUpdateWidget(old);
+    if (widget.isActive && !old.isActive) {
+      _ctrl.repeat(reverse: true);
+    } else if (!widget.isActive && old.isActive) {
+      _ctrl.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: widget.width,
+      height: widget.height,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        color: const Color(0xFFF3F0FF),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF8A2BE2).withValues(alpha: 0.12),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Image
+            _AlbumTileImage(
+              key: ValueKey(widget.src.hashCode),
+              src: widget.src,
+            ),
+            // Active scan overlay: animated shimmer + scan line
+            if (!widget.isAccepted && widget.isActive)
+              AnimatedBuilder(
+                animation: _scan,
+                builder: (context, _) {
+                  return LayoutBuilder(builder: (context, constraints) {
+                    final top = _scan.value * constraints.maxHeight;
+                    return Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Shimmer.fromColors(
+                          baseColor: Colors.purple.withValues(alpha: 0.06),
+                          highlightColor: Colors.purple.withValues(alpha: 0.16),
+                          child: Container(color: Colors.white),
+                        ),
+                        Positioned(
+                          top: top - 28,
+                          left: 0,
+                          right: 0,
+                          child: Container(
+                            height: 56,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Colors.transparent,
+                                  const Color(0xFF8A2BE2).withValues(alpha: 0.25),
+                                  Colors.transparent,
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          top: top,
+                          left: 0,
+                          right: 0,
+                          child: Container(
+                            height: 2,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.transparent,
+                                  const Color(0xFF8A2BE2).withValues(alpha: 0.9),
+                                  Colors.transparent,
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  });
+                },
+              ),
+            // Inactive pending: static dim overlay, no animation
+            if (!widget.isAccepted && !widget.isActive)
+              Container(color: const Color(0xFF8A2BE2).withValues(alpha: 0.08)),
+            // AI scanning badge (top-right, while not accepted)
+            if (!widget.isAccepted)
+              Positioned(
+                top: 7,
+                right: 7,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF8A2BE2).withValues(alpha: 0.85),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'AI',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontFamily: 'Poppins',
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            // Green checkmark when accepted
+            if (widget.isAccepted)
+              Positioned(
+                top: 7,
+                right: 7,
+                child: Container(
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981),
+                    borderRadius: BorderRadius.circular(11),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF10B981).withValues(alpha: 0.45),
+                        blurRadius: 8,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.check, size: 13, color: Colors.white),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Album cover: stacked cards with cycling image preview ─────────────────────
+
+class _MoodboardAlbumCover extends StatefulWidget {
+  final List<MoodboardResultData> results;
+  final VoidCallback onTap;
+
+  const _MoodboardAlbumCover({required this.results, required this.onTap});
+
+  @override
+  State<_MoodboardAlbumCover> createState() => _MoodboardAlbumCoverState();
+}
+
+class _MoodboardAlbumCoverState extends State<_MoodboardAlbumCover> {
+  int _currentIndex = 0;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.results.length > 1) {
+      _timer = Timer.periodic(const Duration(seconds: 2), (_) {
+        if (mounted) {
+          setState(() =>
+              _currentIndex = (_currentIndex + 1) % widget.results.length);
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const double cardW = 200;
+    const double cardH = 220;
+    const double pad = 24.0;
+    final n = widget.results.length;
+
+    return GestureDetector(
+      onTap: widget.onTap,
+      child: SizedBox(
+        width: cardW + pad * 2,
+        height: cardH + pad,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Back card
+            if (n >= 3)
+              Transform.rotate(
+                angle: 0.12,
+                child: _buildCard(((_currentIndex + 2) % n)),
+              ),
+            // Middle card
+            if (n >= 2)
+              Transform.rotate(
+                angle: -0.06,
+                child: _buildCard((_currentIndex + 1) % n),
+              ),
+            // Front card — crossfades when index changes
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 700),
+              transitionBuilder: (child, animation) =>
+                  FadeTransition(opacity: animation, child: child),
+              child: _buildCard(_currentIndex, key: ValueKey(_currentIndex)),
+            ),
+            // // Count badge
+            // Positioned(
+            //   bottom: 6,
+            //   right: pad - 2,
+            //   child: Container(
+            //     padding:
+            //         const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            //     decoration: BoxDecoration(
+            //       color: Colors.black.withValues(alpha: 0.55),
+            //       borderRadius: BorderRadius.circular(12),
+            //     ),
+            //     child: Text(
+            //       '${widget.results.length} photos',
+            //       style: const TextStyle(
+            //         color: Colors.white,
+            //         fontSize: 11,
+            //         fontFamily: 'Poppins',
+            //         fontWeight: FontWeight.w500,
+            //       ),
+            //     ),
+            //   ),
+            // ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCard(int index, {Key? key}) {
+    const double cardW = 200;
+    const double cardH = 220;
+    return Container(
+      key: key,
+      width: cardW,
+      height: cardH,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF8A2BE2).withValues(alpha: 0.20),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: _AlbumTileImage(
+          key: ValueKey(widget.results[index].thumbnailDataUri.hashCode),
+          src: widget.results[index].thumbnailDataUri,
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _MoodboardTile extends StatelessWidget {
+  final MoodboardResultData item;
+  final double width;
+  final double height;
+
+  const _MoodboardTile({
+    required this.item,
+    required this.width,
+    required this.height,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF8A2BE2).withValues(alpha: 0.15),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Image
+            _AlbumTileImage(
+              key: ValueKey(item.thumbnailDataUri.hashCode),
+              src: item.thumbnailDataUri,
+            ),
+            // Bottom gradient overlay
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                height: 60,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.55),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            // Title overlay
+            if (item.title.isNotEmpty)
+              Positioned(
+                bottom: 8,
+                left: 8,
+                right: 8,
+                child: Text(
+                  item.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontFamily: 'Poppins',
+                    fontWeight: FontWeight.w500,
+                    shadows: [
+                      Shadow(blurRadius: 4, color: Colors.black54),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MoodboardShimmerGrid extends StatelessWidget {
+  const _MoodboardShimmerGrid();
+
+  @override
+  Widget build(BuildContext context) {
+    const heights = [190.0, 245.0, 205.0, 265.0, 195.0, 220.0];
+
+    Widget shimmerTile(double height) => Shimmer.fromColors(
+          baseColor: const Color(0xFFEDE0FF),
+          highlightColor: const Color(0xFFF5F0FF),
+          child: Container(
+            height: height,
+            margin: const EdgeInsets.only(bottom: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
+        );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(children: [
+              shimmerTile(heights[0]),
+              shimmerTile(heights[2]),
+              shimmerTile(heights[4]),
+            ]),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(children: [
+              shimmerTile(heights[1]),
+              shimmerTile(heights[3]),
+              shimmerTile(heights[5]),
+            ]),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Analyzing indicator ──────────────────────────────────────────────────────
+
+class _VBAnalyzingIndicator extends StatefulWidget {
+  final String status;
+  const _VBAnalyzingIndicator({required this.status});
+
+  @override
+  State<_VBAnalyzingIndicator> createState() => _VBAnalyzingIndicatorState();
+}
+
+class _VBAnalyzingIndicatorState extends State<_VBAnalyzingIndicator>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
+    _pulse = Tween<double>(begin: 0.5, end: 1.0).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F0FF),
+        borderRadius: BorderRadius.circular(12),
+        border: Border(
+          left: BorderSide(color: const Color(0xFF8A2BE2), width: 3),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF8A2BE2).withValues(alpha: 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          AnimatedBuilder(
+            animation: _pulse,
+            builder: (context, _) => Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Color.lerp(
+                  const Color(0xFF8A2BE2).withValues(alpha: 0.4),
+                  const Color(0xFF8A2BE2),
+                  _pulse.value,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF8A2BE2)
+                        .withValues(alpha: _pulse.value * 0.5),
+                    blurRadius: 6,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              widget.status,
+              style: const TextStyle(
+                fontSize: 13,
+                fontFamily: 'Poppins',
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF5B21B6),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(
+              strokeWidth: 1.5,
+              color: const Color(0xFF8A2BE2).withValues(alpha: 0.6),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Album tile image (handles data URI + http) ───────────────────────────────
+
+class _AlbumTileImage extends StatefulWidget {
+  final String src;
+  const _AlbumTileImage({required this.src, super.key});
+
+  @override
+  State<_AlbumTileImage> createState() => _AlbumTileImageState();
+}
+
+class _AlbumTileImageState extends State<_AlbumTileImage> {
+  Uint8List? _bytes;
+  bool _decoded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _decode(widget.src);
+  }
+
+  @override
+  void didUpdateWidget(_AlbumTileImage old) {
+    super.didUpdateWidget(old);
+    if (old.src != widget.src) _decode(widget.src);
+  }
+
+  void _decode(String src) {
+    if (src.startsWith('data:image/')) {
+      try {
+        _bytes = base64Decode(src.split(',').last);
+      } catch (_) {
+        _bytes = null;
+      }
+    } else {
+      _bytes = null;
+    }
+    _decoded = true;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_decoded) return _placeholder();
+    final src = widget.src;
+    if (_bytes != null) {
+      return Image.memory(
+        _bytes!,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        gaplessPlayback: true,
+        errorBuilder: (_, __, ___) => _placeholder(),
+      );
+    }
+    if (src.startsWith('http')) {
+      return CachedNetworkImage(
+        imageUrl: src,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        errorWidget: (_, __, ___) => _placeholder(),
+      );
+    }
+    return _placeholder();
+  }
+
+  Widget _placeholder() {
+    return Container(
+      color: const Color(0xFFF3F4F6),
+      child: const Center(
+        child: Icon(Icons.image_outlined, color: Color(0xFFD1D5DB), size: 28),
+      ),
+    );
+  }
+}
+
+// ─── Fullscreen lightbox ──────────────────────────────────────────────────────
+
+class _AnswersImageLightbox extends StatefulWidget {
+  final List<VisualBrowseResultData> results;
+  final int initialIndex;
+  final String heroTagPrefix;
+  const _AnswersImageLightbox(
+      {required this.results, required this.initialIndex, this.heroTagPrefix = 'answers_vb_img'});
+
+  @override
+  State<_AnswersImageLightbox> createState() => _AnswersImageLightboxState();
+}
+
+class _AnswersImageLightboxState extends State<_AnswersImageLightbox>
+    with SingleTickerProviderStateMixin {
+  late PageController _pageController;
+  late int _currentIndex;
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+    _pageController = PageController(initialPage: widget.initialIndex);
+    _fadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 280),
+    )..forward();
+    _fadeAnimation =
+        CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    _fadeController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _dismiss() async {
+    await _fadeController.reverse();
+    if (mounted) Navigator.pop(context);
+  }
+
+  String _domain(String url) {
+    try {
+      return Uri.parse(url).host.replaceFirst('www.', '');
+    } catch (_) {
+      return url;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.results[_currentIndex];
+    final topPad = MediaQuery.of(context).padding.top;
+    final bottomPad = MediaQuery.of(context).padding.bottom;
+
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFF0A0015),
+                Color(0xFF12002A),
+                Color(0xFF0D0D1F),
+              ],
+            ),
+          ),
+          child: Stack(
+            children: [
+              // Ambient purple glow
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      center: Alignment.center,
+                      radius: 1.0,
+                      colors: [
+                        const Color(0xFF4A148C).withValues(alpha: 0.35),
+                        Colors.transparent,
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              // PageView
+              PageView.builder(
+                controller: _pageController,
+                itemCount: widget.results.length,
+                onPageChanged: (i) => setState(() => _currentIndex = i),
+                itemBuilder: (ctx, index) {
+                  final it = widget.results[index];
+                  return Padding(
+                    padding: EdgeInsets.fromLTRB(
+                        20, topPad + 72, 20, bottomPad + 130),
+                    child: Hero(
+                      tag: '${widget.heroTagPrefix}_${it.thumbnailDataUri.hashCode}_$index',
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF8A2BE2)
+                                  .withValues(alpha: 0.45),
+                              blurRadius: 48,
+                              spreadRadius: 2,
+                              offset: const Offset(0, 8),
+                            ),
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.5),
+                              blurRadius: 24,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(20),
+                          child: _LightboxImage(src: it.thumbnailDataUri),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+
+              // Top bar
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  padding:
+                      EdgeInsets.fromLTRB(16, topPad + 10, 16, 14),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.65),
+                        Colors.transparent,
+                      ],
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      GestureDetector(
+                        onTap: _dismiss,
+                        child: Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(19),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.18),
+                            ),
+                          ),
+                          child: const Icon(Icons.close_rounded,
+                              color: Colors.white, size: 18),
+                        ),
+                      ),
+                      const Spacer(),
+                      if (widget.results.length > 1)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 7),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.18),
+                            ),
+                          ),
+                          child: Text(
+                            '${_currentIndex + 1} / ${widget.results.length}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontFamily: 'Poppins',
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Bottom bar
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  padding: EdgeInsets.fromLTRB(20, 28, 20, bottomPad + 24),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.bottomCenter,
+                      end: Alignment.topCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.75),
+                        Colors.transparent,
+                      ],
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Dots
+                      if (widget.results.length > 1)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 14),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: List.generate(widget.results.length, (i) {
+                              final isActive = i == _currentIndex;
+                              return TweenAnimationBuilder<double>(
+                                key: ValueKey('dot_$i\_$isActive'),
+                                tween: Tween(
+                                  begin: isActive ? 0.6 : 1.05,
+                                  end: 1.0,
+                                ),
+                                duration: const Duration(milliseconds: 420),
+                                curve: Curves.easeOutBack,
+                                builder: (context, scale, _) {
+                                  return Transform.scale(
+                                    scale: scale,
+                                    child: AnimatedOpacity(
+                                      duration: const Duration(milliseconds: 300),
+                                      opacity: isActive ? 1.0 : 0.45,
+                                      child: AnimatedContainer(
+                                        duration: const Duration(milliseconds: 380),
+                                        curve: Curves.easeOutBack,
+                                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                                        width: isActive ? 24 : 6,
+                                        height: 6,
+                                        decoration: BoxDecoration(
+                                          gradient: isActive
+                                              ? const LinearGradient(colors: [
+                                                  Color(0xFF8A2BE2),
+                                                  Color(0xFFCE93D8),
+                                                ])
+                                              : null,
+                                          color: isActive
+                                              ? null
+                                              : Colors.white,
+                                          borderRadius: BorderRadius.circular(3),
+                                          boxShadow: isActive
+                                              ? [
+                                                  BoxShadow(
+                                                    color: const Color(0xFF8A2BE2)
+                                                        .withValues(alpha: 0.65),
+                                                    blurRadius: 10,
+                                                    spreadRadius: 1,
+                                                  ),
+                                                ]
+                                              : null,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              );
+                            }),
+                          ),
+                        ),
+                      // Title
+                      if (item.title.isNotEmpty)
+                        Text(
+                          item.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontFamily: 'Poppins',
+                            fontWeight: FontWeight.w600,
+                            height: 1.4,
+                          ),
+                        ),
+                      if (item.title.isNotEmpty && item.sourceLink.isNotEmpty)
+                        const SizedBox(height: 5),
+                      // Source
+                      if (item.sourceLink.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF8A2BE2).withValues(alpha: 0.35),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: const Color(0xFFAB47BC).withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.link_rounded,
+                                  color: Colors.white.withValues(alpha: 0.7),
+                                  size: 11),
+                              const SizedBox(width: 4),
+                              Text(
+                                _domain(item.sourceLink),
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.8),
+                                  fontSize: 11,
+                                  fontFamily: 'Poppins',
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Lightbox full-res image (handles data URI + http) ────────────────────────
+
+class _LightboxImage extends StatelessWidget {
+  final String src;
+  const _LightboxImage({required this.src});
+
+  @override
+  Widget build(BuildContext context) {
+    if (src.startsWith('data:image/')) {
+      try {
+        final bytes = base64Decode(src.split(',').last);
+        return Image.memory(bytes, fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => _placeholder());
+      } catch (_) {
+        return _placeholder();
+      }
+    } else if (src.startsWith('http')) {
+      return CachedNetworkImage(
+        imageUrl: src,
+        fit: BoxFit.contain,
+        errorWidget: (_, __, ___) => _placeholder(),
+      );
+    }
+    return _placeholder();
+  }
+
+  Widget _placeholder() {
+    return Container(
+      width: 200,
+      height: 200,
+      color: const Color(0xFF1A0830),
+      child: const Icon(Icons.image_outlined, color: Color(0xFF6B7280), size: 56),
     );
   }
 }

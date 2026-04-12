@@ -9,7 +9,10 @@
       "Bash(otool -l /Users/viratsingh/Projects/bavi/build/native_assets/ios/llamadart.framework/llamadart)",
       "Read(//Users/viratsingh/.pub-cache/hosted/pub.dev/llamadart-0.6.7/lib/**)",
       "Bash(flutter pub:*)",
-      "Read(//Users/viratsingh/.pub-cache/hosted/pub.dev/llamadart-0.6.7/.dart_tool/llamadart/native_bundles/**)"
+      "Read(//Users/viratsingh/.pub-cache/hosted/pub.dev/llamadart-0.6.7/.dart_tool/llamadart/native_bundles/**)",
+      "Bash(grep -l \"VisualBrowse\\\\|VisualBrowseImageData\\\\|VisualBrowseResultData\" /Users/viratsingh/Projects/bavi/lib/models/*.dart)",
+      "Bash(/Users/viratsingh/flutter/bin/dart analyze:*)",
+      "Bash(find /Users/viratsingh/Projects/bavi -name \"*.dart\" -type f -exec grep -l \"ThreadAnswerView\\(\" {} \\\\;)"
     ]
   }
 }

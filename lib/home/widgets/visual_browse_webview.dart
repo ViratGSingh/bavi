@@ -1,21 +1,20 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
-import 'package:bavi/models/short_video.dart';
-import 'package:bavi/home/widgets/search_extraction_helper.dart';
+import 'package:bavi/models/thread.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
-class DeepDrissySearchWebView extends StatefulWidget {
-  final List<String> queries;
+class VisualBrowseWebView extends StatefulWidget {
+  final String query;
 
-  const DeepDrissySearchWebView({required this.queries, super.key});
+  const VisualBrowseWebView({required this.query, super.key});
 
   @override
-  State<DeepDrissySearchWebView> createState() =>
-      _DeepDrissySearchWebViewState();
+  State<VisualBrowseWebView> createState() => _VisualBrowseWebViewState();
 }
 
-class _DeepDrissySearchWebViewState extends State<DeepDrissySearchWebView>
+class _VisualBrowseWebViewState extends State<VisualBrowseWebView>
     with TickerProviderStateMixin {
   InAppWebViewController? _controller;
   bool _isExtracting = false;
@@ -23,12 +22,8 @@ class _DeepDrissySearchWebViewState extends State<DeepDrissySearchWebView>
   Timer? _timeoutTimer;
   double _progress = 0;
   bool _showCaptchaPrompt = false;
-  String _statusText = 'Searching...';
-  int _resultCount = 0;
-
-  int _currentQueryIndex = 0;
-  final List<ExtractedResultInfo> _allResults = [];
-  final Set<String> _seenUrls = {};
+  String _statusText = 'Searching images...';
+  int _imageCount = 0;
 
   late AnimationController _gradientController;
   late Animation<double> _gradientAnimation;
@@ -36,10 +31,8 @@ class _DeepDrissySearchWebViewState extends State<DeepDrissySearchWebView>
   @override
   void initState() {
     super.initState();
-    // Longer timeout for multiple queries
-    _timeoutTimer = Timer(
-        Duration(seconds: 30 + (widget.queries.length * 15)), () {
-      _popWithResults(_allResults);
+    _timeoutTimer = Timer(const Duration(seconds: 30), () {
+      _popWithResults([]);
     });
 
     _gradientController = AnimationController(
@@ -67,7 +60,7 @@ class _DeepDrissySearchWebViewState extends State<DeepDrissySearchWebView>
     }
   }
 
-  void _popWithResults(List<ExtractedResultInfo> results) {
+  void _popWithResults(List<VisualBrowseImageData> results) {
     if (_hasPopped) return;
     _hasPopped = true;
     _timeoutTimer?.cancel();
@@ -76,155 +69,216 @@ class _DeepDrissySearchWebViewState extends State<DeepDrissySearchWebView>
 
   Future<bool> _isCaptchaOrConsentPage() async {
     if (_controller == null) return false;
-    return SearchExtractionHelper.isCaptchaOrConsentPage(_controller!);
+    final check = await _controller!.evaluateJavascript(source: '''
+(function() {
+  var body = document.body ? document.body.innerText : '';
+  if (document.querySelector('#captcha-form') !== null) return 'captcha';
+  if (document.querySelector('form[action*="sorry"]') !== null) return 'captcha';
+  if (body.indexOf('unusual traffic') !== -1) return 'captcha';
+  if (body.indexOf('not a robot') !== -1) return 'captcha';
+  if (document.querySelector('form[action*="consent"]') !== null) return 'consent';
+  return 'ok';
+})();
+''');
+    final result = (check ?? '').toString();
+    return result == 'captcha' || result == 'consent';
   }
 
-  Future<List<ExtractedResultInfo>> _extractResultsFromPage() async {
-    if (_controller == null) return [];
-    return SearchExtractionHelper.extractResultsFromPage(_controller!);
-  }
-
-  Future<void> _scrollToLastOrganicResult() async {
+  Future<void> _scrollToLoadImages() async {
     if (_controller == null) return;
-    final qi = '(${_currentQueryIndex + 1}/${widget.queries.length})';
-    _updateStatus('Scanning results... $qi');
-    await SearchExtractionHelper.scrollToLastOrganicResult(
-      _controller!,
-      onStatus: (s) {
-        _updateStatus('$s $qi');
-        final count = int.tryParse(s.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
-        if (count > 0) setState(() { _resultCount = _allResults.length + count; });
-      },
-    );
+    _updateStatus('Loading images...');
+
+    for (int step = 0; step < 8; step++) {
+      await _controller!.evaluateJavascript(source: '''
+(function() {
+  window.scrollBy({ top: window.innerHeight * 0.8, behavior: 'smooth' });
+})();
+''');
+      await Future.delayed(const Duration(milliseconds: 600));
+
+      final countResult = await _controller!.evaluateJavascript(source: '''
+(function() {
+  var imgs = document.querySelectorAll('img');
+  var count = 0;
+  for (var i = 0; i < imgs.length; i++) {
+    var src = imgs[i].getAttribute('src') || '';
+    var w = imgs[i].naturalWidth || imgs[i].width || 0;
+    var h = imgs[i].naturalHeight || imgs[i].height || 0;
+    if (src.length > 100 && w >= 80 && h >= 80) count++;
+  }
+  return count;
+})();
+''');
+      final count = int.tryParse(countResult?.toString() ?? '0') ?? 0;
+      if (count >= 10) {
+        setState(() => _imageCount = count);
+        break;
+      }
+      if (count > 0) {
+        setState(() => _imageCount = count);
+        _updateStatus('Found $count images...');
+      }
+    }
+  }
+
+  Future<List<VisualBrowseImageData>> _extractImagesFromPage() async {
+    if (_controller == null) return [];
+
+    final result = await _controller!.evaluateJavascript(source: r'''
+(function() {
+  var results = [];
+  var seen = {};
+
+  function getSourceLink(imgEl) {
+    var node = imgEl.parentElement;
+    for (var i = 0; i < 12 && node; i++) {
+      if (node.tagName === 'A' && node.href) {
+        var h = node.href;
+        if (h && h.indexOf('google') === -1 && h.indexOf('javascript') === -1) return h;
+      }
+      node = node.parentElement;
+    }
+    // Fallback: find any nearby <a>
+    var node2 = imgEl.parentElement;
+    for (var j = 0; j < 5 && node2; j++) {
+      var a = node2.querySelector('a[href]');
+      if (a && a.href && a.href.indexOf('google') === -1) return a.href;
+      node2 = node2.parentElement;
+    }
+    return '';
+  }
+
+  function getNearbyTitle(imgEl) {
+    var t = (imgEl.alt || imgEl.getAttribute('aria-label') || '').trim();
+    if (t.length > 3) return t;
+    // Walk up to find nearby text
+    var node = imgEl.parentElement;
+    for (var i = 0; i < 6 && node; i++) {
+      var candidates = node.querySelectorAll('div[role="heading"], span, div');
+      for (var c = 0; c < candidates.length; c++) {
+        var txt = (candidates[c].innerText || '').trim();
+        if (txt.length > 5 && txt.length < 150 && txt.indexOf('\n') === -1) return txt;
+      }
+      node = node.parentElement;
+    }
+    return '';
+  }
+
+  // Strategy 1: data URI thumbnails (most reliable for Google Images udm=2)
+  var allImgs = document.querySelectorAll('img');
+  for (var i = 0; i < allImgs.length && results.length < 10; i++) {
+    var img = allImgs[i];
+    var src = img.getAttribute('src') || '';
+    if (!src || src.length < 100) continue;
+    if (seen[src]) continue;
+
+    var w = img.naturalWidth || img.width || 0;
+    var h = img.naturalHeight || img.height || 0;
+    if (w < 80 || h < 80) continue;
+
+    seen[src] = true;
+    var title = getNearbyTitle(img);
+    var link = getSourceLink(img);
+    results.push({ thumbnailDataUri: src, title: title, sourceLink: link });
+  }
+
+  // Strategy 2: https:// thumbnail URLs if data URIs not found
+  if (results.length < 5) {
+    for (var j = 0; j < allImgs.length && results.length < 10; j++) {
+      var img2 = allImgs[j];
+      var src2 = img2.getAttribute('src') || img2.getAttribute('data-src') || '';
+      if (!src2 || src2.indexOf('http') !== 0) continue;
+      if (seen[src2]) continue;
+      if (src2.indexOf('google') !== -1 || src2.indexOf('gstatic') !== -1) continue;
+
+      var w2 = img2.naturalWidth || img2.width || 0;
+      var h2 = img2.naturalHeight || img2.height || 0;
+      if (w2 < 80 || h2 < 80) continue;
+
+      seen[src2] = true;
+      results.push({
+        thumbnailDataUri: src2,
+        title: getNearbyTitle(img2),
+        sourceLink: getSourceLink(img2)
+      });
+    }
+  }
+
+  return JSON.stringify(results.slice(0, 10));
+})();
+''');
+
+    if (result != null && result != 'null') {
+      final String jsonStr = result is String ? result : result.toString();
+      try {
+        final List<dynamic> parsed = jsonDecode(jsonStr);
+        return parsed.map((e) {
+          return VisualBrowseImageData(
+            thumbnailDataUri: (e['thumbnailDataUri'] ?? '').toString(),
+            title: (e['title'] ?? '').toString(),
+            sourceLink: (e['sourceLink'] ?? '').toString(),
+          );
+        }).where((d) => d.thumbnailDataUri.isNotEmpty).toList();
+      } catch (_) {}
+    }
+    return [];
   }
 
   Future<void> _extractResults() async {
     if (_isExtracting || _controller == null) return;
     _isExtracting = true;
 
-    await Future.delayed(
-        Duration(milliseconds: 1500 + Random().nextInt(1000)));
+    await Future.delayed(const Duration(milliseconds: 1500));
 
     if (await _isCaptchaOrConsentPage()) {
-      print(
-          'DeepDrissySearchWebView: CAPTCHA detected, letting user solve it');
       _isExtracting = false;
-      setState(() {
-        _showCaptchaPrompt = true;
-      });
+      setState(() => _showCaptchaPrompt = true);
       _timeoutTimer?.cancel();
       _timeoutTimer = Timer(const Duration(seconds: 60), () {
-        _popWithResults(_allResults);
+        _popWithResults([]);
       });
       return;
     }
 
     try {
-      final qi = '(${_currentQueryIndex + 1}/${widget.queries.length})';
-      _updateStatus('Reading page... $qi');
+      _updateStatus('Reading image results...');
+      var results = await _extractImagesFromPage();
 
-      var allResults = await _extractResultsFromPage();
-      _updateStatus('Found ${allResults.length} results $qi');
-
-      // Mirror regular browse: only scroll when the initial extraction is thin.
-      if (allResults.length < 8) {
-        await _scrollToLastOrganicResult();
+      if (results.length < 8) {
+        await _scrollToLoadImages();
         await Future.delayed(const Duration(milliseconds: 500));
-        _updateStatus('Extracting results... $qi');
-        final moreResults = await _extractResultsFromPage();
+        _updateStatus('Extracting images...');
+        final moreResults = await _extractImagesFromPage();
 
-        // Merge results from this page, dedup by URL
-        final mergedResults = <ExtractedResultInfo>[];
-        final localSeen = <String>{};
-        for (final r in [...allResults, ...moreResults]) {
-          if (!localSeen.contains(r.url)) {
-            localSeen.add(r.url);
-            mergedResults.add(r);
+        final seen = <String>{};
+        final merged = <VisualBrowseImageData>[];
+        for (final r in [...results, ...moreResults]) {
+          if (!seen.contains(r.thumbnailDataUri)) {
+            seen.add(r.thumbnailDataUri);
+            merged.add(r);
           }
         }
-        allResults = mergedResults;
+        results = merged;
       }
 
-      if (allResults.length > 15) {
-        allResults = allResults.sublist(0, 15);
-      }
+      if (results.length > 10) results = results.sublist(0, 10);
 
-      // Add to global results, dedup across queries, tag with source query
-      final currentQuery = widget.queries[_currentQueryIndex];
-      for (final r in allResults) {
-        if (!_seenUrls.contains(r.url)) {
-          _seenUrls.add(r.url);
-          _allResults.add(ExtractedResultInfo(
-            url: r.url,
-            title: r.title,
-            excerpts: r.excerpts,
-            thumbnailUrl: r.thumbnailUrl,
-            isVerified: r.isVerified,
-            sourceQuery: currentQuery,
-          ));
-        }
-      }
+      setState(() => _imageCount = results.length);
+      _updateStatus('Found ${results.length} images');
 
-      setState(() {
-        _resultCount = _allResults.length;
-      });
-
-      print(
-          'DeepDrissySearchWebView: Query ${_currentQueryIndex + 1}/${widget.queries.length} extracted ${allResults.length} results, total: ${_allResults.length}');
-
-      // Move to next query or finish
-      _currentQueryIndex++;
-      if (_currentQueryIndex < widget.queries.length) {
-        _isExtracting = false;
-        _updateStatus(
-            'Searching ${_currentQueryIndex + 1}/${widget.queries.length}...');
-        await Future.delayed(
-            Duration(milliseconds: 1000 + Random().nextInt(500)));
-        _loadNextQuery();
-      } else {
-        _updateStatus('Got ${_allResults.length} total results');
-        await Future.delayed(const Duration(milliseconds: 400));
-        _popWithResults(_allResults);
-      }
+      await Future.delayed(const Duration(milliseconds: 300));
+      _popWithResults(results);
     } catch (e) {
-      print('DeepDrissySearchWebView: Error extracting results: $e');
-      // On error, try next query or return what we have
-      _currentQueryIndex++;
-      if (_currentQueryIndex < widget.queries.length) {
-        _isExtracting = false;
-        _loadNextQuery();
-      } else {
-        _popWithResults(_allResults);
-      }
+      print('VisualBrowseWebView: Error extracting images: $e');
+      _popWithResults([]);
     }
-  }
-
-  void _loadNextQuery() {
-    if (_controller == null || _currentQueryIndex >= widget.queries.length) {
-      return;
-    }
-    final encodedQuery =
-        Uri.encodeComponent(widget.queries[_currentQueryIndex]);
-    final searchUrl =
-        'https://www.google.com/search?q=$encodedQuery&num=15';
-    _controller!.loadUrl(
-      urlRequest: URLRequest(
-        url: WebUri(searchUrl),
-        headers: {
-          'Accept':
-              'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.9',
-        },
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final encodedQuery =
-        Uri.encodeComponent(widget.queries.first);
+    final encodedQuery = Uri.encodeComponent(widget.query);
     final searchUrl =
-        'https://www.google.com/search?q=$encodedQuery&num=15';
+        'https://www.google.com/search?q=$encodedQuery&udm=2';
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
 
@@ -236,7 +290,7 @@ class _DeepDrissySearchWebViewState extends State<DeepDrissySearchWebView>
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.close, color: Colors.white70),
-          onPressed: () => _popWithResults(_allResults),
+          onPressed: () => _popWithResults([]),
         ),
         title: Column(
           children: [
@@ -249,9 +303,9 @@ class _DeepDrissySearchWebViewState extends State<DeepDrissySearchWebView>
                 fontFamily: 'Poppins',
               ),
             ),
-            if (_resultCount > 0 && !_showCaptchaPrompt)
+            if (_imageCount > 0 && !_showCaptchaPrompt)
               Text(
-                '$_resultCount sources found',
+                '$_imageCount images found',
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.6),
                   fontSize: 11,
@@ -419,8 +473,7 @@ class _DeepDrissySearchWebViewState extends State<DeepDrissySearchWebView>
           _progress = progress / 100;
         });
         if (progress > 30 && progress < 90) {
-          _updateStatus(
-              'Loading page... (${_currentQueryIndex + 1}/${widget.queries.length})');
+          _updateStatus('Loading image results...');
         }
       },
       onLoadStop: (controller, url) async {
@@ -428,29 +481,18 @@ class _DeepDrissySearchWebViewState extends State<DeepDrissySearchWebView>
         if (_showCaptchaPrompt) {
           if (currentUrl.contains('/search?') &&
               !(await _isCaptchaOrConsentPage())) {
-            setState(() {
-              _showCaptchaPrompt = false;
-            });
+            setState(() => _showCaptchaPrompt = false);
             _isExtracting = false;
             await _extractResults();
           }
           return;
         }
-        _updateStatus(
-            'Page loaded, extracting... (${_currentQueryIndex + 1}/${widget.queries.length})');
+        _updateStatus('Page loaded, scanning images...');
         await _extractResults();
       },
       onReceivedError: (controller, request, error) {
-        print(
-            'DeepDrissySearchWebView: Load error: ${error.description}');
-        // On error, try next query or return what we have
-        _currentQueryIndex++;
-        if (_currentQueryIndex < widget.queries.length) {
-          _isExtracting = false;
-          _loadNextQuery();
-        } else {
-          _popWithResults(_allResults);
-        }
+        print('VisualBrowseWebView: Load error: ${error.description}');
+        _popWithResults([]);
       },
     );
   }

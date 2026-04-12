@@ -7,8 +7,12 @@ import 'package:bavi/home/widgets/sources_bottom_sheet.dart';
 import 'package:bavi/home/widgets/web_view.dart';
 import 'package:bavi/home/widgets/google_search_webview.dart';
 import 'package:bavi/home/widgets/deep_drissy_search_webview.dart';
+import 'package:bavi/home/widgets/visual_browse_webview.dart';
+import 'package:bavi/home/widgets/moodboard_webview.dart';
 import 'package:bavi/home/widgets/browse_consent_sheet.dart';
 import 'package:bavi/home/widgets/settings_bottom_sheet.dart';
+import 'package:bavi/home/widgets/model_picker_bottom_sheet.dart';
+import 'package:bavi/home/widgets/model_download_page.dart';
 import 'package:bavi/models/short_video.dart';
 import 'package:bavi/models/thread.dart';
 import 'package:flutter/services.dart';
@@ -105,6 +109,8 @@ class _HomePageState extends State<HomePage>
   String _displayName = '';
   ValueNotifier<String> imageDescriptionNotifier = ValueNotifier<String>("");
 
+  bool _showFilePreview = false;
+
   bool _isLeftPillPressed = false;
   bool _isSettingsIconPressed = false;
   bool _isHistoryIconPressed = false;
@@ -113,6 +119,15 @@ class _HomePageState extends State<HomePage>
   ValueNotifier<String> extractedUrlTitle = ValueNotifier<String>("");
   ValueNotifier<String> extractedUrl = ValueNotifier<String>("");
   ValueNotifier<String> extractedImageUrl = ValueNotifier<String>("");
+  final ValueNotifier<List<VisualBrowseResultData>> visualBrowseNotifier =
+      ValueNotifier<List<VisualBrowseResultData>>([]);
+  final ValueNotifier<List<MoodboardResultData>> moodboardNotifier =
+      ValueNotifier<List<MoodboardResultData>>([]);
+  final ValueNotifier<String> moodboardProgressNotifier =
+      ValueNotifier<String>('');
+  /// All image URIs extracted (accepted + scanning) — drives the scan grid UI
+  final ValueNotifier<List<String>> moodboardScanImagesNotifier =
+      ValueNotifier<List<String>>([]);
 
   final FocusNode taskTextFieldFocusNode = FocusNode();
   @override
@@ -133,6 +148,10 @@ class _HomePageState extends State<HomePage>
     _linkSubscription?.cancel();
     streamedText.removeListener(_scrollToBottom);
     streamedText.dispose();
+    visualBrowseNotifier.dispose();
+    moodboardNotifier.dispose();
+    moodboardProgressNotifier.dispose();
+    moodboardScanImagesNotifier.dispose();
     super.dispose();
   }
 
@@ -280,7 +299,8 @@ class _HomePageState extends State<HomePage>
       create: (context) =>
           HomeBloc(httpClient: http.Client())
             ..add(HomeInitialUserData())
-            ..add(HomeLocalAILoadIfDownloaded()),
+            ..add(HomeLocalAILoadIfDownloaded())
+            ..add(HomeCheckSecondaryModelsDownloaded()),
       child: BlocListener<HomeBloc, HomeState>(
         listenWhen: (prev, curr) =>
             prev.localAIStatus != curr.localAIStatus &&
@@ -405,7 +425,7 @@ class _HomePageState extends State<HomePage>
               previous.webSearchQuery != current.webSearchQuery &&
               current.webSearchQuery != null,
           listener: (context, state) async {
-            final results = await Navigator.push<List<ExtractedResultInfo>>(
+            final browseResult = await Navigator.push<BrowseSearchResult>(
               context,
               MaterialPageRoute(
                 builder: (_) => GoogleSearchWebView(
@@ -416,7 +436,10 @@ class _HomePageState extends State<HomePage>
             );
             if (context.mounted) {
               context.read<HomeBloc>().add(
-                    HomeWebSearchResultsReceived(results ?? []),
+                    HomeWebSearchResultsReceived(
+                      browseResult?.webResults ?? [],
+                      browseImages: browseResult?.images ?? [],
+                    ),
                   );
             }
           },
@@ -442,7 +465,51 @@ class _HomePageState extends State<HomePage>
                     );
               }
             },
-            child: BlocBuilder<HomeBloc, HomeState>(builder: (context, state) {
+            child: BlocListener<HomeBloc, HomeState>(
+              listenWhen: (previous, current) =>
+                  previous.visualBrowseSearchQuery !=
+                      current.visualBrowseSearchQuery &&
+                  current.visualBrowseSearchQuery != null,
+              listener: (context, state) async {
+                final images =
+                    await Navigator.push<List<VisualBrowseImageData>>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => VisualBrowseWebView(
+                      query: state.visualBrowseSearchQuery!,
+                    ),
+                  ),
+                );
+                if (context.mounted) {
+                  context.read<HomeBloc>().add(
+                        HomeVisualBrowseImagesExtracted(images ?? []),
+                      );
+                }
+              },
+              child: BlocListener<HomeBloc, HomeState>(
+              listenWhen: (previous, current) =>
+                  previous.moodboardAllQueries != current.moodboardAllQueries &&
+                  current.moodboardAllQueries != null,
+              listener: (context, state) async {
+                final images =
+                    await Navigator.push<List<VisualBrowseImageData>>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => MoodboardWebView(
+                      queries: state.moodboardAllQueries!,
+                      theme: state.threadData.results.isNotEmpty
+                          ? state.threadData.results.last.userQuery
+                          : '',
+                    ),
+                  ),
+                );
+                if (context.mounted) {
+                  context.read<HomeBloc>().add(
+                        HomeMoodboardImagesExtracted(images ?? []),
+                      );
+                }
+              },
+              child: BlocBuilder<HomeBloc, HomeState>(builder: (context, state) {
               return PopScope(
                 canPop: true,
                 child: SafeArea(
@@ -455,6 +522,13 @@ class _HomePageState extends State<HomePage>
                           drawerScrimColor: Colors.black.withValues(alpha: 0.2),
                           drawerEdgeDragWidth:
                               MediaQuery.of(context).size.width,
+                          onDrawerChanged: (isOpened) {
+                            if (isOpened) {
+                              context
+                                  .read<HomeBloc>()
+                                  .add(HomeInitialUserData());
+                            }
+                          },
                           drawer: Drawer(
                             width: MediaQuery.of(context).size.width * 0.85,
                             backgroundColor: Colors.white,
@@ -1437,6 +1511,138 @@ class _HomePageState extends State<HomePage>
                                           )
                                         : const SizedBox.shrink(),
                                   ),
+                                  // File Preview with Close Button
+                                  AnimatedSize(
+                                    duration: const Duration(milliseconds: 300),
+                                    curve: Curves.easeInOut,
+                                    child: _showFilePreview &&
+                                                state.pendingObsidianNoteName !=
+                                                    null
+                                        ? Padding(
+                                            padding: const EdgeInsets.only(
+                                                bottom: 12),
+                                            child: Stack(
+                                              clipBehavior: Clip.none,
+                                              children: [
+                                                Container(
+                                                  width: 120,
+                                                  height: 120,
+                                                  padding:
+                                                      const EdgeInsets.all(12),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(
+                                                        0xFFF0EBF8),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            16),
+                                                    border: Border.all(
+                                                      color: const Color(
+                                                          0xFF8A2BE2),
+                                                      width: 1.5,
+                                                    ),
+                                                  ),
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      Expanded(
+                                                        child: Text(
+                                                          state.pendingObsidianNoteName!
+                                                              .replaceAll(
+                                                                  RegExp(r'\.[^.]+$'), ''),
+                                                          style:
+                                                              const TextStyle(
+                                                            color: Color(
+                                                                0xFF3D1466),
+                                                            fontSize: 13,
+                                                            fontWeight:
+                                                                FontWeight.w600,
+                                                          ),
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                          maxLines: 3,
+                                                        ),
+                                                      ),
+                                                      Container(
+                                                        padding: const EdgeInsets
+                                                            .symmetric(
+                                                            horizontal: 8,
+                                                            vertical: 4),
+                                                        decoration:
+                                                            BoxDecoration(
+                                                          color: const Color(
+                                                              0xFF8A2BE2),
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(6),
+                                                        ),
+                                                        child: Text(
+                                                          (RegExp(r'\.([^.]+)$')
+                                                                  .firstMatch(state.pendingObsidianNoteName!)
+                                                                  ?.group(1)
+                                                                  ?.toUpperCase()) ??
+                                                              'FILE',
+                                                          style: const TextStyle(
+                                                            color: Colors.white,
+                                                            fontSize: 11,
+                                                            fontWeight:
+                                                                FontWeight.w600,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                Positioned(
+                                                  top: -8,
+                                                  right: -8,
+                                                  child: GestureDetector(
+                                                    onTap: () {
+                                                      context
+                                                          .read<HomeBloc>()
+                                                          .add(
+                                                            HomeObsidianNoteCleared(),
+                                                          );
+                                                      setState(() {
+                                                        _showFilePreview = false;
+                                                      });
+                                                    },
+                                                    child: Container(
+                                                      width: 26,
+                                                      height: 26,
+                                                      decoration: BoxDecoration(
+                                                        color: const Color(
+                                                            0xFF8A2BE2),
+                                                        shape: BoxShape.circle,
+                                                        boxShadow: [
+                                                          BoxShadow(
+                                                            color: const Color(
+                                                                    0xFF8A2BE2)
+                                                                .withOpacity(
+                                                                    0.35),
+                                                            blurRadius: 8,
+                                                            offset:
+                                                                const Offset(
+                                                                    0, 2),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                      child: const Center(
+                                                        child: Icon(
+                                                          Icons.close_rounded,
+                                                          size: 16,
+                                                          color: Colors.white,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          )
+                                        : const SizedBox.shrink(),
+                                  ),
                                   Row(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
@@ -1568,6 +1774,23 @@ class _HomePageState extends State<HomePage>
                                                         state.instagramStatus ==
                                                             HomeInstagramStatus
                                                                 .enabled,
+                                                    onObsidianNoteSelected:
+                                                        (name, content) {
+                                                      context
+                                                          .read<HomeBloc>()
+                                                          .add(
+                                                            HomeObsidianNoteSelected(
+                                                              name,
+                                                              content,
+                                                            ),
+                                                          );
+                                                      setState(() {
+                                                        _showFilePreview = true;
+                                                      });
+                                                    },
+                                                    currentObsidianNoteName:
+                                                        state.pendingObsidianNoteName,
+                                                    isNoteLocked: false,
                                                   ),
                                                 ),
                                               );
@@ -1590,11 +1813,126 @@ class _HomePageState extends State<HomePage>
                                             ),
                                           ),
                                           const SizedBox(width: 8),
+                                          // Intelligence / Model picker button
+                                          GestureDetector(
+                                            onTap: () {
+                                              showModalBottomSheet(
+                                                context: context,
+                                                isScrollControlled: true,
+                                                backgroundColor:
+                                                    Colors.transparent,
+                                                builder: (_) =>
+                                                    ModelPickerBottomSheet(
+                                                  selectedModel:
+                                                      state.selectedModel,
+                                                  localAIStatus:
+                                                      state.localAIStatus,
+                                                  localAIDownloadProgress:
+                                                      state.localAIDownloadProgress,
+                                                  gemma4Status:
+                                                      state.gemma4Status,
+                                                  gemma4DownloadProgress:
+                                                      state.gemma4DownloadProgress,
+                                                  bonsaiStatus:
+                                                      state.bonsaiStatus,
+                                                  bonsaiDownloadProgress:
+                                                      state.bonsaiDownloadProgress,
+                                                  onModelSelected: (model) {
+                                                    HapticFeedback
+                                                        .selectionClick();
+                                                    context
+                                                        .read<HomeBloc>()
+                                                        .add(HomeModelSelect(
+                                                            model));
+                                                  },
+                                                  onGemma4Tap: () {
+                                                    Navigator.pop(context);
+                                                    if (state.gemma4Status ==
+                                                        LocalAIStatus.ready) {
+                                                      context
+                                                          .read<HomeBloc>()
+                                                          .add(HomeModelSelect(
+                                                              HomeModel
+                                                                  .gemma4));
+                                                    } else {
+                                                      Navigator.of(context)
+                                                          .push(
+                                                        MaterialPageRoute<
+                                                            void>(
+                                                          builder: (_) =>
+                                                              BlocProvider
+                                                                  .value(
+                                                            value: context
+                                                                .read<
+                                                                    HomeBloc>(),
+                                                            child:
+                                                                const ModelDownloadPage(
+                                                              model: HomeModel
+                                                                  .gemma4,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      );
+                                                    }
+                                                  },
+                                                  onBonsaiTap: () {
+                                                    Navigator.pop(context);
+                                                    if (state.bonsaiStatus ==
+                                                        LocalAIStatus.ready) {
+                                                      context
+                                                          .read<HomeBloc>()
+                                                          .add(HomeModelSelect(
+                                                              HomeModel
+                                                                  .bonsai));
+                                                    } else {
+                                                      Navigator.of(context)
+                                                          .push(
+                                                        MaterialPageRoute<
+                                                            void>(
+                                                          builder: (_) =>
+                                                              BlocProvider
+                                                                  .value(
+                                                            value: context
+                                                                .read<
+                                                                    HomeBloc>(),
+                                                            child:
+                                                                const ModelDownloadPage(
+                                                              model: HomeModel
+                                                                  .bonsai,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      );
+                                                    }
+                                                  },
+                                                ),
+                                              );
+                                            },
+                                            child: Container(
+                                              height: 32,
+                                              width: 32,
+                                              decoration: BoxDecoration(
+                                                color: Colors.grey
+                                                    .withOpacity(0.1),
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: const Center(
+                                                child: Icon(
+                                                  Icons.psychology,
+                                                  size: 20,
+                                                  color: Colors.black54,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
                                           // Tools button with animated popup
                                           _ToolsMenuButton(
                                             isChatActive: state.isChatModeActive,
                                             isSearchActive: !state.isChatModeActive,
                                             isDeepSearchActive: state.deepDrissyStatus == HomeDeepDrissyStatus.enabled,
+                                            isVisualBrowseActive: state.visualBrowseStatus == HomeVisualBrowseStatus.enabled,
+                                            isMoodboardActive: state.moodboardStatus == HomeMoodboardStatus.enabled,
                                             onChatSelected: () {
                                               // Switch to chat mode, disable search & deep search
                                               if (!state.isChatModeActive) {
@@ -1602,6 +1940,12 @@ class _HomePageState extends State<HomePage>
                                               }
                                               if (state.deepDrissyStatus == HomeDeepDrissyStatus.enabled) {
                                                 context.read<HomeBloc>().add(HomeToggleDeepDrissy());
+                                              }
+                                              if (state.visualBrowseStatus == HomeVisualBrowseStatus.enabled) {
+                                                context.read<HomeBloc>().add(HomeToggleVisualBrowse());
+                                              }
+                                              if (state.moodboardStatus == HomeMoodboardStatus.enabled) {
+                                                context.read<HomeBloc>().add(HomeToggleMoodboard());
                                               }
                                             },
                                             onSearchToggle: () {
@@ -1612,6 +1956,12 @@ class _HomePageState extends State<HomePage>
                                               if (state.deepDrissyStatus == HomeDeepDrissyStatus.enabled) {
                                                 context.read<HomeBloc>().add(HomeToggleDeepDrissy());
                                               }
+                                              if (state.visualBrowseStatus == HomeVisualBrowseStatus.enabled) {
+                                                context.read<HomeBloc>().add(HomeToggleVisualBrowse());
+                                              }
+                                              if (state.moodboardStatus == HomeMoodboardStatus.enabled) {
+                                                context.read<HomeBloc>().add(HomeToggleMoodboard());
+                                              }
                                             },
                                             onDeepSearchToggle: () {
                                               // Enable deep search + search mode
@@ -1621,6 +1971,18 @@ class _HomePageState extends State<HomePage>
                                               if (state.isChatModeActive) {
                                                 context.read<HomeBloc>().add(HomeToggleChatMode());
                                               }
+                                              if (state.visualBrowseStatus == HomeVisualBrowseStatus.enabled) {
+                                                context.read<HomeBloc>().add(HomeToggleVisualBrowse());
+                                              }
+                                              if (state.moodboardStatus == HomeMoodboardStatus.enabled) {
+                                                context.read<HomeBloc>().add(HomeToggleMoodboard());
+                                              }
+                                            },
+                                            onVisualBrowseToggle: () {
+                                              context.read<HomeBloc>().add(HomeToggleVisualBrowse());
+                                            },
+                                            onMoodboardToggle: () {
+                                              context.read<HomeBloc>().add(HomeToggleMoodboard());
                                             },
                                           ),
                                         ],
@@ -1755,7 +2117,30 @@ class _HomePageState extends State<HomePage>
                                                           if (!consented || !context.mounted) return;
                                                           taskTextController
                                                               .text = "";
-                                                          if (state.deepDrissyStatus ==
+                                                          if (state.moodboardStatus ==
+                                                              HomeMoodboardStatus.enabled) {
+                                                            moodboardNotifier.value = [];
+                                                            moodboardProgressNotifier.value = '';
+                                                            moodboardScanImagesNotifier.value = [];
+                                                            context.read<HomeBloc>().add(
+                                                              HomeMoodboardStart(
+                                                                taskText,
+                                                                moodboardNotifier,
+                                                                moodboardProgressNotifier,
+                                                                moodboardScanImagesNotifier,
+                                                              ),
+                                                            );
+                                                          } else if (state.visualBrowseStatus ==
+                                                              HomeVisualBrowseStatus.enabled) {
+                                                            visualBrowseNotifier.value = [];
+                                                            context.read<HomeBloc>().add(
+                                                              HomeVisualBrowseStart(
+                                                                taskText,
+                                                                visualBrowseNotifier,
+                                                                streamedText,
+                                                              ),
+                                                            );
+                                                          } else if (state.deepDrissyStatus ==
                                                               HomeDeepDrissyStatus.enabled) {
                                                             context.read<HomeBloc>().add(
                                                               HomeDeepDrissyGetAnswer(
@@ -1787,6 +2172,7 @@ class _HomePageState extends State<HomePage>
                                                         }
                                                         setState(() {
                                                           isTaskValid = false;
+                                                          _showFilePreview = false;
                                                         });
                                                         Future.delayed(Duration(
                                                                 milliseconds:
@@ -2269,6 +2655,18 @@ class _HomePageState extends State<HomePage>
                                                               streamedText,
                                                           builder: (context,
                                                               value, _) {
+                                                            return ValueListenableBuilder<List<MoodboardResultData>>(
+                                                              valueListenable: moodboardNotifier,
+                                                              builder: (context, mbImages, _) {
+                                                            return ValueListenableBuilder<String>(
+                                                              valueListenable: moodboardProgressNotifier,
+                                                              builder: (context, mbProgress, _) {
+                                                            return ValueListenableBuilder<List<String>>(
+                                                              valueListenable: moodboardScanImagesNotifier,
+                                                              builder: (context, mbScanImages, _) {
+                                                            return ValueListenableBuilder<List<VisualBrowseResultData>>(
+                                                              valueListenable: visualBrowseNotifier,
+                                                              builder: (context, vbImages, _) {
                                                             return ThreadAnswerView(
                                                               youtubeVideos: result
                                                                   .youtubeVideos,
@@ -2399,7 +2797,39 @@ class _HomePageState extends State<HomePage>
                                                                       ? state
                                                                           .condensingSources
                                                                       : const [],
+                                                              obsidianNoteName:
+                                                                  result.obsidianNoteName,
+                                                              visualBrowseResults:
+                                                                  state.loadingIndex == index
+                                                                      ? vbImages
+                                                                      : result.visualBrowseResults,
+                                                              visualBrowseAnalysisStatus:
+                                                                  state.loadingIndex == index
+                                                                      ? state.visualBrowseAnalysisStatus
+                                                                      : null,
+                                                              moodboardResults:
+                                                                  state.loadingIndex == index
+                                                                      ? mbImages
+                                                                      : result.moodboardResults,
+                                                              moodboardAnalysisStatus:
+                                                                  state.loadingIndex == index
+                                                                      ? state.moodboardAnalysisStatus
+                                                                      : null,
+                                                              moodboardProgressText:
+                                                                  state.loadingIndex == index
+                                                                      ? mbProgress
+                                                                      : null,
+                                                              moodboardScanImages:
+                                                                  state.loadingIndex == index
+                                                                      ? mbScanImages
+                                                                      : const [],
+                                                              browseImages:
+                                                                  result.browseImages,
                                                             );
+                                                          }); // Close visualBrowseNotifier builder
+                                                          }); // Close moodboardScanImagesNotifier builder
+                                                          }); // Close moodboardProgressNotifier builder
+                                                          }); // Close moodboardNotifier builder
                                                           }),
                                                   if (index <
                                                       state.threadData.results
@@ -2425,6 +2855,8 @@ class _HomePageState extends State<HomePage>
                 ),
               );
             }),
+          ), // Close BlocListener for moodboardAllQueries
+          ), // Close BlocListener for visualBrowseSearchQuery
         ), // Close BlocListener for deepDrissyWebSearchQueries
         ), // Close BlocListener for webSearchQuery
       ), // Close outer BlocListener for OCR
@@ -2481,17 +2913,25 @@ class _ToolsMenuButton extends StatefulWidget {
   final bool isChatActive;
   final bool isSearchActive;
   final bool isDeepSearchActive;
+  final bool isVisualBrowseActive;
+  final bool isMoodboardActive;
   final VoidCallback onChatSelected;
   final VoidCallback onSearchToggle;
   final VoidCallback onDeepSearchToggle;
+  final VoidCallback onVisualBrowseToggle;
+  final VoidCallback onMoodboardToggle;
 
   const _ToolsMenuButton({
     required this.isChatActive,
     required this.isSearchActive,
     required this.isDeepSearchActive,
+    required this.isVisualBrowseActive,
+    required this.isMoodboardActive,
     required this.onChatSelected,
     required this.onSearchToggle,
     required this.onDeepSearchToggle,
+    required this.onVisualBrowseToggle,
+    required this.onMoodboardToggle,
   });
 
   @override
@@ -2500,12 +2940,16 @@ class _ToolsMenuButton extends StatefulWidget {
 
 class _ToolsMenuButtonState extends State<_ToolsMenuButton> {
   String get _activeLabel {
+    if (widget.isMoodboardActive) return "Moodboard";
+    if (widget.isVisualBrowseActive) return "Visual Browse";
     if (widget.isDeepSearchActive) return "Deep Browse";
     if (widget.isChatActive && !widget.isSearchActive) return "Chat";
     return "Browse";
   }
 
   IconData get _activeIcon {
+    if (widget.isMoodboardActive) return Icons.collections_rounded;
+    if (widget.isVisualBrowseActive) return Icons.image_search_rounded;
     if (widget.isDeepSearchActive) return Icons.auto_awesome;
     if (widget.isChatActive && !widget.isSearchActive) return Icons.chat_bubble_outline;
     return Icons.language;
@@ -2520,6 +2964,8 @@ class _ToolsMenuButtonState extends State<_ToolsMenuButton> {
         isChatActive: widget.isChatActive,
         isSearchActive: widget.isSearchActive,
         isDeepSearchActive: widget.isDeepSearchActive,
+        isVisualBrowseActive: widget.isVisualBrowseActive,
+        isMoodboardActive: widget.isMoodboardActive,
         onChatSelected: () {
           Navigator.pop(context);
           widget.onChatSelected();
@@ -2531,6 +2977,14 @@ class _ToolsMenuButtonState extends State<_ToolsMenuButton> {
         onDeepSearchToggle: () {
           Navigator.pop(context);
           widget.onDeepSearchToggle();
+        },
+        onVisualBrowseToggle: () {
+          Navigator.pop(context);
+          widget.onVisualBrowseToggle();
+        },
+        onMoodboardToggle: () {
+          Navigator.pop(context);
+          widget.onMoodboardToggle();
         },
       ),
     );
@@ -2576,23 +3030,31 @@ class _ToolsModeSheet extends StatelessWidget {
   final bool isChatActive;
   final bool isSearchActive;
   final bool isDeepSearchActive;
+  final bool isVisualBrowseActive;
+  final bool isMoodboardActive;
   final VoidCallback onChatSelected;
   final VoidCallback onSearchToggle;
   final VoidCallback onDeepSearchToggle;
+  final VoidCallback onVisualBrowseToggle;
+  final VoidCallback onMoodboardToggle;
 
   const _ToolsModeSheet({
     required this.isChatActive,
     required this.isSearchActive,
     required this.isDeepSearchActive,
+    required this.isVisualBrowseActive,
+    required this.isMoodboardActive,
     required this.onChatSelected,
     required this.onSearchToggle,
     required this.onDeepSearchToggle,
+    required this.onVisualBrowseToggle,
+    required this.onMoodboardToggle,
   });
 
   @override
   Widget build(BuildContext context) {
-    final bool chatSelected = isChatActive && !isDeepSearchActive;
-    final bool browseSelected = isSearchActive && !isDeepSearchActive;
+    final bool chatSelected = isChatActive && !isDeepSearchActive && !isVisualBrowseActive && !isMoodboardActive;
+    final bool browseSelected = isSearchActive && !isDeepSearchActive && !isVisualBrowseActive && !isMoodboardActive;
 
     return Container(
       decoration: const BoxDecoration(
@@ -2661,16 +3123,34 @@ class _ToolsModeSheet extends StatelessWidget {
             isActive: browseSelected,
             onTap: onSearchToggle,
           ),
-          const SizedBox(height: 10),
-          // Deep Browse option
-          _ModeCard(
-            icon: Icons.auto_awesome_rounded,
-            title: "Deep Browse",
-            subtitle: "Multi-step reasoning with web sources",
-            isActive: isDeepSearchActive,
-            onTap: onDeepSearchToggle,
-            //badge: "PRO",
-          ),
+          // const SizedBox(height: 10),
+          // // Deep Browse option
+          // _ModeCard(
+          //   icon: Icons.auto_awesome_rounded,
+          //   title: "Deep Browse",
+          //   subtitle: "Multi-step reasoning with web sources",
+          //   isActive: isDeepSearchActive,
+          //   onTap: onDeepSearchToggle,
+          // ),
+          //const SizedBox(height: 10),
+          // // Visual Browse option
+          // _ModeCard(
+          //   icon: Icons.image_search_rounded,
+          //   title: "Visual Browse",
+          //   subtitle: "Search for images with AI vision filtering",
+          //   isActive: isVisualBrowseActive,
+          //   onTap: onVisualBrowseToggle,
+          // ),
+          // const SizedBox(height: 10),
+          // // Moodboard option
+          // _ModeCard(
+          //   icon: Icons.collections_rounded,
+          //   title: "Moodboard",
+          //   subtitle: "AI curates a Pinterest-style visual moodboard",
+          //   isActive: isMoodboardActive,
+          //   onTap: onMoodboardToggle,
+          //   badge: "NEW",
+          // ),
         ],
       ),
     );

@@ -407,6 +407,10 @@ final class HomeLocalAIDownloadProgress extends HomeEvent {
 final class HomeGemma4DownloadAndLoad extends HomeEvent {}
 final class HomeGemma4LoadIfDownloaded extends HomeEvent {}
 
+/// Liquid AI download/load events
+final class HomeLiquidAIDownloadAndLoad extends HomeEvent {}
+final class HomeLiquidAILoadIfDownloaded extends HomeEvent {}
+
 /// Bonsai download/load events
 final class HomeBonsaiDownloadAndLoad extends HomeEvent {}
 final class HomeBonsaiLoadIfDownloaded extends HomeEvent {}
@@ -472,4 +476,5 @@ final class HomeMoodboardCompleted extends HomeEvent {
 /// Model deletion events
 final class HomeDeleteLocalAIModel extends HomeEvent {}
 final class HomeDeleteGemma4Model extends HomeEvent {}
+final class HomeDeleteLiquidAIModel extends HomeEvent {}
 final class HomeDeleteBonsaiModel extends HomeEvent {}

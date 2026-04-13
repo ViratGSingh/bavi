@@ -47,9 +47,18 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
   static const String _gemma4MmProjFileName = 'gemma-4-E2B-it-mmproj-BF16.gguf';
   static const String _gemma4MmProjDownloadUrl =
       'https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/mmproj-BF16.gguf';
+  static const String _liquidAIFileName = 'LFM2.5-VL-1.6B-Q8_0.gguf';
+  static const String _liquidAIDownloadUrl =
+      'https://huggingface.co/LiquidAI/LFM2.5-VL-1.6B-GGUF/resolve/main/LFM2.5-VL-1.6B-Q8_0.gguf';
+  static const String _liquidAIMmProjFileName = 'mmproj-LFM2.5-VL-1.6b-BF16.gguf';
+  static const String _liquidAIMmProjDownloadUrl =
+      'https://huggingface.co/LiquidAI/LFM2.5-VL-1.6B-GGUF/resolve/main/mmproj-LFM2.5-VL-1.6b-BF16.gguf';
   static const String _bonsaiFileName = 'Bonsai-8B.gguf';
   static const String _bonsaiDownloadUrl =
       'https://huggingface.co/prism-ml/Bonsai-8B-gguf/resolve/main/Bonsai-8B.gguf';
+    static const String _bonsaiMmProjFileName = 'bonsai-8b-mmproj.gguf';
+  static const String _bonsaiMmProjDownloadUrl =
+      'https://huggingface.co/drissea-ai/drissy-qwen3.5-2b-GGUF/resolve/main/drissy-qwen3.5-2b.BF16-mmproj.gguf';
   // @override
   // void onTransition(Transition<HomeEvent, HomeState> transition) {
   //   super.onTransition(transition);
@@ -111,8 +120,8 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     on<HomeLocalAILoadIfDownloaded>(_loadModelIfDownloaded);
     on<HomeGemma4DownloadAndLoad>(_downloadAndLoadGemma4);
     on<HomeGemma4LoadIfDownloaded>(_loadGemma4IfDownloaded);
-    on<HomeBonsaiDownloadAndLoad>(_downloadAndLoadBonsai);
-    on<HomeBonsaiLoadIfDownloaded>(_loadBonsaiIfDownloaded);
+    on<HomeLiquidAIDownloadAndLoad>(_downloadAndLoadLiquidAI);
+    on<HomeLiquidAILoadIfDownloaded>(_loadLiquidAIIfDownloaded);
     on<HomeCheckSecondaryModelsDownloaded>(_checkSecondaryModelsDownloaded);
     on<HomeDeleteAllHistory>(_deleteAllHistory);
     on<HomeObsidianNoteSelected>(_handleObsidianNoteSelected);
@@ -127,6 +136,9 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     on<HomeMoodboardCompleted>(_handleMoodboardCompleted);
     on<HomeDeleteLocalAIModel>(_deleteLocalAIModel);
     on<HomeDeleteGemma4Model>(_deleteGemma4Model);
+    on<HomeDeleteLiquidAIModel>(_deleteLiquidAIModel);
+    on<HomeBonsaiDownloadAndLoad>(_downloadAndLoadBonsai);
+    on<HomeBonsaiLoadIfDownloaded>(_loadBonsaiIfDownloaded);
     on<HomeDeleteBonsaiModel>(_deleteBonsaiModel);
   }
 
@@ -652,6 +664,9 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         state.gemma4Status == LocalAIStatus.ready) {
       // File already downloaded — just load into engine
       add(HomeGemma4LoadIfDownloaded());
+    } else if (event.model == HomeModel.liquidAI &&
+        state.liquidAIStatus == LocalAIStatus.ready) {
+      add(HomeLiquidAILoadIfDownloaded());
     } else if (event.model == HomeModel.bonsai &&
         state.bonsaiStatus == LocalAIStatus.ready) {
       add(HomeBonsaiLoadIfDownloaded());
@@ -852,13 +867,17 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     try {
       final dir = await getApplicationDocumentsDirectory();
       final gemma4File = File('${dir.path}/$_gemma4FileName');
+      final liquidAIFile = File('${dir.path}/$_liquidAIFileName');
       final bonsaiFile = File('${dir.path}/$_bonsaiFileName');
       final gemma4Exists = await gemma4File.exists();
+      final liquidAIExists = await liquidAIFile.exists();
       final bonsaiExists = await bonsaiFile.exists();
-      if (gemma4Exists || bonsaiExists) {
+      if (gemma4Exists || liquidAIExists || bonsaiExists) {
         emit(state.copyWith(
           gemma4Status:
               gemma4Exists ? LocalAIStatus.ready : state.gemma4Status,
+          liquidAIStatus:
+              liquidAIExists ? LocalAIStatus.ready : state.liquidAIStatus,
           bonsaiStatus:
               bonsaiExists ? LocalAIStatus.ready : state.bonsaiStatus,
         ));
@@ -1036,112 +1055,170 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     }
   }
 
-  // ── Bonsai ─────────────────────────────────────────────────────────────────
+  // ── Liquid AI ──────────────────────────────────────────────────────────────
 
-  Future<void> _downloadAndLoadBonsai(
-    HomeBonsaiDownloadAndLoad event,
+  Future<void> _downloadAndLoadLiquidAI(
+    HomeLiquidAIDownloadAndLoad event,
     Emitter<HomeState> emit,
   ) async {
     try {
       final dir = await getApplicationDocumentsDirectory();
-      final modelFile = File('${dir.path}/$_bonsaiFileName');
-      final needsDownload = !await modelFile.exists();
+      final modelFile = File('${dir.path}/$_liquidAIFileName');
+      final mmProjFile = File('${dir.path}/$_liquidAIMmProjFileName');
+      final needsModel = !await modelFile.exists();
+      final needsVision = !await mmProjFile.exists();
 
-      if (needsDownload) {
+      const combinedEstimate = 2106 * 1024 * 1024; // ~1.25 GB model + ~856 MB mmproj
+      int combinedReceivedBytes = 0;
+      int combinedTotalBytes = combinedEstimate;
+
+      if (needsModel || needsVision) {
         final availableBytes = await StorageChecker.getAvailableBytes();
         const requiredBytes = 2 * 1024 * 1024 * 1024;
         if (availableBytes != null && availableBytes < requiredBytes) {
-          emit(state.copyWith(bonsaiStatus: LocalAIStatus.noStorage));
+          emit(state.copyWith(liquidAIStatus: LocalAIStatus.noStorage));
           return;
         }
         emit(state.copyWith(
-          bonsaiStatus: LocalAIStatus.downloading,
-          bonsaiDownloadProgress: 0.0,
-          bonsaiDownloadPhase: 'Downloading Bonsai...',
+          liquidAIStatus: LocalAIStatus.downloading,
+          liquidAIDownloadProgress: 0.0,
+          liquidAIDownloadPhase: 'Downloading Liquid AI...',
         ));
+      }
 
-        final request = http.Request('GET', Uri.parse(_bonsaiDownloadUrl));
+      // Step 1: Download main model
+      if (needsModel) {
+        final request = http.Request('GET', Uri.parse(_liquidAIDownloadUrl));
         final client = http.Client();
         final response = await client.send(request);
         if (response.statusCode != 200) {
+          print('Liquid AI model download failed: ${response.statusCode}');
           client.close();
-          emit(state.copyWith(bonsaiStatus: LocalAIStatus.error));
+          emit(state.copyWith(liquidAIStatus: LocalAIStatus.error));
           return;
         }
-        int received = 0;
-        int total = response.contentLength ?? (1200 * 1024 * 1024);
+        final modelContentLength = response.contentLength ?? 0;
+        if (modelContentLength > 0) {
+          combinedTotalBytes = modelContentLength + (856 * 1024 * 1024);
+        }
         final sink = modelFile.openWrite();
         await for (final chunk in response.stream) {
           sink.add(chunk);
-          received += chunk.length;
-          final progress = received / total;
+          combinedReceivedBytes += chunk.length;
+          final progress = combinedReceivedBytes / combinedTotalBytes;
           if ((progress * 100).floor() >
-              (state.bonsaiDownloadProgress * 100).floor()) {
+              (state.liquidAIDownloadProgress * 100).floor()) {
             emit(state.copyWith(
-                bonsaiDownloadProgress: progress.clamp(0.0, 0.99)));
+                liquidAIDownloadProgress: progress.clamp(0.0, 0.99)));
           }
         }
         await sink.flush();
         await sink.close();
         client.close();
-        emit(state.copyWith(bonsaiDownloadProgress: 1.0));
       }
 
+      // Step 2: Download vision projector
+      if (needsVision) {
+        emit(state.copyWith(
+          liquidAIDownloadPhase: 'Downloading vision model...',
+        ));
+        try {
+          final mmRequest =
+              http.Request('GET', Uri.parse(_liquidAIMmProjDownloadUrl));
+          final mmClient = http.Client();
+          final mmResponse = await mmClient.send(mmRequest);
+          if (mmResponse.statusCode == 200) {
+            final mmContentLength = mmResponse.contentLength ?? 0;
+            if (mmContentLength > 0 && combinedReceivedBytes > 0) {
+              combinedTotalBytes = combinedReceivedBytes + mmContentLength;
+            }
+            final mmSink = mmProjFile.openWrite();
+            await for (final chunk in mmResponse.stream) {
+              mmSink.add(chunk);
+              combinedReceivedBytes += chunk.length;
+              final progress = combinedReceivedBytes / combinedTotalBytes;
+              if ((progress * 100).floor() >
+                  (state.liquidAIDownloadProgress * 100).floor()) {
+                emit(state.copyWith(
+                    liquidAIDownloadProgress: progress.clamp(0.0, 0.99)));
+              }
+            }
+            await mmSink.flush();
+            await mmSink.close();
+            print('Liquid AI vision projector downloaded');
+          }
+          mmClient.close();
+        } catch (e) {
+          print('Liquid AI mmproj download error (non-fatal): $e');
+        }
+      }
+
+      if (needsModel || needsVision) {
+        emit(state.copyWith(liquidAIDownloadProgress: 1.0));
+      }
+
+      // Step 3: Load model into engine
       await Future.delayed(const Duration(seconds: 2));
       emit(state.copyWith(
-        bonsaiStatus: LocalAIStatus.loading,
-        bonsaiDownloadPhase: '',
+        liquidAIStatus: LocalAIStatus.loading,
+        liquidAIDownloadPhase: '',
       ));
       final success = await _drissyEngine.loadModel(modelFile.path);
       if (success) {
+        if (await mmProjFile.exists()) {
+          await _drissyEngine.loadVisionProjector(mmProjFile.path);
+        }
         emit(state.copyWith(
-          bonsaiStatus: LocalAIStatus.ready,
-          selectedModel: HomeModel.bonsai,
+          liquidAIStatus: LocalAIStatus.ready,
+          selectedModel: HomeModel.liquidAI,
         ));
-        print('Bonsai loaded successfully');
-        print('[ModelSwitch] Active model → Bonsai');
+        print('Liquid AI loaded successfully');
+        print('[ModelSwitch] Active model → Liquid AI');
       } else {
-        emit(state.copyWith(bonsaiStatus: LocalAIStatus.error));
+        emit(state.copyWith(liquidAIStatus: LocalAIStatus.error));
       }
     } catch (e) {
-      print('Bonsai download/load error: $e');
-      emit(state.copyWith(bonsaiStatus: LocalAIStatus.error));
+      print('Liquid AI download/load error: $e');
+      emit(state.copyWith(liquidAIStatus: LocalAIStatus.error));
     }
   }
 
-  Future<void> _loadBonsaiIfDownloaded(
-    HomeBonsaiLoadIfDownloaded event,
+  Future<void> _loadLiquidAIIfDownloaded(
+    HomeLiquidAILoadIfDownloaded event,
     Emitter<HomeState> emit,
   ) async {
-    if (state.bonsaiStatus == LocalAIStatus.loading ||
-        state.bonsaiStatus == LocalAIStatus.downloading) return;
+    if (state.liquidAIStatus == LocalAIStatus.loading ||
+        state.liquidAIStatus == LocalAIStatus.downloading) return;
     try {
       final dir = await getApplicationDocumentsDirectory();
-      final modelFile = File('${dir.path}/$_bonsaiFileName');
+      final modelFile = File('${dir.path}/$_liquidAIFileName');
+      final mmProjFile = File('${dir.path}/$_liquidAIMmProjFileName');
       if (!await modelFile.exists()) return;
-      // Skip if this model is already loaded in the engine
       if (_drissyEngine.loadedModelPath == modelFile.path) {
         emit(state.copyWith(
-          bonsaiStatus: LocalAIStatus.ready,
-          selectedModel: HomeModel.bonsai,
+          liquidAIStatus: LocalAIStatus.ready,
+          selectedModel: HomeModel.liquidAI,
         ));
-        print('[ModelSwitch] Active model → Bonsai (already in engine)');
+        print('[ModelSwitch] Active model → Liquid AI (already in engine)');
         return;
       }
-      emit(state.copyWith(bonsaiStatus: LocalAIStatus.loading));
+      emit(state.copyWith(liquidAIStatus: LocalAIStatus.loading));
       final success = await _drissyEngine.loadModel(modelFile.path);
       if (success) {
+        if (await mmProjFile.exists()) {
+          await _drissyEngine.loadVisionProjector(mmProjFile.path);
+        }
         emit(state.copyWith(
-          bonsaiStatus: LocalAIStatus.ready,
-          selectedModel: HomeModel.bonsai,
+          liquidAIStatus: LocalAIStatus.ready,
+          selectedModel: HomeModel.liquidAI,
         ));
-        print('[ModelSwitch] Active model → Bonsai');
+        print('[ModelSwitch] Active model → Liquid AI');
       } else {
-        emit(state.copyWith(bonsaiStatus: LocalAIStatus.error));
+        emit(state.copyWith(liquidAIStatus: LocalAIStatus.error));
       }
     } catch (e) {
-      print('Bonsai load error: $e');
-      emit(state.copyWith(bonsaiStatus: LocalAIStatus.error));
+      print('Liquid AI load error: $e');
+      emit(state.copyWith(liquidAIStatus: LocalAIStatus.error));
     }
   }
 
@@ -5266,6 +5343,199 @@ Don't reveal any personal information you have in your context unless asked abou
     }
   }
 
+  Future<void> _deleteLiquidAIModel(
+    HomeDeleteLiquidAIModel event,
+    Emitter<HomeState> emit,
+  ) async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final modelFile = File('${dir.path}/$_liquidAIFileName');
+      final mmProjFile = File('${dir.path}/$_liquidAIMmProjFileName');
+      if (_drissyEngine.loadedModelPath == modelFile.path) {
+        _drissyEngine.unload();
+      }
+      if (await modelFile.exists()) await modelFile.delete();
+      if (await mmProjFile.exists()) await mmProjFile.delete();
+      emit(state.copyWith(
+        liquidAIStatus: LocalAIStatus.idle,
+        liquidAIDownloadProgress: 0.0,
+        liquidAIDownloadPhase: '',
+        selectedModel: state.selectedModel == HomeModel.liquidAI
+            ? HomeModel.gemini
+            : state.selectedModel,
+      ));
+    } catch (e) {
+      debugPrint('Delete Liquid AI model error: $e');
+    }
+  }
+
+  // ── Bonsai ─────────────────────────────────────────────────────────────────
+
+  Future<void> _downloadAndLoadBonsai(
+    HomeBonsaiDownloadAndLoad event,
+    Emitter<HomeState> emit,
+  ) async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final modelFile = File('${dir.path}/$_bonsaiFileName');
+      final mmProjFile = File('${dir.path}/$_bonsaiMmProjFileName');
+      final needsModel = !await modelFile.exists();
+      final needsVision = !await mmProjFile.exists();
+
+      const combinedEstimate = 1690 * 1024 * 1024; // ~1.5 GB model + ~155 MB mmproj
+      int combinedReceivedBytes = 0;
+      int combinedTotalBytes = combinedEstimate;
+
+      if (needsModel || needsVision) {
+        final availableBytes = await StorageChecker.getAvailableBytes();
+        const requiredBytes = 2 * 1024 * 1024 * 1024;
+        if (availableBytes != null && availableBytes < requiredBytes) {
+          emit(state.copyWith(bonsaiStatus: LocalAIStatus.noStorage));
+          return;
+        }
+        emit(state.copyWith(
+          bonsaiStatus: LocalAIStatus.downloading,
+          bonsaiDownloadProgress: 0.0,
+          bonsaiDownloadPhase: 'Downloading Bonsai...',
+        ));
+      }
+
+      // Step 1: Download main model
+      if (needsModel) {
+        final request = http.Request('GET', Uri.parse(_bonsaiDownloadUrl));
+        final client = http.Client();
+        final response = await client.send(request);
+        if (response.statusCode != 200) {
+          print('Bonsai model download failed: ${response.statusCode}');
+          client.close();
+          emit(state.copyWith(bonsaiStatus: LocalAIStatus.error));
+          return;
+        }
+        final modelContentLength = response.contentLength ?? 0;
+        if (modelContentLength > 0) {
+          combinedTotalBytes = modelContentLength + (155 * 1024 * 1024);
+        }
+        final sink = modelFile.openWrite();
+        await for (final chunk in response.stream) {
+          sink.add(chunk);
+          combinedReceivedBytes += chunk.length;
+          final progress = combinedReceivedBytes / combinedTotalBytes;
+          if ((progress * 100).floor() >
+              (state.bonsaiDownloadProgress * 100).floor()) {
+            emit(state.copyWith(
+                bonsaiDownloadProgress: progress.clamp(0.0, 0.99)));
+          }
+        }
+        await sink.flush();
+        await sink.close();
+        client.close();
+      }
+
+      // Step 2: Download vision projector
+      if (needsVision) {
+        emit(state.copyWith(
+          bonsaiDownloadPhase: 'Downloading vision model...',
+        ));
+        try {
+          final mmRequest =
+              http.Request('GET', Uri.parse(_bonsaiMmProjDownloadUrl));
+          final mmClient = http.Client();
+          final mmResponse = await mmClient.send(mmRequest);
+          if (mmResponse.statusCode == 200) {
+            final mmContentLength = mmResponse.contentLength ?? 0;
+            if (mmContentLength > 0 && combinedReceivedBytes > 0) {
+              combinedTotalBytes = combinedReceivedBytes + mmContentLength;
+            }
+            final mmSink = mmProjFile.openWrite();
+            await for (final chunk in mmResponse.stream) {
+              mmSink.add(chunk);
+              combinedReceivedBytes += chunk.length;
+              final progress = combinedReceivedBytes / combinedTotalBytes;
+              if ((progress * 100).floor() >
+                  (state.bonsaiDownloadProgress * 100).floor()) {
+                emit(state.copyWith(
+                    bonsaiDownloadProgress: progress.clamp(0.0, 0.99)));
+              }
+            }
+            await mmSink.flush();
+            await mmSink.close();
+            print('Bonsai vision projector downloaded');
+          }
+          mmClient.close();
+        } catch (e) {
+          print('Bonsai mmproj download error (non-fatal): $e');
+        }
+      }
+
+      if (needsModel || needsVision) {
+        emit(state.copyWith(bonsaiDownloadProgress: 1.0));
+      }
+
+      // Step 3: Load model into engine
+      await Future.delayed(const Duration(seconds: 2));
+      emit(state.copyWith(
+        bonsaiStatus: LocalAIStatus.loading,
+        bonsaiDownloadPhase: '',
+      ));
+      final success = await _drissyEngine.loadModel(modelFile.path);
+      if (success) {
+        if (await mmProjFile.exists()) {
+          await _drissyEngine.loadVisionProjector(mmProjFile.path);
+        }
+        emit(state.copyWith(
+          bonsaiStatus: LocalAIStatus.ready,
+          selectedModel: HomeModel.bonsai,
+        ));
+        print('Bonsai loaded successfully');
+        print('[ModelSwitch] Active model → Bonsai');
+      } else {
+        emit(state.copyWith(bonsaiStatus: LocalAIStatus.error));
+      }
+    } catch (e) {
+      print('Bonsai download/load error: $e');
+      emit(state.copyWith(bonsaiStatus: LocalAIStatus.error));
+    }
+  }
+
+  Future<void> _loadBonsaiIfDownloaded(
+    HomeBonsaiLoadIfDownloaded event,
+    Emitter<HomeState> emit,
+  ) async {
+    if (state.bonsaiStatus == LocalAIStatus.loading ||
+        state.bonsaiStatus == LocalAIStatus.downloading) return;
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final modelFile = File('${dir.path}/$_bonsaiFileName');
+      final mmProjFile = File('${dir.path}/$_bonsaiMmProjFileName');
+      if (!await modelFile.exists()) return;
+      if (_drissyEngine.loadedModelPath == modelFile.path) {
+        emit(state.copyWith(
+          bonsaiStatus: LocalAIStatus.ready,
+          selectedModel: HomeModel.bonsai,
+        ));
+        print('[ModelSwitch] Active model → Bonsai (already in engine)');
+        return;
+      }
+      emit(state.copyWith(bonsaiStatus: LocalAIStatus.loading));
+      final success = await _drissyEngine.loadModel(modelFile.path);
+      if (success) {
+        if (await mmProjFile.exists()) {
+          await _drissyEngine.loadVisionProjector(mmProjFile.path);
+        }
+        emit(state.copyWith(
+          bonsaiStatus: LocalAIStatus.ready,
+          selectedModel: HomeModel.bonsai,
+        ));
+        print('[ModelSwitch] Active model → Bonsai');
+      } else {
+        emit(state.copyWith(bonsaiStatus: LocalAIStatus.error));
+      }
+    } catch (e) {
+      print('Bonsai load error: $e');
+      emit(state.copyWith(bonsaiStatus: LocalAIStatus.error));
+    }
+  }
+
   Future<void> _deleteBonsaiModel(
     HomeDeleteBonsaiModel event,
     Emitter<HomeState> emit,
@@ -5273,10 +5543,12 @@ Don't reveal any personal information you have in your context unless asked abou
     try {
       final dir = await getApplicationDocumentsDirectory();
       final modelFile = File('${dir.path}/$_bonsaiFileName');
+      final mmProjFile = File('${dir.path}/$_bonsaiMmProjFileName');
       if (_drissyEngine.loadedModelPath == modelFile.path) {
         _drissyEngine.unload();
       }
       if (await modelFile.exists()) await modelFile.delete();
+      if (await mmProjFile.exists()) await mmProjFile.delete();
       emit(state.copyWith(
         bonsaiStatus: LocalAIStatus.idle,
         bonsaiDownloadProgress: 0.0,

@@ -2,7 +2,6 @@ import 'package:bavi/home/bloc/home_bloc.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:icons_plus/icons_plus.dart';
 
 class ManageModelsBottomSheet extends StatefulWidget {
   const ManageModelsBottomSheet({super.key});
@@ -19,6 +18,7 @@ class _ManageModelsBottomSheetState extends State<ManageModelsBottomSheet> {
       buildWhen: (prev, curr) =>
           prev.localAIStatus != curr.localAIStatus ||
           prev.gemma4Status != curr.gemma4Status ||
+          prev.liquidAIStatus != curr.liquidAIStatus ||
           prev.bonsaiStatus != curr.bonsaiStatus,
       listener: (context, state) {},
       builder: (context, state) {
@@ -27,34 +27,41 @@ class _ManageModelsBottomSheetState extends State<ManageModelsBottomSheet> {
         if (state.localAIStatus == LocalAIStatus.ready) {
           readyModels.add(const _ModelEntry(
             model: HomeModel.localAI,
-            icon: Icons.memory_rounded,
-            iconColor: Color(0xFF7C3AED),
-            title: 'Qwen 3.5',
-            subtitle: 'On-device · Multilingual · Private',
-            tags: ['Thinking', 'Vision'],
-            tagColors: [Color(0xFF7C3AED), Color(0xFF92400E)],
+            logoAsset: 'assets/images/logo/qwen.jpg',
+            title: 'Qwen',
+            subtitle: 'Fine-tuned Qwen 3.5 2b model for grounded on-device RAG answers',
+            tags: ['Text', 'Vision', 'Recommended'],
+            tagColors: [Color(0xFF7C3AED), Color(0xFF7C3AED), Color(0xFF7C3AED)],
           ));
         }
         if (state.gemma4Status == LocalAIStatus.ready) {
           readyModels.add(const _ModelEntry(
             model: HomeModel.gemma4,
-            icon: Icons.auto_awesome_rounded,
-            iconColor: Color(0xFF059669),
+            logoAsset: 'assets/images/logo/gemma.jpg',
             title: 'Gemma 4',
-            subtitle: "Google's latest open model · Multi-turn",
-            tags: ['New', 'Vision'],
-            tagColors: [Color(0xFF065F46), Color(0xFF92400E)],
+            subtitle: "Google's latest open model that offers maximum versatility across all tasks and modalities",
+            tags: ['Text', 'Vision', 'Best'],
+            tagColors: [Color(0xFF7C3AED), Color(0xFF7C3AED), Color(0xFF7C3AED)],
+          ));
+        }
+        if (state.liquidAIStatus == LocalAIStatus.ready) {
+          readyModels.add(const _ModelEntry(
+            model: HomeModel.liquidAI,
+            logoAsset: 'assets/images/logo/liquid_ai.jpg',
+            title: 'Liquid AI',
+            subtitle: 'Ultra-efficient LFM2.5-VL-1.6B multimodal model optimised for mobiles with limited resources',
+            tags: ['Text', 'Vision', 'Lightweight'],
+            tagColors: [Color(0xFF7C3AED), Color(0xFF7C3AED), Color(0xFF7C3AED)],
           ));
         }
         if (state.bonsaiStatus == LocalAIStatus.ready) {
           readyModels.add(const _ModelEntry(
             model: HomeModel.bonsai,
-            icon: Icons.bolt_rounded,
-            iconColor: Color(0xFFD97706),
+            logoAsset: 'assets/images/logo/prism_ml.jpg',
             title: 'Bonsai',
-            subtitle: 'Ultra-efficient 1-bit on-device model',
-            tags: ['New'],
-            tagColors: [Color(0xFF065F46)],
+            subtitle: "Prism ML's 1-bit quantised 8B model — ultra-compact on-device intelligence",
+            tags: ['Text', 'Vision', '1-bit'],
+            tagColors: [Color(0xFF7C3AED), Color(0xFF7C3AED), Color(0xFF7C3AED)],
           ));
         }
 
@@ -285,6 +292,8 @@ class _ManageModelsBottomSheetState extends State<ManageModelsBottomSheet> {
         bloc.add(HomeDeleteLocalAIModel());
       case HomeModel.gemma4:
         bloc.add(HomeDeleteGemma4Model());
+      case HomeModel.liquidAI:
+        bloc.add(HomeDeleteLiquidAIModel());
       case HomeModel.bonsai:
         bloc.add(HomeDeleteBonsaiModel());
       default:
@@ -340,8 +349,7 @@ class _EmptyState extends StatelessWidget {
 
 class _ModelEntry {
   final HomeModel model;
-  final IconData icon;
-  final Color iconColor;
+  final String logoAsset;
   final String title;
   final String subtitle;
   final List<String> tags;
@@ -349,8 +357,7 @@ class _ModelEntry {
 
   const _ModelEntry({
     required this.model,
-    required this.icon,
-    required this.iconColor,
+    required this.logoAsset,
     required this.title,
     required this.subtitle,
     required this.tags,
@@ -379,18 +386,14 @@ class _ModelManageTile extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Icon box
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: entry.iconColor.withValues(alpha: 0.13),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  entry.icon,
-                  size: 22,
-                  color: entry.iconColor,
+              // Logo
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.asset(
+                  entry.logoAsset,
+                  width: 42,
+                  height: 42,
+                  fit: BoxFit.cover,
                 ),
               ),
               const SizedBox(width: 12),
@@ -434,7 +437,7 @@ class _ModelManageTile extends StatelessWidget {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(
-                    Iconsax.trash_outline,
+                    Icons.delete_outline_rounded,
                     size: 18,
                     color: Color(0xFFEF4444),
                   ),

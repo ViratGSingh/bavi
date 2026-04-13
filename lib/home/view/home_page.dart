@@ -10,6 +10,7 @@ import 'package:bavi/home/widgets/deep_drissy_search_webview.dart';
 import 'package:bavi/home/widgets/visual_browse_webview.dart';
 import 'package:bavi/home/widgets/moodboard_webview.dart';
 import 'package:bavi/home/widgets/browse_consent_sheet.dart';
+import 'package:bavi/home/widgets/speech_input_sheet.dart';
 import 'package:bavi/home/widgets/settings_bottom_sheet.dart';
 import 'package:bavi/home/widgets/model_picker_bottom_sheet.dart';
 import 'package:bavi/home/widgets/model_download_page.dart';
@@ -207,6 +208,7 @@ class _HomePageState extends State<HomePage>
   TextEditingController taskTextController = TextEditingController();
   bool isTaskValid = false;
   bool isUrl = false;
+  bool _isSpeechPanelOpen = false;
   Future<void> initMixpanel() async {
     // initialize Mixpanel
     mixpanel = await Mixpanel.init(dotenv.get("MIXPANEL_PROJECT_KEY"),
@@ -1815,7 +1817,7 @@ class _HomePageState extends State<HomePage>
                                           const SizedBox(width: 8),
                                           // Intelligence / Model picker button
                                           GestureDetector(
-                                            onTap: () {
+                                            onTap: state.replyStatus == HomeReplyStatus.loading ? null : () {
                                               showModalBottomSheet(
                                                 context: context,
                                                 isScrollControlled: true,
@@ -1833,6 +1835,10 @@ class _HomePageState extends State<HomePage>
                                                       state.gemma4Status,
                                                   gemma4DownloadProgress:
                                                       state.gemma4DownloadProgress,
+                                                  liquidAIStatus:
+                                                      state.liquidAIStatus,
+                                                  liquidAIDownloadProgress:
+                                                      state.liquidAIDownloadProgress,
                                                   bonsaiStatus:
                                                       state.bonsaiStatus,
                                                   bonsaiDownloadProgress:
@@ -1875,6 +1881,36 @@ class _HomePageState extends State<HomePage>
                                                       );
                                                     }
                                                   },
+                                                  onLiquidAITap: () {
+                                                    Navigator.pop(context);
+                                                    if (state.liquidAIStatus ==
+                                                        LocalAIStatus.ready) {
+                                                      context
+                                                          .read<HomeBloc>()
+                                                          .add(HomeModelSelect(
+                                                              HomeModel
+                                                                  .liquidAI));
+                                                    } else {
+                                                      Navigator.of(context)
+                                                          .push(
+                                                        MaterialPageRoute<
+                                                            void>(
+                                                          builder: (_) =>
+                                                              BlocProvider
+                                                                  .value(
+                                                            value: context
+                                                                .read<
+                                                                    HomeBloc>(),
+                                                            child:
+                                                                const ModelDownloadPage(
+                                                              model: HomeModel
+                                                                  .liquidAI,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      );
+                                                    }
+                                                  },
                                                   onBonsaiTap: () {
                                                     Navigator.pop(context);
                                                     if (state.bonsaiStatus ==
@@ -1908,24 +1944,81 @@ class _HomePageState extends State<HomePage>
                                                 ),
                                               );
                                             },
-                                            child: Container(
-                                              height: 32,
-                                              width: 32,
-                                              decoration: BoxDecoration(
-                                                color: Colors.grey
-                                                    .withOpacity(0.1),
-                                                shape: BoxShape.circle,
-                                              ),
-                                              child: const Center(
-                                                child: Icon(
-                                                  Icons.psychology,
-                                                  size: 20,
-                                                  color: Colors.black54,
-                                                ),
-                                              ),
+                                            child: Builder(
+                                              builder: (_) {
+                                                final isModelLoading =
+                                                    (state.selectedModel == HomeModel.localAI && state.localAIStatus == LocalAIStatus.loading) ||
+                                                    (state.selectedModel == HomeModel.gemma4 && state.gemma4Status == LocalAIStatus.loading) ||
+                                                    (state.selectedModel == HomeModel.liquidAI && state.liquidAIStatus == LocalAIStatus.loading) ||
+                                                    (state.selectedModel == HomeModel.bonsai && state.bonsaiStatus == LocalAIStatus.loading);
+                                                if (isModelLoading) {
+                                                  return  Container(
+                                                    width: 28,
+                                                    height: 28,
+                                                    decoration: BoxDecoration(
+                                                      color: Color(0xFF8A2BE2),
+                                                      shape: BoxShape.circle,
+                                                    ),
+                                                    padding: EdgeInsets.all(4),
+                                                    child: CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                      backgroundColor: Color(0xFF8A2BE2),
+                                                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFDFFF00)),
+                                                    ),
+                                                  );
+                                                }
+                                                return ClipRRect(
+                                                  borderRadius: BorderRadius.circular(16),
+                                                  child: Image.asset(
+                                                    state.selectedModel == HomeModel.gemma4
+                                                        ? 'assets/images/logo/gemma.jpg'
+                                                        : state.selectedModel == HomeModel.liquidAI
+                                                            ? 'assets/images/logo/liquid_ai.jpg'
+                                                            : 'assets/images/logo/qwen.jpg',
+                                                    width: 32,
+                                                    height: 32,
+                                                    fit: BoxFit.cover,
+                                                  ),
+                                                );
+                                              },
                                             ),
                                           ),
-                                          const SizedBox(width: 8),
+                                          
+                                        ],
+                                      ),
+                                      Row(
+                                        crossAxisAlignment: CrossAxisAlignment.end,
+                                        children: [
+                                          // Padding(
+                                          //     padding: const EdgeInsets.only(right: 12),
+                                          //     child: InkWell(
+                                          //       onTap: () async {
+                                          //         Navigator.push(
+                                          //           context,
+                                          //           MaterialPageRoute<void>(
+                                          //             builder: (BuildContext context) =>
+                                          //                 TabsViewPage(),
+                                          //           ),
+                                          //         );
+                                          //       },
+                                          //       child: Container(
+                                          //         width: 36,
+                                          //         height: 36,
+                                          //         decoration: BoxDecoration(
+                                          //           borderRadius:
+                                          //               BorderRadius.circular(18),
+                                          //           color: Color(
+                                          //               0xFF8A2BE2), //Color(0xFFDFFF00),
+                                          //         ),
+                                          //         child: Center(
+                                          //           child: Icon(
+                                          //             Iconsax.note_2_bold,
+                                          //             color: Color(0xFFDFFF00),
+                                          //             size: 20,
+                                          //           ),
+                                          //         ),
+                                          //       ),
+                                          //     )),
                                           // Tools button with animated popup
                                           _ToolsMenuButton(
                                             isChatActive: state.isChatModeActive,
@@ -1985,41 +2078,7 @@ class _HomePageState extends State<HomePage>
                                               context.read<HomeBloc>().add(HomeToggleMoodboard());
                                             },
                                           ),
-                                        ],
-                                      ),
-                                      Row(
-                                        crossAxisAlignment: CrossAxisAlignment.end,
-                                        children: [
-                                          // Padding(
-                                          //     padding: const EdgeInsets.only(right: 12),
-                                          //     child: InkWell(
-                                          //       onTap: () async {
-                                          //         Navigator.push(
-                                          //           context,
-                                          //           MaterialPageRoute<void>(
-                                          //             builder: (BuildContext context) =>
-                                          //                 TabsViewPage(),
-                                          //           ),
-                                          //         );
-                                          //       },
-                                          //       child: Container(
-                                          //         width: 36,
-                                          //         height: 36,
-                                          //         decoration: BoxDecoration(
-                                          //           borderRadius:
-                                          //               BorderRadius.circular(18),
-                                          //           color: Color(
-                                          //               0xFF8A2BE2), //Color(0xFFDFFF00),
-                                          //         ),
-                                          //         child: Center(
-                                          //           child: Icon(
-                                          //             Iconsax.note_2_bold,
-                                          //             color: Color(0xFFDFFF00),
-                                          //             size: 20,
-                                          //           ),
-                                          //         ),
-                                          //       ),
-                                          //     )),
+                                          SizedBox(width: 8),
                                           state.status == HomePageStatus.idle ||
                                                   (state.status ==
                                                           HomePageStatus
@@ -2027,11 +2086,12 @@ class _HomePageState extends State<HomePage>
                                                       state.replyStatus !=
                                                           HomeReplyStatus
                                                               .loading)
-                                              ? InkWell(
-                                                  // padding: EdgeInsets.zero,
-                                                  // visualDensity: VisualDensity(
-                                                  //     horizontal: -4),
+                                              ? (isTaskValid
+                                                  ? InkWell(
                                                   onTap: () async {
+                                                    if ((state.selectedModel == HomeModel.localAI && state.localAIStatus == LocalAIStatus.loading) ||
+                                                        (state.selectedModel == HomeModel.gemma4 && state.gemma4Status == LocalAIStatus.loading) ||
+                                                        (state.selectedModel == HomeModel.liquidAI && state.liquidAIStatus == LocalAIStatus.loading)) return;
                                                     FocusScope.of(context)
                                                         .unfocus();
 
@@ -2194,25 +2254,64 @@ class _HomePageState extends State<HomePage>
                                                       }
                                                     }
                                                   },
+                                                  child: Opacity(
+                                                    opacity: ((state.selectedModel == HomeModel.localAI && state.localAIStatus == LocalAIStatus.loading) ||
+                                                        (state.selectedModel == HomeModel.gemma4 && state.gemma4Status == LocalAIStatus.loading) ||
+                                                        (state.selectedModel == HomeModel.liquidAI && state.liquidAIStatus == LocalAIStatus.loading)) ? 0.4 : 1.0,
+                                                    child: Container(
+                                                      width: 32,
+                                                      height: 32,
+                                                      margin: EdgeInsets.only(
+                                                          left: 0, bottom: 0),
+                                                      decoration: BoxDecoration(
+                                                        color: Color(0xFF8A2BE2),
+                                                        shape: BoxShape.circle,
+                                                      ),
+                                                      padding: EdgeInsets.all(0),
+                                                      child: Icon(
+                                                        Icons.send,
+                                                        color: Color(0xFFDFFF00),
+                                                        size: 16,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                )
+                                                : InkWell(
+                                                  onTap: () {
+                                                    HapticFeedback.mediumImpact();
+                                                    FocusScope.of(context).unfocus();
+                                                    setState(() {
+                                                      _isSpeechPanelOpen = true;
+                                                    });
+                                                    // Scroll to bottom after the panel
+                                                    // animation completes (320ms).
+                                                    Future.delayed(
+                                                      const Duration(milliseconds: 340),
+                                                      () {
+                                                        if (_scrollController.hasClients) {
+                                                          _scrollController.animateTo(
+                                                            _scrollController.position.maxScrollExtent,
+                                                            duration: const Duration(milliseconds: 250),
+                                                            curve: Curves.easeOut,
+                                                          );
+                                                        }
+                                                      },
+                                                    );
+                                                  },
                                                   child: Container(
                                                     width: 32,
                                                     height: 32,
-                                                    margin: EdgeInsets.only(
-                                                        left: 0, bottom: 0),
-                                                    decoration: BoxDecoration(
-                                                      color: isTaskValid == true
-                                                          ? Color(0xFF8A2BE2)
-                                                          : Color(0xFFC99DF2),
+                                                    decoration: const BoxDecoration(
+                                                      color: Color(0xFF8A2BE2),
                                                       shape: BoxShape.circle,
                                                     ),
-                                                    padding: EdgeInsets.all(0),
-                                                    child: Icon(
-                                                      Icons.send,
+                                                    child: const Icon(
+                                                      Icons.mic,
                                                       color: Color(0xFFDFFF00),
                                                       size: 16,
                                                     ),
                                                   ),
-                                                )
+                                                ))
                                               : InkWell(
                                                   // padding: EdgeInsets.zero,
                                                   // visualDensity: VisualDensity(
@@ -2264,6 +2363,35 @@ class _HomePageState extends State<HomePage>
                                   fontSize: 11,
                                 ),
                               ),
+                            ),
+                            AnimatedSize(
+                              duration: const Duration(milliseconds: 320),
+                              curve: Curves.easeInOut,
+                              child: _isSpeechPanelOpen
+                                  ? SpeechInputSheet(
+                                      textController: taskTextController,
+                                      onDismiss: () {
+                                        setState(() {
+                                          _isSpeechPanelOpen = false;
+                                          isTaskValid = taskTextController.text.trim().length >= 3;
+                                        });
+                                        // Let AnimatedPadding collapse first,
+                                        // then snap scroll to the real bottom.
+                                        Future.delayed(
+                                          const Duration(milliseconds: 340),
+                                          () {
+                                            if (_scrollController.hasClients) {
+                                              _scrollController.animateTo(
+                                                _scrollController.position.maxScrollExtent,
+                                                duration: const Duration(milliseconds: 200),
+                                                curve: Curves.easeOut,
+                                              );
+                                            }
+                                          },
+                                        );
+                                      },
+                                    )
+                                  : const SizedBox.shrink(),
                             ),
                               ],
                             ),
@@ -2336,7 +2464,11 @@ class _HomePageState extends State<HomePage>
                                                       ),
                                                     ],
                                                   )
-                                                : state.localAIStatus ==
+                                                : (state.selectedModel == HomeModel.gemma4
+                                                            ? state.gemma4Status
+                                                            : state.selectedModel == HomeModel.liquidAI
+                                                                ? state.liquidAIStatus
+                                                                : state.localAIStatus) ==
                                                             LocalAIStatus.idle
                                                         ? Column(
                                                             mainAxisSize:
@@ -2509,13 +2641,15 @@ class _HomePageState extends State<HomePage>
                                                                   ),
                                                                 ],
                                                               ),
-                                                              // Loading indicator when local model is loading/downloading
-                                                              if (state.localAIStatus ==
-                                                                      LocalAIStatus
-                                                                          .loading ||
-                                                                  state.localAIStatus ==
-                                                                      LocalAIStatus
-                                                                          .downloading) ...[
+                                                              // Loading indicator when active model is loading/downloading
+                                                              if (() {
+                                                                final s = state.selectedModel == HomeModel.gemma4
+                                                                    ? state.gemma4Status
+                                                                    : state.selectedModel == HomeModel.liquidAI
+                                                                        ? state.liquidAIStatus
+                                                                        : state.localAIStatus;
+                                                                return s == LocalAIStatus.loading || s == LocalAIStatus.downloading;
+                                                              }()) ...[
                                                                 const SizedBox(
                                                                     height: 16),
                                                                 SizedBox(
@@ -2532,11 +2666,21 @@ class _HomePageState extends State<HomePage>
                                                                 const SizedBox(
                                                                     height: 8),
                                                                 Text(
-                                                                  state.localAIStatus ==
-                                                                          LocalAIStatus
-                                                                              .downloading
-                                                                      ? 'Downloading model... ${(state.localAIDownloadProgress * 100).toInt()}%'
-                                                                      : 'Loading model...',
+                                                                  () {
+                                                                    final s = state.selectedModel == HomeModel.gemma4
+                                                                        ? state.gemma4Status
+                                                                        : state.selectedModel == HomeModel.liquidAI
+                                                                            ? state.liquidAIStatus
+                                                                            : state.localAIStatus;
+                                                                    final p = state.selectedModel == HomeModel.gemma4
+                                                                        ? state.gemma4DownloadProgress
+                                                                        : state.selectedModel == HomeModel.liquidAI
+                                                                            ? state.liquidAIDownloadProgress
+                                                                            : state.localAIDownloadProgress;
+                                                                    return s == LocalAIStatus.downloading
+                                                                        ? 'Downloading model... ${(p * 100).toInt()}%'
+                                                                        : 'Loading model...';
+                                                                  }(),
                                                                   style:
                                                                       TextStyle(
                                                                     color: Color(
@@ -2565,9 +2709,12 @@ class _HomePageState extends State<HomePage>
                                         EdgeInsets.fromLTRB(10, 10, 10, 10),
                                     child: SingleChildScrollView(
                                       controller: _scrollController,
-                                      child: Padding(
-                                        padding:
-                                            const EdgeInsets.only(bottom: 160),
+                                      child: AnimatedPadding(
+                                        duration: const Duration(milliseconds: 320),
+                                        curve: Curves.easeInOut,
+                                        padding: EdgeInsets.only(
+                                          bottom: _isSpeechPanelOpen ? 394 : 160,
+                                        ),
                                         child: Column(
                                           children: List.generate(
                                             state.threadData.results.length,
@@ -3123,15 +3270,15 @@ class _ToolsModeSheet extends StatelessWidget {
             isActive: browseSelected,
             onTap: onSearchToggle,
           ),
-          // const SizedBox(height: 10),
-          // // Deep Browse option
-          // _ModeCard(
-          //   icon: Icons.auto_awesome_rounded,
-          //   title: "Deep Browse",
-          //   subtitle: "Multi-step reasoning with web sources",
-          //   isActive: isDeepSearchActive,
-          //   onTap: onDeepSearchToggle,
-          // ),
+          const SizedBox(height: 10),
+          // Deep Browse option
+          _ModeCard(
+            icon: Icons.auto_awesome_rounded,
+            title: "Deep Browse",
+            subtitle: "Multi-step reasoning with web sources",
+            isActive: isDeepSearchActive,
+            onTap: onDeepSearchToggle,
+          ),
           //const SizedBox(height: 10),
           // // Visual Browse option
           // _ModeCard(

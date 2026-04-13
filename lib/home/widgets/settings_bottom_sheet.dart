@@ -183,7 +183,7 @@ class _SettingsBottomSheetState extends State<SettingsBottomSheet> {
                 _divider(),
 
                 _settingsTile(
-                  icon: Iconsax.cpu_bold,
+                  icon: Iconsax.cpu_outline,
                   label: 'Manage Models',
                   onTap: () {
                     showModalBottomSheet<void>(

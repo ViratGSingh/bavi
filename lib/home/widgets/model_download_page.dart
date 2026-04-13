@@ -60,25 +60,47 @@ const _gemma4Config = _ModelConfig(
   ],
 );
 
-const _bonsaiConfig = _ModelConfig(
-  name: 'Bonsai',
-  subtitle: 'Ultra-efficient 1-bit model',
-  paramTag: '8B PARAMS',
-  bgColor: Color(0xFFFFF8E1),
-  accentColor: Color(0xFFD97706),
-  icon: Icons.bolt_rounded,
-  downloadSizeLabel: '~1.2 GB',
+const _liquidAIConfig = _ModelConfig(
+  name: 'Liquid AI',
+  subtitle: 'Compact multimodal model by Liquid AI',
+  paramTag: '1.6B PARAMS',
+  bgColor: Color(0xFFE0F7FA),
+  accentColor: Color(0xFF0EA5E9),
+  icon: Icons.water_drop_rounded,
+  downloadSizeLabel: '~2.1 GB',
   tips: [
-    'Bonsai uses 1-bit quantization — radical efficiency without quality loss.',
-    '8 billion parameters in a fraction of the usual storage.',
-    'Built by PrismML for peak on-device and real-time performance.',
-    'Your data never leaves your device. True privacy.',
-    'Faster inference than most 7B models at a fraction of the size.',
+    'LFM2.5-VL is a compact vision-language model built by Liquid AI.',
+    'Understands both text and images — all running on your device.',
+    'Only 1.6B parameters, optimised for speed without sacrificing quality.',
+    'Your data stays private — no cloud, no servers, just your phone.',
+    'Runs fully offline after download — no internet needed.',
   ],
   features: [
     _FeaturePill(Icons.shield_outlined, 'Private', 'on your device'),
-    _FeaturePill(Icons.bolt_rounded, 'Ultra-fast', '1-bit model'),
-    _FeaturePill(Icons.memory_rounded, 'Efficient', '8B params'),
+    _FeaturePill(Icons.image_outlined, 'Vision', 'text + images'),
+    _FeaturePill(Icons.bolt_rounded, 'Compact', '1.6B params'),
+  ],
+);
+
+const _bonsaiConfig = _ModelConfig(
+  name: 'Bonsai',
+  subtitle: 'Ultra-compact 1-bit 8B model by Prism ML',
+  paramTag: '8B PARAMS',
+  bgColor: Color(0xFFFFF8F0),
+  accentColor: Color(0xFFD97706),
+  icon: Icons.forest_rounded,
+  downloadSizeLabel: '~1.5 GB',
+  tips: [
+    'Bonsai is a 1-bit quantised 8B model by Prism ML, pushing the limits of compression.',
+    'Despite being 8B parameters, the 1-bit format makes it extremely compact.',
+    'Your data stays private — all processing happens on your device.',
+    'Supports both text and image inputs via the vision projector.',
+    'Runs fully offline after download — no internet needed.',
+  ],
+  features: [
+    _FeaturePill(Icons.shield_outlined, 'Private', 'on your device'),
+    _FeaturePill(Icons.compress_rounded, '1-bit', 'ultra compact'),
+    _FeaturePill(Icons.image_outlined, 'Vision', 'text + images'),
   ],
 );
 
@@ -96,19 +118,29 @@ class _ModelDownloadPageState extends State<ModelDownloadPage> {
   int _currentTip = 0;
   Timer? _tipTimer;
 
-  _ModelConfig get _config =>
-      widget.model == HomeModel.gemma4 ? _gemma4Config : _bonsaiConfig;
+  _ModelConfig get _config {
+    if (widget.model == HomeModel.gemma4) return _gemma4Config;
+    if (widget.model == HomeModel.bonsai) return _bonsaiConfig;
+    return _liquidAIConfig;
+  }
 
-  LocalAIStatus _statusFor(HomeState s) =>
-      widget.model == HomeModel.gemma4 ? s.gemma4Status : s.bonsaiStatus;
+  LocalAIStatus _statusFor(HomeState s) {
+    if (widget.model == HomeModel.gemma4) return s.gemma4Status;
+    if (widget.model == HomeModel.bonsai) return s.bonsaiStatus;
+    return s.liquidAIStatus;
+  }
 
-  double _progressFor(HomeState s) => widget.model == HomeModel.gemma4
-      ? s.gemma4DownloadProgress
-      : s.bonsaiDownloadProgress;
+  double _progressFor(HomeState s) {
+    if (widget.model == HomeModel.gemma4) return s.gemma4DownloadProgress;
+    if (widget.model == HomeModel.bonsai) return s.bonsaiDownloadProgress;
+    return s.liquidAIDownloadProgress;
+  }
 
-  String _phaseFor(HomeState s) => widget.model == HomeModel.gemma4
-      ? s.gemma4DownloadPhase
-      : s.bonsaiDownloadPhase;
+  String _phaseFor(HomeState s) {
+    if (widget.model == HomeModel.gemma4) return s.gemma4DownloadPhase;
+    if (widget.model == HomeModel.bonsai) return s.bonsaiDownloadPhase;
+    return s.liquidAIDownloadPhase;
+  }
 
   void _startTips() {
     if (_tipTimer != null) return;
@@ -134,8 +166,10 @@ class _ModelDownloadPageState extends State<ModelDownloadPage> {
     HapticFeedback.mediumImpact();
     if (widget.model == HomeModel.gemma4) {
       context.read<HomeBloc>().add(HomeGemma4DownloadAndLoad());
-    } else {
+    } else if (widget.model == HomeModel.bonsai) {
       context.read<HomeBloc>().add(HomeBonsaiDownloadAndLoad());
+    } else {
+      context.read<HomeBloc>().add(HomeLiquidAIDownloadAndLoad());
     }
   }
 

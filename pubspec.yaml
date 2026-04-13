@@ -130,6 +130,9 @@ dependencies:
   # PDF text extraction
   syncfusion_flutter_pdf: ^28.1.39
 
+  # Speech recognition (on-device)
+  speech_to_text: ^7.0.0
+
   # On-device LLM inference
   llamadart: ^0.6.7
 

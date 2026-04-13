@@ -43,6 +43,10 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>We need access to your camera to take photos for search</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Bavi needs microphone access to transcribe your voice into text.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Bavi uses on-device speech recognition to convert your voice to text.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>This app requires local network access for model inference services.</string>
 	<key>NSPasteboardUsageDescription</key>

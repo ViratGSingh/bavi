@@ -70,7 +70,7 @@ enum HomeExtractUrlStatus { loading, success, failure, idle }
 
 enum OCRExtractionStatus { idle, loading, success, failed, cancelled }
 
-enum HomeModel { deepseek, gemini, claude, openAI, flashThink, localAI, gemma4, bonsai }
+enum HomeModel { deepseek, gemini, claude, openAI, flashThink, localAI, gemma4, liquidAI, bonsai }
 
 enum LocalAIStatus { idle, downloading, loading, ready, error, noStorage }
 
@@ -135,6 +135,9 @@ final class HomeState extends Equatable {
     this.gemma4Status = LocalAIStatus.idle,
     this.gemma4DownloadProgress = 0.0,
     this.gemma4DownloadPhase = '',
+    this.liquidAIStatus = LocalAIStatus.idle,
+    this.liquidAIDownloadProgress = 0.0,
+    this.liquidAIDownloadPhase = '',
     this.bonsaiStatus = LocalAIStatus.idle,
     this.bonsaiDownloadProgress = 0.0,
     this.bonsaiDownloadPhase = '',
@@ -225,6 +228,9 @@ final class HomeState extends Equatable {
   final LocalAIStatus gemma4Status;
   final double gemma4DownloadProgress;
   final String gemma4DownloadPhase;
+  final LocalAIStatus liquidAIStatus;
+  final double liquidAIDownloadProgress;
+  final String liquidAIDownloadPhase;
   final LocalAIStatus bonsaiStatus;
   final double bonsaiDownloadProgress;
   final String bonsaiDownloadPhase;
@@ -290,6 +296,9 @@ final class HomeState extends Equatable {
     LocalAIStatus? gemma4Status,
     double? gemma4DownloadProgress,
     String? gemma4DownloadPhase,
+    LocalAIStatus? liquidAIStatus,
+    double? liquidAIDownloadProgress,
+    String? liquidAIDownloadPhase,
     LocalAIStatus? bonsaiStatus,
     double? bonsaiDownloadProgress,
     String? bonsaiDownloadPhase,
@@ -379,6 +388,10 @@ final class HomeState extends Equatable {
       gemma4DownloadProgress:
           gemma4DownloadProgress ?? this.gemma4DownloadProgress,
       gemma4DownloadPhase: gemma4DownloadPhase ?? this.gemma4DownloadPhase,
+      liquidAIStatus: liquidAIStatus ?? this.liquidAIStatus,
+      liquidAIDownloadProgress:
+          liquidAIDownloadProgress ?? this.liquidAIDownloadProgress,
+      liquidAIDownloadPhase: liquidAIDownloadPhase ?? this.liquidAIDownloadPhase,
       bonsaiStatus: bonsaiStatus ?? this.bonsaiStatus,
       bonsaiDownloadProgress:
           bonsaiDownloadProgress ?? this.bonsaiDownloadProgress,
@@ -451,6 +464,9 @@ final class HomeState extends Equatable {
         gemma4Status,
         gemma4DownloadProgress,
         gemma4DownloadPhase,
+        liquidAIStatus,
+        liquidAIDownloadProgress,
+        liquidAIDownloadPhase,
         bonsaiStatus,
         bonsaiDownloadProgress,
         bonsaiDownloadPhase,

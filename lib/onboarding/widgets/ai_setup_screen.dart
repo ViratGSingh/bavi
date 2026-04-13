@@ -703,7 +703,7 @@ class _BenchmarkCard extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           const _BarRow(
-            label: 'Drissy Qwen',
+            label: 'Qwen',
             value: 92.9,
             color: Color(0xFF8A2BE2),
             isHighlighted: true,

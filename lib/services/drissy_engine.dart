@@ -86,13 +86,32 @@ Rules:
             await _storageChannel.invokeMethod<int>('getPhysicalMemoryBytes') ??
                 0;
       } catch (_) {}
+      // < 5 GB covers iPhone 13 and older (4 GB RAM).
+      final isVeryLowRam =
+          physicalBytes == 0 || physicalBytes < 5 * 1024 * 1024 * 1024;
       final isLowRam =
           physicalBytes == 0 || physicalBytes < 6 * 1024 * 1024 * 1024;
 
-      // Unload the existing model before loading a new one to free memory
+      // On iOS, any GPU layers >0 triggers Metal buffer allocation AND KV-cache
+      // offload to Metal.  On 4 GB devices (iPhone 13), the combined Metal
+      // allocation + mmap read during loading peaks at ~2 GB and hits the
+      // jetsam limit.  CPU backend avoids all Metal allocation; the model is
+      // mmap-paged lazily, keeping the loading peak under ~500 MB.
+      // reusePromptPrefix caches the KV state so only the first query pays
+      // full prefill cost; generation speed on A15 (4 threads) is ~10-15 t/s.
+      final backend = Platform.isIOS && isVeryLowRam
+          ? GpuBackend.cpu
+          : (Platform.isIOS ? GpuBackend.metal : await _resolveAndroidGpuBackend());
+      final gpuLayers = (Platform.isIOS && isVeryLowRam)
+          ? 0
+          : ModelParams.maxGpuLayers;
+
+      // Await dispose so native Metal buffers are freed before allocating new
+      // ones.  Without await the old engine's memory overlaps with the new
+      // load, doubling peak usage during model switches.
       if (_engine != null) {
         print('[ModelSwitch] Unloading previous model from memory...');
-        _engine!.dispose();
+        await _engine!.dispose();
         _engine = null;
         _isLoaded = false;
         _isVisionLoaded = false;
@@ -103,15 +122,13 @@ Rules:
       await _engine!.loadModel(
         modelPath,
         modelParams: ModelParams(
-          contextSize: isLowRam ? 4096 : 8192,
-          gpuLayers: ModelParams.maxGpuLayers,
-          numberOfThreads: 2,
+          contextSize: isVeryLowRam ? 2048 : (isLowRam ? 4096 : 8192),
+          gpuLayers: gpuLayers,
+          numberOfThreads: isVeryLowRam ? 4 : 2,
           numberOfThreadsBatch: isLowRam ? 2 : 4,
           batchSize: isLowRam ? 512 : 2048,
           microBatchSize: isLowRam ? 128 : 512,
-          preferredBackend: Platform.isIOS
-              ? GpuBackend.metal
-              : await _resolveAndroidGpuBackend(),
+          preferredBackend: backend,
         ),
       );
       _isLoaded = true;

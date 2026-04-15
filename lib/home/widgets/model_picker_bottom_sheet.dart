@@ -12,7 +12,7 @@ class ModelPickerBottomSheet extends StatelessWidget {
   final double liquidAIDownloadProgress;
   final LocalAIStatus bonsaiStatus;
   final double bonsaiDownloadProgress;
-  final Function(HomeModel) onModelSelected;
+  final VoidCallback onLocalAITap;
   final VoidCallback onGemma4Tap;
   final VoidCallback onLiquidAITap;
   final VoidCallback onBonsaiTap;
@@ -20,7 +20,7 @@ class ModelPickerBottomSheet extends StatelessWidget {
   const ModelPickerBottomSheet({
     super.key,
     required this.selectedModel,
-    required this.onModelSelected,
+    required this.onLocalAITap,
     required this.onGemma4Tap,
     required this.onLiquidAITap,
     required this.onBonsaiTap,
@@ -119,8 +119,7 @@ class ModelPickerBottomSheet extends StatelessWidget {
                       : null,
                   onTap: () {
                     HapticFeedback.selectionClick();
-                    onModelSelected(HomeModel.localAI);
-                    Navigator.pop(context);
+                    onLocalAITap();
                   },
                 ),
                 _Divider(),
@@ -167,8 +166,8 @@ class ModelPickerBottomSheet extends StatelessWidget {
                   logoAsset: 'assets/images/logo/prism_ml.jpg',
                   title: 'Bonsai',
                   subtitle: "Prism ML's 1-bit quantised 8B model — ultra-compact on-device intelligence",
-                  tags: const ['Text', 'Vision', '1-bit'],
-                  tagColors: const [Color(0xFF7C3AED), Color(0xFF7C3AED), Color(0xFF7C3AED)],
+                  tags: const ['Text', '1-bit'],
+                  tagColors: const [Color(0xFF7C3AED), Color(0xFF7C3AED)],
                   isSelected: selectedModel == HomeModel.bonsai,
                   localAIStatus: bonsaiStatus,
                   downloadProgress:
@@ -228,12 +227,9 @@ class _ModelTile extends StatelessWidget {
     final isDownloading = localAIStatus == LocalAIStatus.downloading;
     final isLoading = localAIStatus == LocalAIStatus.loading;
     final isReady = localAIStatus == LocalAIStatus.ready;
-    // A model is "not yet obtained" if it's idle/error/noStorage and NOT the one
-    // currently in the engine (i.e. not selected+ready)
-    final notDownloaded = !isDownloading &&
-        !isLoading &&
-        !isReady &&
-        !isSelected;
+    // A model is "not yet obtained" if it's idle/error/noStorage — regardless
+    // of whether it's selected (a selected but undownloaded model is still not ready).
+    final notDownloaded = !isDownloading && !isLoading && !isReady;
 
     return GestureDetector(
       onTap: onTap,
@@ -293,7 +289,7 @@ class _ModelTile extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 // Right badge
-                if (isSelected)
+                if (isSelected && isReady)
                   Container(
                     width: 24,
                     height: 24,
@@ -307,7 +303,7 @@ class _ModelTile extends StatelessWidget {
                       color: Colors.white,
                     ),
                   )
-                else if (!isReady)
+                else if (!isReady && !isDownloading && !isLoading)
                   Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 9, vertical: 3),

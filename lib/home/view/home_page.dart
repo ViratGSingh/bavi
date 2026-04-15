@@ -301,8 +301,8 @@ class _HomePageState extends State<HomePage>
       create: (context) =>
           HomeBloc(httpClient: http.Client())
             ..add(HomeInitialUserData())
-            ..add(HomeLocalAILoadIfDownloaded())
-            ..add(HomeCheckSecondaryModelsDownloaded()),
+            ..add(HomeCheckSecondaryModelsDownloaded())
+            ..add(HomeLoadSavedModel()),
       child: BlocListener<HomeBloc, HomeState>(
         listenWhen: (prev, curr) =>
             prev.localAIStatus != curr.localAIStatus &&
@@ -1727,7 +1727,7 @@ class _HomePageState extends State<HomePage>
                                         children: [
                                           // + button to open sources bottom sheet (image picker)
                                           GestureDetector(
-                                            onTap: () {
+                                            onTap: state.selectedModel == HomeModel.bonsai ? null : () {
                                               showModalBottomSheet(
                                                 context: context,
                                                 isScrollControlled: true,
@@ -1797,19 +1797,22 @@ class _HomePageState extends State<HomePage>
                                                 ),
                                               );
                                             },
-                                            child: Container(
-                                              height: 32,
-                                              width: 32,
-                                              decoration: BoxDecoration(
-                                                color: Colors.grey
-                                                    .withOpacity(0.1),
-                                                shape: BoxShape.circle,
-                                              ),
-                                              child: const Center(
-                                                child: Icon(
-                                                  Icons.add,
-                                                  size: 20,
-                                                  color: Colors.black54,
+                                            child: Opacity(
+                                              opacity: state.selectedModel == HomeModel.bonsai ? 0.3 : 1.0,
+                                              child: Container(
+                                                height: 32,
+                                                width: 32,
+                                                decoration: BoxDecoration(
+                                                  color: Colors.grey
+                                                      .withOpacity(0.1),
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: const Center(
+                                                  child: Icon(
+                                                    Icons.add,
+                                                    size: 20,
+                                                    color: Colors.black54,
+                                                  ),
                                                 ),
                                               ),
                                             ),
@@ -1843,13 +1846,35 @@ class _HomePageState extends State<HomePage>
                                                       state.bonsaiStatus,
                                                   bonsaiDownloadProgress:
                                                       state.bonsaiDownloadProgress,
-                                                  onModelSelected: (model) {
-                                                    HapticFeedback
-                                                        .selectionClick();
-                                                    context
-                                                        .read<HomeBloc>()
-                                                        .add(HomeModelSelect(
-                                                            model));
+                                                  onLocalAITap: () {
+                                                    Navigator.pop(context);
+                                                    if (state.localAIStatus ==
+                                                        LocalAIStatus.ready) {
+                                                      context
+                                                          .read<HomeBloc>()
+                                                          .add(HomeModelSelect(
+                                                              HomeModel
+                                                                  .localAI));
+                                                    } else {
+                                                      Navigator.of(context)
+                                                          .push(
+                                                        MaterialPageRoute<
+                                                            void>(
+                                                          builder: (_) =>
+                                                              BlocProvider
+                                                                  .value(
+                                                            value: context
+                                                                .read<
+                                                                    HomeBloc>(),
+                                                            child:
+                                                                const ModelDownloadPage(
+                                                              model: HomeModel
+                                                                  .localAI,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      );
+                                                    }
                                                   },
                                                   onGemma4Tap: () {
                                                     Navigator.pop(context);
@@ -1967,17 +1992,36 @@ class _HomePageState extends State<HomePage>
                                                     ),
                                                   );
                                                 }
-                                                return ClipRRect(
-                                                  borderRadius: BorderRadius.circular(16),
-                                                  child: Image.asset(
-                                                    state.selectedModel == HomeModel.gemma4
-                                                        ? 'assets/images/logo/gemma.jpg'
-                                                        : state.selectedModel == HomeModel.liquidAI
-                                                            ? 'assets/images/logo/liquid_ai.jpg'
-                                                            : 'assets/images/logo/qwen.jpg',
-                                                    width: 32,
-                                                    height: 32,
-                                                    fit: BoxFit.cover,
+                                                return Container(
+                                                  // decoration: BoxDecoration(
+                                                  //   borderRadius: BorderRadius.circular(16),
+                                                  //   boxShadow: [
+                                                  //     BoxShadow(
+                                                  //       color: const Color(0xFF8A2BE2).withOpacity(0.28),
+                                                  //       blurRadius: 10,
+                                                  //       spreadRadius: 1,
+                                                  //     ),
+                                                  //   ],
+                                                  // ),
+                                                   decoration: BoxDecoration(
+                                                  color: Colors.grey
+                                                      .withOpacity(0.1),
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                  child: ClipRRect(
+                                                    borderRadius: BorderRadius.circular(16),
+                                                    child: Image.asset(
+                                                      state.selectedModel == HomeModel.gemma4
+                                                          ? 'assets/images/logo/gemma.jpg'
+                                                          : state.selectedModel == HomeModel.liquidAI
+                                                              ? 'assets/images/logo/liquid_ai.jpg'
+                                                              : state.selectedModel == HomeModel.bonsai
+                                                                  ? 'assets/images/logo/prism_ml.jpg'
+                                                                  : 'assets/images/logo/qwen.jpg',
+                                                      width: state.selectedModel == HomeModel.bonsai?28:32,
+                                                      height: state.selectedModel == HomeModel.bonsai?28:32,
+                                                      fit: BoxFit.cover,
+                                                    ),
                                                   ),
                                                 );
                                               },
@@ -2464,12 +2508,10 @@ class _HomePageState extends State<HomePage>
                                                       ),
                                                     ],
                                                   )
-                                                : (state.selectedModel == HomeModel.gemma4
-                                                            ? state.gemma4Status
-                                                            : state.selectedModel == HomeModel.liquidAI
-                                                                ? state.liquidAIStatus
-                                                                : state.localAIStatus) ==
-                                                            LocalAIStatus.idle
+                                                : (state.localAIStatus == LocalAIStatus.idle &&
+                                                            state.gemma4Status == LocalAIStatus.idle &&
+                                                            state.liquidAIStatus == LocalAIStatus.idle &&
+                                                            state.bonsaiStatus == LocalAIStatus.idle)
                                                         ? Column(
                                                             mainAxisSize:
                                                                 MainAxisSize

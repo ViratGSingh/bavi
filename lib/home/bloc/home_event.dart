@@ -478,3 +478,6 @@ final class HomeDeleteLocalAIModel extends HomeEvent {}
 final class HomeDeleteGemma4Model extends HomeEvent {}
 final class HomeDeleteLiquidAIModel extends HomeEvent {}
 final class HomeDeleteBonsaiModel extends HomeEvent {}
+
+/// Load the last model the user selected (persisted across launches)
+final class HomeLoadSavedModel extends HomeEvent {}

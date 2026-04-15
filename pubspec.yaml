@@ -190,6 +190,10 @@ flutter:
     - assets/animations/
     - assets/fonts/
     - assets/images/onboarding/
+    - assets/images/onboarding/gemma/
+    - assets/images/onboarding/liquid-ai/
+    - assets/images/onboarding/prism-ml/
+    - assets/images/onboarding/qwen/
     - assets/images/login/
     - assets/images/logo/
     - .env

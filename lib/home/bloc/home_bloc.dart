@@ -56,9 +56,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
   static const String _bonsaiFileName = 'Bonsai-8B.gguf';
   static const String _bonsaiDownloadUrl =
       'https://huggingface.co/prism-ml/Bonsai-8B-gguf/resolve/main/Bonsai-8B.gguf';
-    static const String _bonsaiMmProjFileName = 'bonsai-8b-mmproj.gguf';
-  static const String _bonsaiMmProjDownloadUrl =
-      'https://huggingface.co/drissea-ai/drissy-qwen3.5-2b-GGUF/resolve/main/drissy-qwen3.5-2b.BF16-mmproj.gguf';
+  // Bonsai has no multimodal projector — text-only model.
   // @override
   // void onTransition(Transition<HomeEvent, HomeState> transition) {
   //   super.onTransition(transition);
@@ -140,6 +138,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     on<HomeBonsaiDownloadAndLoad>(_downloadAndLoadBonsai);
     on<HomeBonsaiLoadIfDownloaded>(_loadBonsaiIfDownloaded);
     on<HomeDeleteBonsaiModel>(_deleteBonsaiModel);
+    on<HomeLoadSavedModel>(_loadSavedModel);
   }
 
   Completer<BrowseSearchResult>? _webSearchCompleter;
@@ -655,8 +654,13 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     Emitter<HomeState> emit,
   ) async {
     emit(state.copyWith(selectedModel: event.model));
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('last_selected_model', event.model.name);
     if (event.model == HomeModel.localAI &&
-        state.localAIStatus != LocalAIStatus.ready &&
+        state.localAIStatus == LocalAIStatus.ready) {
+      // File already downloaded — reload into engine (e.g. switching back from another model)
+      add(HomeLocalAILoadIfDownloaded());
+    } else if (event.model == HomeModel.localAI &&
         state.localAIStatus != LocalAIStatus.downloading &&
         state.localAIStatus != LocalAIStatus.loading) {
       add(HomeLocalAIDownloadAndLoad());
@@ -819,17 +823,9 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     HomeLocalAILoadIfDownloaded event,
     Emitter<HomeState> emit,
   ) async {
-    // Skip if already loaded or currently loading/downloading
-    if (state.localAIStatus == LocalAIStatus.ready ||
-        state.localAIStatus == LocalAIStatus.loading ||
+    // Skip if already in-progress
+    if (state.localAIStatus == LocalAIStatus.loading ||
         state.localAIStatus == LocalAIStatus.downloading) {
-      return;
-    }
-
-    // Engine is a singleton — if the model was already loaded (e.g. during
-    // onboarding), just update the state without reloading.
-    if (_drissyEngine.isLoaded) {
-      emit(state.copyWith(localAIStatus: LocalAIStatus.ready));
       return;
     }
 
@@ -837,6 +833,16 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       final dir = await getApplicationDocumentsDirectory();
       final modelFile = File('${dir.path}/$_modelFileName');
       if (!await modelFile.exists()) return;
+
+      // Engine already has Qwen loaded — no reload needed
+      if (_drissyEngine.loadedModelPath == modelFile.path) {
+        emit(state.copyWith(
+          localAIStatus: LocalAIStatus.ready,
+          selectedModel: HomeModel.localAI,
+        ));
+        print('[ModelSwitch] Active model → Qwen 3.5 (already in engine)');
+        return;
+      }
 
       emit(state.copyWith(localAIStatus: LocalAIStatus.loading));
       final success = await _drissyEngine.loadModel(modelFile.path);
@@ -846,8 +852,10 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         if (await mmProjFile.exists()) {
           await _drissyEngine.loadVisionProjector(mmProjFile.path);
         }
-        emit(state.copyWith(localAIStatus: LocalAIStatus.ready));
-        print('Local AI model loaded on home init');
+        emit(state.copyWith(
+          localAIStatus: LocalAIStatus.ready,
+          selectedModel: HomeModel.localAI,
+        ));
         print('[ModelSwitch] Active model → Qwen 3.5');
       } else {
         emit(state.copyWith(localAIStatus: LocalAIStatus.error));
@@ -884,6 +892,38 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       }
     } catch (e) {
       print('Secondary model file check error: $e');
+    }
+  }
+
+  // ── Restore last selected model on startup ─────────────────────────────────
+
+  Future<void> _loadSavedModel(
+    HomeLoadSavedModel event,
+    Emitter<HomeState> emit,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedName = prefs.getString('last_selected_model');
+    HomeModel model = HomeModel.localAI;
+    if (savedName != null) {
+      try {
+        model = HomeModel.values.byName(savedName);
+      } catch (_) {
+        model = HomeModel.localAI;
+      }
+    }
+
+    switch (model) {
+      case HomeModel.localAI:
+        add(HomeLocalAILoadIfDownloaded());
+      case HomeModel.gemma4:
+        add(HomeGemma4LoadIfDownloaded());
+      case HomeModel.liquidAI:
+        add(HomeLiquidAILoadIfDownloaded());
+      case HomeModel.bonsai:
+        add(HomeBonsaiLoadIfDownloaded());
+      default:
+        // Cloud model — no local file to load, just restore the selection
+        emit(state.copyWith(selectedModel: model));
     }
   }
 
@@ -5378,17 +5418,11 @@ Don't reveal any personal information you have in your context unless asked abou
     try {
       final dir = await getApplicationDocumentsDirectory();
       final modelFile = File('${dir.path}/$_bonsaiFileName');
-      final mmProjFile = File('${dir.path}/$_bonsaiMmProjFileName');
       final needsModel = !await modelFile.exists();
-      final needsVision = !await mmProjFile.exists();
 
-      const combinedEstimate = 1690 * 1024 * 1024; // ~1.5 GB model + ~155 MB mmproj
-      int combinedReceivedBytes = 0;
-      int combinedTotalBytes = combinedEstimate;
-
-      if (needsModel || needsVision) {
+      if (needsModel) {
         final availableBytes = await StorageChecker.getAvailableBytes();
-        const requiredBytes = 2 * 1024 * 1024 * 1024;
+        const requiredBytes = 1300 * 1024 * 1024; // ~1.16 GB + headroom
         if (availableBytes != null && availableBytes < requiredBytes) {
           emit(state.copyWith(bonsaiStatus: LocalAIStatus.noStorage));
           return;
@@ -5398,10 +5432,7 @@ Don't reveal any personal information you have in your context unless asked abou
           bonsaiDownloadProgress: 0.0,
           bonsaiDownloadPhase: 'Downloading Bonsai...',
         ));
-      }
 
-      // Step 1: Download main model
-      if (needsModel) {
         final request = http.Request('GET', Uri.parse(_bonsaiDownloadUrl));
         final client = http.Client();
         final response = await client.send(request);
@@ -5411,15 +5442,13 @@ Don't reveal any personal information you have in your context unless asked abou
           emit(state.copyWith(bonsaiStatus: LocalAIStatus.error));
           return;
         }
-        final modelContentLength = response.contentLength ?? 0;
-        if (modelContentLength > 0) {
-          combinedTotalBytes = modelContentLength + (155 * 1024 * 1024);
-        }
+        final totalBytes = response.contentLength ?? (1500 * 1024 * 1024);
+        int receivedBytes = 0;
         final sink = modelFile.openWrite();
         await for (final chunk in response.stream) {
           sink.add(chunk);
-          combinedReceivedBytes += chunk.length;
-          final progress = combinedReceivedBytes / combinedTotalBytes;
+          receivedBytes += chunk.length;
+          final progress = receivedBytes / totalBytes;
           if ((progress * 100).floor() >
               (state.bonsaiDownloadProgress * 100).floor()) {
             emit(state.copyWith(
@@ -5429,49 +5458,10 @@ Don't reveal any personal information you have in your context unless asked abou
         await sink.flush();
         await sink.close();
         client.close();
-      }
-
-      // Step 2: Download vision projector
-      if (needsVision) {
-        emit(state.copyWith(
-          bonsaiDownloadPhase: 'Downloading vision model...',
-        ));
-        try {
-          final mmRequest =
-              http.Request('GET', Uri.parse(_bonsaiMmProjDownloadUrl));
-          final mmClient = http.Client();
-          final mmResponse = await mmClient.send(mmRequest);
-          if (mmResponse.statusCode == 200) {
-            final mmContentLength = mmResponse.contentLength ?? 0;
-            if (mmContentLength > 0 && combinedReceivedBytes > 0) {
-              combinedTotalBytes = combinedReceivedBytes + mmContentLength;
-            }
-            final mmSink = mmProjFile.openWrite();
-            await for (final chunk in mmResponse.stream) {
-              mmSink.add(chunk);
-              combinedReceivedBytes += chunk.length;
-              final progress = combinedReceivedBytes / combinedTotalBytes;
-              if ((progress * 100).floor() >
-                  (state.bonsaiDownloadProgress * 100).floor()) {
-                emit(state.copyWith(
-                    bonsaiDownloadProgress: progress.clamp(0.0, 0.99)));
-              }
-            }
-            await mmSink.flush();
-            await mmSink.close();
-            print('Bonsai vision projector downloaded');
-          }
-          mmClient.close();
-        } catch (e) {
-          print('Bonsai mmproj download error (non-fatal): $e');
-        }
-      }
-
-      if (needsModel || needsVision) {
         emit(state.copyWith(bonsaiDownloadProgress: 1.0));
       }
 
-      // Step 3: Load model into engine
+      // Load model into engine (text-only — Bonsai has no vision projector)
       await Future.delayed(const Duration(seconds: 2));
       emit(state.copyWith(
         bonsaiStatus: LocalAIStatus.loading,
@@ -5479,9 +5469,6 @@ Don't reveal any personal information you have in your context unless asked abou
       ));
       final success = await _drissyEngine.loadModel(modelFile.path);
       if (success) {
-        if (await mmProjFile.exists()) {
-          await _drissyEngine.loadVisionProjector(mmProjFile.path);
-        }
         emit(state.copyWith(
           bonsaiStatus: LocalAIStatus.ready,
           selectedModel: HomeModel.bonsai,
@@ -5506,7 +5493,6 @@ Don't reveal any personal information you have in your context unless asked abou
     try {
       final dir = await getApplicationDocumentsDirectory();
       final modelFile = File('${dir.path}/$_bonsaiFileName');
-      final mmProjFile = File('${dir.path}/$_bonsaiMmProjFileName');
       if (!await modelFile.exists()) return;
       if (_drissyEngine.loadedModelPath == modelFile.path) {
         emit(state.copyWith(
@@ -5517,11 +5503,9 @@ Don't reveal any personal information you have in your context unless asked abou
         return;
       }
       emit(state.copyWith(bonsaiStatus: LocalAIStatus.loading));
+      // Text-only — Bonsai has no vision projector
       final success = await _drissyEngine.loadModel(modelFile.path);
       if (success) {
-        if (await mmProjFile.exists()) {
-          await _drissyEngine.loadVisionProjector(mmProjFile.path);
-        }
         emit(state.copyWith(
           bonsaiStatus: LocalAIStatus.ready,
           selectedModel: HomeModel.bonsai,
@@ -5543,12 +5527,10 @@ Don't reveal any personal information you have in your context unless asked abou
     try {
       final dir = await getApplicationDocumentsDirectory();
       final modelFile = File('${dir.path}/$_bonsaiFileName');
-      final mmProjFile = File('${dir.path}/$_bonsaiMmProjFileName');
       if (_drissyEngine.loadedModelPath == modelFile.path) {
         _drissyEngine.unload();
       }
       if (await modelFile.exists()) await modelFile.delete();
-      if (await mmProjFile.exists()) await mmProjFile.delete();
       emit(state.copyWith(
         bonsaiStatus: LocalAIStatus.idle,
         bonsaiDownloadProgress: 0.0,

@@ -39,6 +39,13 @@ class _SpeechInputSheetState extends State<SpeechInputSheet>
       .join(' ')
       .trim();
 
+  void _syncToController() {
+    final text = _displayText;
+    widget.textController.text = text;
+    widget.textController.selection =
+        TextSelection.fromPosition(TextPosition(offset: text.length));
+  }
+
   double _currentLevel = 0.0;
 
   late AnimationController _waveController;
@@ -48,7 +55,6 @@ class _SpeechInputSheetState extends State<SpeechInputSheet>
   Timer? _decayTimer;
   Timer? _restartDebounce;
 
-  final ScrollController _textScrollController = ScrollController();
 
   @override
   void initState() {
@@ -117,6 +123,7 @@ class _SpeechInputSheetState extends State<SpeechInputSheet>
     final merged = _displayText;
     _committedText = merged;
     _currentText = '';
+    _syncToController();
   }
 
   void _scheduleRestart() {
@@ -140,15 +147,7 @@ class _SpeechInputSheetState extends State<SpeechInputSheet>
             _currentLevel = (_currentLevel + 0.45).clamp(0.0, 1.0);
           }
         });
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (_textScrollController.hasClients) {
-            _textScrollController.animateTo(
-              _textScrollController.position.maxScrollExtent,
-              duration: const Duration(milliseconds: 150),
-              curve: Curves.easeOut,
-            );
-          }
-        });
+        _syncToController();
       },
       onSoundLevelChange: (double level) {
         if (!mounted || _isManuallyStopped) return;
@@ -185,13 +184,6 @@ class _SpeechInputSheetState extends State<SpeechInputSheet>
 
   void _useTranscription() {
     _stopManually();
-    final String text = _committedText.trim();
-    if (text.isNotEmpty) {
-      widget.textController.text = text;
-      widget.textController.selection = TextSelection.fromPosition(
-        TextPosition(offset: text.length),
-      );
-    }
     widget.onDismiss();
   }
 
@@ -199,6 +191,7 @@ class _SpeechInputSheetState extends State<SpeechInputSheet>
     _isManuallyStopped = true;
     _restartDebounce?.cancel();
     _speech.stop();
+    widget.textController.clear();
     widget.onDismiss();
   }
 
@@ -208,19 +201,17 @@ class _SpeechInputSheetState extends State<SpeechInputSheet>
     _restartDebounce?.cancel();
     _waveController.dispose();
     _pulseController.dispose();
-    _textScrollController.dispose();
     _speech.stop();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final String displayText = _displayText;
-    final bool hasText = displayText.isNotEmpty;
+    final bool hasText = _displayText.isNotEmpty;
 
     return Container(
       // Fixed height so AnimatedSize knows the target size to animate toward.
-      height: 224,
+      height: 160,
       margin: const EdgeInsets.only(top: 10),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
@@ -263,71 +254,38 @@ class _SpeechInputSheetState extends State<SpeechInputSheet>
                     ),
             ),
 
-            const SizedBox(height: 10),
-
-            // Transcription text box
-            Container(
-              width: double.infinity,
-              constraints: const BoxConstraints(minHeight: 40, maxHeight: 60),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: hasText
-                      ? const Color(0xFF8A2BE2).withOpacity(0.6)
-                      : Colors.white.withOpacity(0.08),
-                  width: 1,
-                ),
-              ),
-              child: SingleChildScrollView(
-                controller: _textScrollController,
-                physics: const BouncingScrollPhysics(),
-                child: Text(
-                  hasText
-                      ? displayText
-                      : (_isListening ? 'Listening...' : 'Tap mic to start'),
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 13,
-                    color: hasText
-                        ? Colors.white
-                        : Colors.white.withOpacity(0.4),
-                    fontWeight: FontWeight.w400,
-                    height: 1.45,
-                  ),
-                ),
-              ),
-            ),
-
             const SizedBox(height: 14),
 
-            // Bottom row: Cancel | Mic orb | Use
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // Cancel
-                GestureDetector(
-                  onTap: _cancel,
-                  behavior: HitTestBehavior.opaque,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 4, vertical: 4),
-                    child: Text(
-                      'Cancel',
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 14,
-                        color: Colors.white.withOpacity(0.6),
-                        fontWeight: FontWeight.w500,
+            // Bottom row: Cancel | Mic orb (centered) | Use
+            SizedBox(
+              height: 52,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  // Cancel — pinned left
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: GestureDetector(
+                      onTap: _cancel,
+                      behavior: HitTestBehavior.opaque,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 4),
+                        child: Text(
+                          'Cancel',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 14,
+                            color: Colors.white.withOpacity(0.6),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
 
-                // Mic orb
-                AnimatedBuilder(
+                  // Mic orb — always centered
+                  AnimatedBuilder(
                   animation: _pulseAnimation,
                   builder: (context, child) {
                     final double glowRadius =
@@ -368,27 +326,31 @@ class _SpeechInputSheetState extends State<SpeechInputSheet>
                   },
                 ),
 
-                // Use button
-                GestureDetector(
-                  onTap: hasText ? _useTranscription : null,
-                  behavior: HitTestBehavior.opaque,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 4, vertical: 4),
-                    child: Text(
-                      'Use',
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 14,
-                        color: hasText
-                            ? const Color(0xFFDFFF00)
-                            : Colors.white.withOpacity(0.2),
-                        fontWeight: FontWeight.w700,
+                  // Use button — pinned right
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: GestureDetector(
+                      onTap: hasText ? _useTranscription : null,
+                      behavior: HitTestBehavior.opaque,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 4),
+                        child: Text(
+                          'Use',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 14,
+                            color: hasText
+                                ? const Color(0xFFDFFF00)
+                                : Colors.white.withOpacity(0.2),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ],
         ),
